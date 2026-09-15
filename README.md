@@ -23,33 +23,6 @@ flutter analyze
 flutter test
 ```
 
-## OAuth 配置
-
-登录功能需要先在 Bangumi 注册 OAuth 应用，回调地址设置为：
-
-```text
-http://localhost/callback
-```
-
-运行时通过 `dart-define` 注入应用凭据。不要把真实凭据提交到仓库：
-
-```powershell
-flutter run -d windows `
-  --dart-define=BGM_OAUTH_APP_ID=your_app_id `
-  --dart-define=BGM_OAUTH_APP_SECRET=your_app_secret
-```
-
-连接 Android 设备后：
-
-```powershell
-flutter devices
-flutter run -d <device-id> `
-  --dart-define=BGM_OAUTH_APP_ID=your_app_id `
-  --dart-define=BGM_OAUTH_APP_SECRET=your_app_secret
-```
-
-Cookie 和 Token 保存在 Android/Windows 系统安全存储中，密码不会持久化。
-
 ## 网络
 
 默认使用 `https://next.bgm.tv/p1/` API。Android 使用原生 OkHttp 网络桥，Windows 使用 WinHTTP 并读取系统代理、PAC/WPAD。
