@@ -27,9 +27,11 @@ abstract interface class BangumiRepository {
     int? category,
   });
   Future<List<Topic>> fetchTopics({String type = 'all'});
+  Future<TopicDetailData> fetchTopicDetails(Topic topic);
   Future<UserProfileData> fetchUserProfile(String username);
   Future<CharacterDetailData> fetchCharacterDetails(int id);
   Future<List<CommunityReply>> fetchEpisodeComments(int episodeId);
+  Future<List<CommunityReply>> fetchPersonComments(int personId);
   Future<void> updateSubjectCollection(
     int subjectId, {
     required int type,
@@ -46,6 +48,11 @@ abstract interface class BangumiRepository {
   Future<void> toggleFriend(String username, bool isFriend);
   Future<void> setEpisodeCommentReaction(int commentId, String? value);
   Future<void> setSubjectCommentReaction(int commentId, String? value);
+  Future<void> setTopicPostReaction(
+    String topicType,
+    int postId,
+    String? value,
+  );
   Future<void> setTimelineReaction(int timelineId, String? value);
   void close();
 }
@@ -201,6 +208,20 @@ class RemoteBangumiRepository implements BangumiRepository {
   }
 
   @override
+  Future<TopicDetailData> fetchTopicDetails(Topic topic) async {
+    if (topic.type != 'group' && topic.type != 'subject') {
+      throw const ApiException('该类型没有讨论详情接口');
+    }
+    final owner = topic.type == 'group' ? 'groups' : 'subjects';
+    final json = await _api.get('p1/$owner/-/topics/${topic.id}');
+    if (json is! Map) throw const ApiException('讨论详情数据格式不正确');
+    return TopicDetailData.fromJson(
+      Map<String, dynamic>.from(json),
+      type: topic.type,
+    );
+  }
+
+  @override
   Future<UserProfileData> fetchUserProfile(String username) async {
     final encoded = Uri.encodeComponent(username);
     final results = await Future.wait<dynamic>([
@@ -248,7 +269,15 @@ class RemoteBangumiRepository implements BangumiRepository {
       user: CommunityUser.fromJson(
         Map<String, dynamic>.from(results[0] as Map),
       ),
-      timeline: _items(results[1]).map(TimelineEntry.fromJson).toList(),
+      timeline:
+          _items(results[1])
+              .map(
+                (item) => TimelineEntry.fromJson({
+                  ...item,
+                  if (item['user'] == null) 'user': results[0],
+                }),
+              )
+              .toList(),
       collections: _items(results[2]).map(UserContentItem.fromSubject).toList(),
       characters: _items(results[3]).map(UserContentItem.fromMono).toList(),
       persons: _items(results[4]).map(UserContentItem.fromMono).toList(),
@@ -294,6 +323,15 @@ class RemoteBangumiRepository implements BangumiRepository {
   @override
   Future<List<CommunityReply>> fetchEpisodeComments(int episodeId) async {
     final json = await _api.get('p1/episodes/$episodeId/comments');
+    return _items(json)
+        .map(CommunityReply.fromJson)
+        .where((item) => item.content.isNotEmpty)
+        .toList();
+  }
+
+  @override
+  Future<List<CommunityReply>> fetchPersonComments(int personId) async {
+    final json = await _api.get('p1/persons/$personId/comments');
     return _items(json)
         .map(CommunityReply.fromJson)
         .where((item) => item.content.isNotEmpty)
@@ -359,11 +397,27 @@ class RemoteBangumiRepository implements BangumiRepository {
   @override
   Future<void> setSubjectCommentReaction(int commentId, String? value) =>
       value == null
-          ? _api.delete('p1/subjects/-/comments/$commentId/like')
+          ? _api.delete('p1/subjects/-/collects/$commentId/like')
           : _api.put(
-            'p1/subjects/-/comments/$commentId/like',
+            'p1/subjects/-/collects/$commentId/like',
             body: {'value': int.parse(value)},
           );
+
+  @override
+  Future<void> setTopicPostReaction(
+    String topicType,
+    int postId,
+    String? value,
+  ) {
+    if (topicType != 'group' && topicType != 'subject') {
+      throw const ApiException('该类型不支持贴贴');
+    }
+    final owner = topicType == 'group' ? 'groups' : 'subjects';
+    final path = 'p1/$owner/-/posts/$postId/like';
+    return value == null
+        ? _api.delete(path)
+        : _api.put(path, body: {'value': int.parse(value)});
+  }
 
   @override
   Future<void> setTimelineReaction(int timelineId, String? value) =>

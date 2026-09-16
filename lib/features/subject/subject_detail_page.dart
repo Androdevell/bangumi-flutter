@@ -6,6 +6,7 @@ import '../../core/network/app_image_cache.dart';
 import '../../core/subject_detail_models.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/bangumi_rich_text.dart';
 import '../../widgets/subject_card.dart';
 import '../character/character_detail_page.dart';
 import '../community/reaction_picker.dart';
@@ -820,16 +821,16 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
                 icon:
                     _selectedValue == null
                         ? const Icon(Icons.add_reaction_outlined)
-                        : Text(
-                          reactionEmoji(_selectedValue!),
-                          style: const TextStyle(fontSize: 20),
+                        : BangumiReactionImage(
+                          value: _selectedValue!,
+                          size: 21,
                         ),
               ),
             ],
           ),
           if (item.comment.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(item.comment),
+            BangumiRichText(item.comment),
           ],
           if (_reactions.isNotEmpty) ...[
             const SizedBox(height: 10),

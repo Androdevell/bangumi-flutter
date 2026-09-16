@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/bangumi_rich_text.dart';
+
 const bangumiReactions = <String, String>{
   '0': '👍',
   '54': '😊',
@@ -14,8 +16,6 @@ const bangumiReactions = <String, String>{
   '140': '🤝',
   '141': '🔥',
 };
-
-String reactionEmoji(String value) => bangumiReactions[value] ?? '👍';
 
 Future<String?> showReactionPicker(
   BuildContext context, {
@@ -42,10 +42,7 @@ Future<String?> showReactionPicker(
                       tooltip: reaction.key,
                       isSelected: reaction.key == selectedValue,
                       onPressed: () => Navigator.pop(context, reaction.key),
-                      icon: Text(
-                        reaction.value,
-                        style: const TextStyle(fontSize: 21),
-                      ),
+                      icon: BangumiReactionImage(value: reaction.key),
                     ),
                 ],
               ),
@@ -83,7 +80,14 @@ class ReactionSummary extends StatelessWidget {
               color: Theme.of(context).colorScheme.surfaceContainerHigh,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text('${reactionEmoji(item.key)}  ${item.value}'),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                BangumiReactionImage(value: item.key, size: 20),
+                const SizedBox(width: 5),
+                Text('${item.value}'),
+              ],
+            ),
           ),
       ],
     );

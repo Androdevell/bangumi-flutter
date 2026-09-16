@@ -87,6 +87,10 @@ class _FakeRepository implements BangumiRepository {
   Future<List<Topic>> fetchTopics({String type = 'all'}) async => [];
 
   @override
+  Future<TopicDetailData> fetchTopicDetails(Topic topic) =>
+      throw UnimplementedError();
+
+  @override
   Future<List<Subject>> fetchTrending({int type = 2, int limit = 20}) async => [
     subject,
   ];
@@ -106,6 +110,9 @@ class _FakeRepository implements BangumiRepository {
 
   @override
   Future<List<CommunityReply>> fetchEpisodeComments(int episodeId) async => [];
+
+  @override
+  Future<List<CommunityReply>> fetchPersonComments(int personId) async => [];
 
   @override
   Future<void> updateSubjectCollection(
@@ -137,6 +144,13 @@ class _FakeRepository implements BangumiRepository {
 
   @override
   Future<void> setSubjectCommentReaction(int commentId, String? value) async {}
+
+  @override
+  Future<void> setTopicPostReaction(
+    String topicType,
+    int postId,
+    String? value,
+  ) async {}
 
   @override
   Future<void> setTimelineReaction(int timelineId, String? value) async {}

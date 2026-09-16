@@ -8,6 +8,8 @@
 - 时间线、超展开、用户资料、收藏、人物和章节评论
 - Bangumi OAuth 登录、Token 自动刷新和系统安全存储
 - 收藏状态、观看进度、好友与表情反应操作
+- Bangumi 站内图片表情、贴贴和超展开讨论详情
+- GitHub Releases 新版本检测
 - Android 高刷新率支持，以及封面、头像和预览图片磁盘缓存
 - Android 原生网络兼容层和 Windows WinHTTP 系统代理支持
 
@@ -22,6 +24,10 @@ flutter pub get
 flutter analyze
 flutter test
 ```
+
+## 发布版本
+
+每次发布前先更新 `pubspec.yaml` 中的 `version`。格式为 `主版本.次版本.修订号+构建号`，例如 `1.1.0+2`；随后使用相同版本创建 `v1.1.0` Git 标签和 GitHub Release。应用内“检查更新”以 GitHub 最新 Release 为准。
 
 ## 网络
 

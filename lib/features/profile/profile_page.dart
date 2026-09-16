@@ -5,6 +5,7 @@ import '../../core/app_strings.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/community_models.dart';
 import '../../core/network/app_image_cache.dart';
+import '../../core/update/app_update_service.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../auth/login_page.dart';
@@ -34,6 +35,15 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _reduceMotion = false;
   String _profileUsername = '';
   Future<UserProfileData>? _profile;
+  late final AppUpdateService _updateService = AppUpdateService();
+  late final Future<String> _appVersion = _updateService.currentVersion();
+  bool _checkingUpdate = false;
+
+  @override
+  void dispose() {
+    _updateService.close();
+    super.dispose();
+  }
 
   Future<UserProfileData>? _ensureProfile(String username) {
     if (username.isEmpty) return null;
@@ -66,6 +76,51 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('连接失败：$error')));
+    }
+  }
+
+  Future<void> _checkUpdate() async {
+    if (_checkingUpdate) return;
+    setState(() => _checkingUpdate = true);
+    try {
+      final result = await _updateService.check();
+      if (!mounted) return;
+      if (!result.updateAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('当前已是最新版 ${result.currentVersion}')),
+        );
+        return;
+      }
+      final open = await showDialog<bool>(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('发现新版本'),
+              content: Text(
+                '当前版本 ${result.currentVersion}\n最新版本 ${result.latestVersion}',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('稍后'),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(context, true),
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  label: const Text('查看发布页'),
+                ),
+              ],
+            ),
+      );
+      if (open == true) await _updateService.openRelease(result);
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('检查更新失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
     }
   }
 
@@ -403,17 +458,42 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 22),
             Text('关于', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 10),
-            const SurfaceBlock(
+            SurfaceBlock(
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
                   ListTile(
-                    leading: Icon(Icons.info_outline_rounded),
-                    title: Text('Bangumi Flutter'),
-                    subtitle: Text('版本 1.0.0 · Android 10+ / Windows'),
+                    leading: const Icon(Icons.info_outline_rounded),
+                    title: const Text('Bangumi Flutter'),
+                    subtitle: FutureBuilder<String>(
+                      future: _appVersion,
+                      builder:
+                          (_, snapshot) => Text(
+                            '版本 ${snapshot.data ?? '读取中'} · Android 11+ / Windows',
+                          ),
+                    ),
                   ),
-                  Divider(height: 1),
+                  const Divider(height: 1),
                   ListTile(
+                    leading:
+                        _checkingUpdate
+                            ? const Padding(
+                              padding: EdgeInsets.all(3),
+                              child: SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                            : const Icon(Icons.system_update_outlined),
+                    title: const Text('检查更新'),
+                    subtitle: const Text('从 GitHub Releases 获取最新版本'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _checkingUpdate ? null : _checkUpdate,
+                  ),
+                  const Divider(height: 1),
+                  const ListTile(
                     leading: Icon(Icons.api_outlined),
                     title: Text('数据来源'),
                     subtitle: Text('Bangumi Next API · next.bgm.tv'),

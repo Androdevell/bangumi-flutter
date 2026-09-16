@@ -5,6 +5,7 @@ import '../../core/community_models.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/bangumi_rich_text.dart';
 import '../character/character_detail_page.dart';
 import '../community/community_widgets.dart';
 import '../subject/subject_detail_page.dart';
@@ -217,134 +218,248 @@ class _TimeMachine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stats = user.stats;
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        if (user.bio.isNotEmpty) ...[
-          SurfaceBlock(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.format_quote_rounded, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      '个人简介',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ],
+    return LayoutBuilder(
+      builder:
+          (context, constraints) => ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              Wrap(
+                spacing: 9,
+                runSpacing: 9,
+                children: [
+                  _TimeMachineStat(
+                    label: '收藏',
+                    value: stats.subjects,
+                    icon: Icons.bookmarks_outlined,
+                  ),
+                  _TimeMachineStat(
+                    label: '看过',
+                    value: stats.watched,
+                    icon: Icons.done_all_rounded,
+                  ),
+                  _TimeMachineStat(
+                    label: '日志',
+                    value: stats.blogs,
+                    icon: Icons.article_outlined,
+                  ),
+                  _TimeMachineStat(
+                    label: '好友',
+                    value: stats.friends,
+                    icon: Icons.people_outline_rounded,
+                  ),
+                ],
+              ),
+              if (user.joinedAt.millisecondsSinceEpoch > 0) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '${user.joinedAt.year}-${user.joinedAt.month.toString().padLeft(2, '0')}-${user.joinedAt.day.toString().padLeft(2, '0')} 加入 Bangumi',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 10),
-                SelectableText(user.bio),
               ],
+              if (user.bio.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                SurfaceBlock(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.format_quote_rounded, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            '个人简介',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SelectableText(user.bio),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              if (constraints.maxWidth >= 840)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: _CollectionOverview(data: data)),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 2, child: _TimelineOverview(data: data)),
+                  ],
+                )
+              else ...[
+                _CollectionOverview(data: data),
+                const SizedBox(height: 26),
+                _TimelineOverview(data: data),
+              ],
+            ],
+          ),
+    );
+  }
+}
+
+class _CollectionOverview extends StatelessWidget {
+  const _CollectionOverview({required this.data});
+  final UserProfileData data;
+
+  @override
+  Widget build(BuildContext context) {
+    const types = <int, String>{2: '动画', 1: '书籍', 4: '游戏', 3: '音乐', 6: '三次元'};
+    final groups = <(String, List<UserContentItem>)>[];
+    for (final entry in types.entries) {
+      final items =
+          data.collections
+              .where((item) => item.subjectType == entry.key)
+              .toList();
+      if (items.isNotEmpty) groups.add((entry.value, items));
+    }
+    if (groups.isEmpty) return const EmptyView(message: '暂无公开收藏');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('我的收藏', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        for (final group in groups) ...[
+          Row(
+            children: [
+              Text(group.$1, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(width: 8),
+              Text(
+                '最近 ${group.$2.length} 项',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 155,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: group.$2.take(8).length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, index) {
+                final item = group.$2[index];
+                return SizedBox(
+                  width: 86,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: CachedNetworkImage(
+                          imageUrl: item.imageUrl,
+                          cacheManager: AppImageCache.manager,
+                          width: 86,
+                          height: 112,
+                          memCacheWidth: 258,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
         ],
-        Wrap(
-          spacing: 9,
-          runSpacing: 9,
-          children: [
-            _TimeMachineStat(
-              label: '收藏',
-              value: stats.subjects,
-              icon: Icons.bookmarks_outlined,
-            ),
-            _TimeMachineStat(
-              label: '看过',
-              value: stats.watched,
-              icon: Icons.done_all_rounded,
-            ),
-            _TimeMachineStat(
-              label: '日志',
-              value: stats.blogs,
-              icon: Icons.article_outlined,
-            ),
-            _TimeMachineStat(
-              label: '好友',
-              value: stats.friends,
-              icon: Icons.people_outline_rounded,
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Text('最近动态', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            Text(
-              '${data.timeline.length} 条',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (data.timeline.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 28),
-            child: Center(child: Text('暂无公开动态')),
-          )
-        else
-          for (final item in data.timeline.take(12))
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+      ],
+    );
+  }
+}
+
+class _TimelineOverview extends StatelessWidget {
+  const _TimelineOverview({required this.data});
+  final UserProfileData data;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Text('我的时间胶囊', style: Theme.of(context).textTheme.titleLarge),
+          const Spacer(),
+          Text(
+            '${data.timeline.length} 条',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      if (data.timeline.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 28),
+          child: Center(child: Text('暂无公开动态')),
+        )
+      else
+        for (final item in data.timeline.take(12))
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Column(
                   children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 9,
-                          height: 9,
-                          margin: const EdgeInsets.only(top: 17),
-                          decoration: BoxDecoration(
-                            color: item.color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Expanded(
-                          child: Container(
-                            width: 1,
-                            color: Theme.of(context).dividerColor,
-                          ),
-                        ),
-                      ],
+                    Container(
+                      width: 9,
+                      height: 9,
+                      margin: const EdgeInsets.only(top: 15),
+                      decoration: BoxDecoration(
+                        color: item.color,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                    const SizedBox(width: 13),
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 11),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${item.action}  ${item.subject}'),
-                            if (item.detail.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                item.detail,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                            const SizedBox(height: 5),
-                            Text(
-                              item.relativeTime(),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
+                      child: Container(
+                        width: 1,
+                        color: Theme.of(context).dividerColor,
                       ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        BangumiRichText(
+                          '${item.action}  ${item.subject}',
+                          selectable: false,
+                        ),
+                        if (item.detail.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          BangumiRichText(
+                            item.detail,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                            selectable: false,
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Text(
+                          item.relativeTime(),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-      ],
-    );
-  }
+          ),
+    ],
+  );
 }
 
 class _TimeMachineStat extends StatelessWidget {
@@ -609,14 +724,32 @@ class _TimelineList extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: items.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder:
-          (_, index) => ListTile(
-            leading: const Icon(Icons.timeline_rounded),
-            title: Text(items[index].subject),
-            subtitle: Text(
-              '${items[index].action} · ${items[index].relativeTime()}',
-            ),
+      itemBuilder: (_, index) {
+        final item = items[index];
+        return ListTile(
+          leading:
+              item.imageUrl.isEmpty
+                  ? const Icon(Icons.timeline_rounded)
+                  : ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: CachedNetworkImage(
+                      imageUrl: item.imageUrl,
+                      cacheManager: AppImageCache.manager,
+                      width: 42,
+                      height: 56,
+                      memCacheWidth: 126,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+          title: BangumiRichText(item.subject, selectable: false),
+          subtitle: BangumiRichText(
+            '${item.action} · ${item.relativeTime()}${item.detail.isEmpty ? '' : '\n${item.detail}'}',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            selectable: false,
           ),
+        );
+      },
     );
   }
 }

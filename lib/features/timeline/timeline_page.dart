@@ -6,6 +6,7 @@ import '../../core/models.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/bangumi_rich_text.dart';
 import '../community/reaction_picker.dart';
 import '../user/user_profile_page.dart';
 
@@ -277,7 +278,10 @@ class _TimelineTileState extends State<_TimelineTile> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text('${entry.action}  ${entry.subject}'),
+                      BangumiRichText(
+                        '${entry.action}  ${entry.subject}',
+                        selectable: false,
+                      ),
                       if (entry.imageUrl.isNotEmpty ||
                           entry.detail.isNotEmpty) ...[
                         const SizedBox(height: 10),
@@ -304,13 +308,14 @@ class _TimelineTileState extends State<_TimelineTile> {
                                 const SizedBox(width: 10),
                               ],
                               Expanded(
-                                child: Text(
+                                child: BangumiRichText(
                                   entry.detail.isEmpty
                                       ? entry.subject
                                       : entry.detail,
                                   maxLines: 3,
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.bodySmall,
+                                  selectable: false,
                                 ),
                               ),
                             ],
@@ -352,9 +357,9 @@ class _TimelineTileState extends State<_TimelineTile> {
                                       Icons.add_reaction_outlined,
                                       size: 19,
                                     )
-                                    : Text(
-                                      reactionEmoji(_selectedValue!),
-                                      style: const TextStyle(fontSize: 18),
+                                    : BangumiReactionImage(
+                                      value: _selectedValue!,
+                                      size: 19,
                                     ),
                           ),
                         ],

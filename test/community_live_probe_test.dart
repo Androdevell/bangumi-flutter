@@ -13,6 +13,8 @@ void main() {
       final user = await repository.fetchUserProfile('sai');
       final character = await repository.fetchCharacterDetails(1);
       final comments = await repository.fetchEpisodeComments(9122);
+      final topics = await repository.fetchTopics(type: 'group');
+      final topic = await repository.fetchTopicDetails(topics.first);
 
       expect(user.user.username, 'sai');
       expect(user.user.stats.subjects, greaterThan(0));
@@ -24,6 +26,8 @@ void main() {
       expect(character.comments, isNotEmpty);
       expect(comments, isNotEmpty);
       expect(comments.first.user.username, isNotEmpty);
+      expect(topic.title, isNotEmpty);
+      expect(topic.replies, isNotEmpty);
     },
     skip: _runLiveTests ? false : 'Live network probe',
     timeout: const Timeout(Duration(seconds: 90)),

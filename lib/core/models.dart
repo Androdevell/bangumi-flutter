@@ -235,6 +235,8 @@ class Topic {
     this.imageUrl = '',
     this.subtitle = '',
     this.subjectId = 0,
+    this.episodeSort = 0,
+    this.episodeName = '',
   });
 
   factory Topic.fromJson(Map<String, dynamic> json) {
@@ -278,6 +280,8 @@ class Topic {
       ]),
       subtitle: _firstNonEmpty([episodeName, subject['info'], json['info']]),
       subjectId: _integer(subject['id']),
+      episodeSort: episodeSort,
+      episodeName: episodeName,
     );
   }
 
@@ -293,6 +297,8 @@ class Topic {
   final String imageUrl;
   final String subtitle;
   final int subjectId;
+  final double episodeSort;
+  final String episodeName;
 
   String get typeLabel => switch (type) {
     'group' => '小组',

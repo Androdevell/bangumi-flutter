@@ -150,6 +150,10 @@ class UserContentItem {
     required this.title,
     required this.subtitle,
     required this.imageUrl,
+    this.subjectType = 0,
+    this.collectionType = 0,
+    this.rate = 0,
+    this.info = '',
   });
 
   factory UserContentItem.fromSubject(Map<String, dynamic> json) {
@@ -159,6 +163,10 @@ class UserContentItem {
       title: _first([json['nameCN'], json['name_cn'], json['name']]),
       subtitle: _collectionLabel(_int(interest['type'])),
       imageUrl: _image(json['images']),
+      subjectType: _int(json['type']),
+      collectionType: _int(interest['type']),
+      rate: _int(interest['rate']),
+      info: _text(json['info']),
     );
   }
 
@@ -194,6 +202,51 @@ class UserContentItem {
   final String title;
   final String subtitle;
   final String imageUrl;
+  final int subjectType;
+  final int collectionType;
+  final int rate;
+  final String info;
+}
+
+@immutable
+class TopicDetailData {
+  const TopicDetailData({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.groupName,
+    required this.creator,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.replies,
+  });
+
+  factory TopicDetailData.fromJson(
+    Map<String, dynamic> json, {
+    required String type,
+  }) {
+    final group = _map(json['group']);
+    final subject = _map(json['subject']);
+    return TopicDetailData(
+      id: _int(json['id']),
+      type: type,
+      title: _first([json['title'], subject['nameCN'], subject['name']]),
+      groupName: _first([group['title'], subject['nameCN'], subject['name']]),
+      creator: CommunityUser.fromJson(_map(json['creator'])),
+      createdAt: _date(json['createdAt']),
+      updatedAt: _date(json['updatedAt']),
+      replies: _list(json['replies']).map(CommunityReply.fromJson).toList(),
+    );
+  }
+
+  final int id;
+  final String type;
+  final String title;
+  final String groupName;
+  final CommunityUser creator;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final List<CommunityReply> replies;
 }
 
 @immutable

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/community_models.dart';
 import '../../core/network/app_image_cache.dart';
+import '../../widgets/bangumi_rich_text.dart';
 import 'reaction_picker.dart';
 
 class CommunityAvatar extends StatelessWidget {
@@ -169,7 +170,7 @@ class _ReplyTileState extends State<_ReplyTile> {
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 4),
-                SelectableText(item.content),
+                BangumiRichText(item.content),
                 if (item.replies.isNotEmpty) ...[
                   const SizedBox(height: 9),
                   Container(
@@ -182,7 +183,7 @@ class _ReplyTileState extends State<_ReplyTile> {
                         for (final reply in item.replies)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 5),
-                            child: Text(
+                            child: BangumiRichText(
                               '${reply.user.nickname}：${reply.content}',
                             ),
                           ),
@@ -203,10 +204,7 @@ class _ReplyTileState extends State<_ReplyTile> {
             icon:
                 _selectedValue == null
                     ? const Icon(Icons.add_reaction_outlined)
-                    : Text(
-                      reactionEmoji(_selectedValue!),
-                      style: const TextStyle(fontSize: 20),
-                    ),
+                    : BangumiReactionImage(value: _selectedValue!, size: 21),
           ),
         ],
       ),

@@ -7,8 +7,12 @@ import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../character/character_detail_page.dart';
+import '../episode/episode_comments_page.dart';
 import '../subject/subject_detail_page.dart';
 import '../user/user_profile_page.dart';
+import '../../core/subject_detail_models.dart';
+import 'person_comments_page.dart';
+import 'topic_detail_page.dart';
 
 class RakuenPage extends StatefulWidget {
   const RakuenPage({super.key, required this.repository});
@@ -63,12 +67,55 @@ class _RakuenPageState extends State<RakuenPage> {
   }
 
   Future<void> _openTopic(Topic topic) async {
+    if (topic.type == 'group' || topic.type == 'subject') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder:
+              (_) =>
+                  TopicDetailPage(topic: topic, repository: widget.repository),
+        ),
+      );
+      return;
+    }
+    if (topic.type == 'episode' || topic.type == 'ep') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder:
+              (_) => EpisodeCommentsPage(
+                episode: SubjectEpisode(
+                  id: topic.id,
+                  sort: topic.episodeSort,
+                  name: topic.episodeName,
+                  nameCn: topic.episodeName,
+                  duration: '',
+                  airdate: '',
+                  commentCount: topic.replies,
+                  description: '',
+                ),
+                repository: widget.repository,
+              ),
+        ),
+      );
+      return;
+    }
     if (topic.type == 'character') {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder:
               (_) => CharacterDetailPage(
                 characterId: topic.id,
+                repository: widget.repository,
+              ),
+        ),
+      );
+      return;
+    }
+    if (topic.type == 'person') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder:
+              (_) => PersonCommentsPage(
+                topic: topic,
                 repository: widget.repository,
               ),
         ),

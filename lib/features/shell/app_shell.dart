@@ -29,6 +29,24 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      DiscoverPage(repository: widget.repository),
+      TimelinePage(repository: widget.repository),
+      BrowsePage(repository: widget.repository),
+      RakuenPage(repository: widget.repository),
+      ProfilePage(
+        authService: widget.authService,
+        repository: widget.repository,
+        themeMode: widget.themeMode,
+        onToggleTheme: widget.onToggleTheme,
+      ),
+    ];
+  }
 
   static const _destinations = <_AppDestination>[
     _AppDestination(
@@ -58,19 +76,6 @@ class _AppShellState extends State<AppShell> {
     ),
   ];
 
-  List<Widget> get _pages => [
-    DiscoverPage(repository: widget.repository),
-    TimelinePage(repository: widget.repository),
-    BrowsePage(repository: widget.repository),
-    RakuenPage(repository: widget.repository),
-    ProfilePage(
-      authService: widget.authService,
-      repository: widget.repository,
-      themeMode: widget.themeMode,
-      onToggleTheme: widget.onToggleTheme,
-    ),
-  ];
-
   void _select(int index) {
     if (index == _selectedIndex) return;
     setState(() => _selectedIndex = index);
@@ -82,10 +87,7 @@ class _AppShellState extends State<AppShell> {
       builder: (context, constraints) {
         final showRail = constraints.maxWidth >= 760;
         final extendRail = constraints.maxWidth >= 1180;
-        final content = _AnimatedPage(
-          pageKey: ValueKey(_selectedIndex),
-          child: _pages[_selectedIndex],
-        );
+        final content = IndexedStack(index: _selectedIndex, children: _pages);
 
         if (!showRail) {
           return Scaffold(
@@ -154,33 +156,6 @@ class _AppShellState extends State<AppShell> {
           ),
         );
       },
-    );
-  }
-}
-
-class _AnimatedPage extends StatelessWidget {
-  const _AnimatedPage({required this.pageKey, required this.child});
-
-  final Key pageKey;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        final offset = Tween<Offset>(
-          begin: const Offset(0.025, 0),
-          end: Offset.zero,
-        ).animate(animation);
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(position: offset, child: child),
-        );
-      },
-      child: KeyedSubtree(key: pageKey, child: child),
     );
   }
 }
