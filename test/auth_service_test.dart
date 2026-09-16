@@ -46,12 +46,16 @@ void main() {
         case '/oauth/authorize':
           expect(request.followRedirects, isFalse);
           expect(request.headers['cookie'], contains('chii_auth=signed-in'));
+          expect(request.url.queryParameters['client_id'], isNotEmpty);
+          expect(request.bodyFields['client_id'], isNotEmpty);
           return http.Response(
             '',
             302,
             headers: {'location': 'http://localhost/callback?code=oauth-code'},
           );
         case '/oauth/access_token':
+          expect(request.bodyFields['client_id'], isNotEmpty);
+          expect(request.bodyFields['client_secret'], isNotEmpty);
           return http.Response(
             jsonEncode({
               'access_token': 'access-token',
@@ -83,8 +87,6 @@ void main() {
       client: sessionClient,
       cookies: cookies,
       vault: vault,
-      appId: 'test-app',
-      appSecret: 'test-secret',
     );
     await auth.initialize();
 

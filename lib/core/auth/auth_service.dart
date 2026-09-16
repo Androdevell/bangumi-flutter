@@ -16,8 +16,14 @@ class AuthService extends ChangeNotifier {
     required http.Client client,
     required PersistentCookieStore cookies,
     required SecureVault vault,
-    String appId = const String.fromEnvironment('BGM_OAUTH_APP_ID'),
-    String appSecret = const String.fromEnvironment('BGM_OAUTH_APP_SECRET'),
+    String appId = const String.fromEnvironment(
+      'BGM_OAUTH_APP_ID',
+      defaultValue: _defaultAppId,
+    ),
+    String appSecret = const String.fromEnvironment(
+      'BGM_OAUTH_APP_SECRET',
+      defaultValue: _defaultAppSecret,
+    ),
   }) : _client = client,
        _cookies = cookies,
        _vault = vault,
@@ -26,11 +32,13 @@ class AuthService extends ChangeNotifier {
 
   static const _userStorageKey = 'bangumi.auth.user.v1';
   static const _tokenStorageKey = 'bangumi.auth.token.v1';
+  static const _defaultAppId = 'bgm285565606da641d78';
+  static const _defaultAppSecret = '2f6af7bc16f05f70537ec24076164d5c';
   static const _callback = 'http://localhost/callback';
   static const _userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
       'AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.0';
+      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.1';
 
   final http.Client _client;
   final PersistentCookieStore _cookies;
