@@ -93,6 +93,7 @@ void main() {
 
     expect(timeline.imageUrl, contains('cover.jpg'));
     expect(timeline.detail, '很好看');
+    expect(timeline.subjectId, 42);
     expect(timeline.reactionBy('tester'), '54');
     expect(topic.subjectId, 42);
     expect(topic.title, contains('Ep.3'));

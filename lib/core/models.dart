@@ -123,6 +123,7 @@ class TimelineEntry {
     this.detail = '',
     this.sourceName = '',
     this.replies = 0,
+    this.subjectId = 0,
   });
 
   factory TimelineEntry.fromJson(Map<String, dynamic> json) {
@@ -169,6 +170,7 @@ class TimelineEntry {
       }..remove(''),
       imageUrl: visual.$1,
       detail: visual.$2,
+      subjectId: visual.$3,
       sourceName: _string(_map(json['source'])['name']),
       replies: _integer(json['replies']),
     );
@@ -190,6 +192,7 @@ class TimelineEntry {
   final String detail;
   final String sourceName;
   final int replies;
+  final int subjectId;
 
   String? reactionBy(String username) {
     if (username.isEmpty) return null;
@@ -439,7 +442,7 @@ String _timelineContent(Map<String, dynamic> memo, int category) {
   return found.isEmpty ? '一条 Bangumi 动态' : found;
 }
 
-(String, String) _timelineVisual(Map<String, dynamic> memo, int category) {
+(String, String, int) _timelineVisual(Map<String, dynamic> memo, int category) {
   Map<String, dynamic> subject = const {};
   var detail = '';
   if (category == 3 && memo['subject'] is List) {
@@ -469,7 +472,11 @@ String _timelineContent(Map<String, dynamic> memo, int category) {
   } else {
     subject = _map(_map(memo['wiki'])['subject']);
   }
-  return (_imageFromJson(subject['images']), _compact(detail));
+  return (
+    _imageFromJson(subject['images']),
+    _compact(detail),
+    _integer(subject['id']),
+  );
 }
 
 String _findTimelineText(dynamic value) {

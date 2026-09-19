@@ -54,6 +54,52 @@ class ApiClient {
   bool get isLoggedIn => _authService?.isLoggedIn ?? false;
   String get currentUsername => _authService?.user?.username ?? '';
 
+  Future<dynamic> postWebForm(
+    String path, {
+    required Map<String, String> fields,
+    String? referer,
+  }) async {
+    final uri = Uri.parse('https://bgm.tv/').resolve(path);
+    final request =
+        http.Request('POST', uri)
+          ..followRedirects = false
+          ..headers.addAll({
+            HttpHeaders.acceptHeader: 'application/json,*/*;q=0.8',
+            HttpHeaders.acceptLanguageHeader:
+                'zh-CN,zh;q=0.8,zh-TW;q=0.6,zh-HK;q=0.4,en;q=0.2',
+            HttpHeaders.refererHeader: referer ?? 'https://bgm.tv/',
+            HttpHeaders.cookieHeader: 'kira=4',
+          })
+          ..bodyFields = fields;
+    try {
+      final response = await http.Response.fromStream(
+        await _client.send(request).timeout(const Duration(seconds: 20)),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 400) {
+        throw ApiException(
+          '服务器返回 ${response.statusCode}',
+          statusCode: response.statusCode,
+          details: response.body,
+        );
+      }
+      final text = utf8.decode(response.bodyBytes).trim();
+      if (text.isEmpty || response.statusCode >= 300) return null;
+      try {
+        return jsonDecode(text);
+      } on FormatException {
+        throw const ApiException('评论发布失败，请重新登录后再试');
+      }
+    } on TimeoutException {
+      throw const ApiException('连接 Bangumi 超时，请检查网络后重试');
+    } on SocketException {
+      throw const ApiException('无法连接 Bangumi，请检查网络或 DNS 设置');
+    } on http.ClientException catch (error) {
+      throw ApiException('网络请求失败：${error.message}');
+    }
+  }
+
+  String get formHash => _authService?.user?.formHash ?? '';
+
   Future<dynamic> _request(
     String method,
     String path, {

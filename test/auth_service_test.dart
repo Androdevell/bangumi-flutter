@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:bangumi_flutter/core/auth/auth_service.dart';
 import 'package:bangumi_flutter/core/auth/secure_vault.dart';
 import 'package:bangumi_flutter/core/network/cookie_session_client.dart';
+import 'package:bangumi_flutter/core/network/api_client.dart';
+import 'package:bangumi_flutter/data/bangumi_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -79,6 +81,30 @@ void main() {
             200,
             headers: {'content-type': 'application/json'},
           );
+        case '/subject/ep/9122/new_reply':
+          expect(request.url.queryParameters['ajax'], '1');
+          expect(request.headers['referer'], 'https://bgm.tv/ep/9122');
+          expect(request.headers['cookie'], contains('chii_auth=signed-in'));
+          expect(request.bodyFields, {
+            'lastview': '',
+            'formhash': 'form-token',
+            'content': '章节评论',
+            'submit': 'submit',
+          });
+          return http.Response(
+            jsonEncode({
+              'posts': {
+                'main': <String, dynamic>{},
+                'sub': <String, dynamic>{},
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        case '/p1/collections/subjects/99':
+          expect(request.method, 'PUT');
+          expect(request.headers['authorization'], 'Bearer access-token');
+          return http.Response('', 204);
       }
       return http.Response('not found', 404);
     });
@@ -103,5 +129,23 @@ void main() {
     expect(auth.isLoggedIn, isTrue);
     expect(auth.user?.username, 'tester');
     expect(await auth.validAccessToken(), 'access-token');
+
+    final repository = RemoteBangumiRepository(
+      apiClient: ApiClient(client: sessionClient, authService: auth),
+      externalClient: rawClient,
+    );
+    await repository.createEpisodeComment(9122, ' 章节评论 ');
+    var collectionNotifications = 0;
+    repository.collectionChanges.addListener(() => collectionNotifications++);
+    await repository.updateSubjectCollection(
+      99,
+      type: 3,
+      rate: 0,
+      comment: '',
+      isPrivate: false,
+      wasCollected: false,
+    );
+    expect(repository.pendingSubjectCollectionDelta, 1);
+    expect(collectionNotifications, 1);
   });
 }

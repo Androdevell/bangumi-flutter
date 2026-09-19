@@ -32,7 +32,7 @@ void main() {
       'memo': {
         'subject': [
           {
-            'subject': {'name_cn': '测试动画'},
+            'subject': {'id': 485936, 'name_cn': '测试动画'},
           },
         ],
       },
@@ -41,5 +41,6 @@ void main() {
     expect(entry.user, 'hana7');
     expect(entry.action, '在看');
     expect(entry.subject, '测试动画');
+    expect(entry.subjectId, 485936);
   });
 }

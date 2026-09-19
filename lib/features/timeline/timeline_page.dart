@@ -8,6 +8,7 @@ import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../../widgets/bangumi_rich_text.dart';
 import '../community/reaction_picker.dart';
+import '../subject/subject_detail_page.dart';
 import '../user/user_profile_page.dart';
 
 class TimelinePage extends StatefulWidget {
@@ -221,6 +222,25 @@ class _TimelineTileState extends State<_TimelineTile> {
     );
   }
 
+  void _openSubject() {
+    final entry = widget.entry;
+    if (entry.subjectId <= 0) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => SubjectDetailPage(
+              subject: Subject(
+                id: entry.subjectId,
+                title: entry.subject,
+                imageUrl: entry.imageUrl,
+              ),
+              heroTag: 'timeline-${entry.id}-${entry.subjectId}',
+              repository: widget.repository,
+            ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
@@ -231,7 +251,10 @@ class _TimelineTileState extends State<_TimelineTile> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
-          onTap: entry.username.isEmpty ? null : _openUser,
+          onTap:
+              entry.subjectId > 0
+                  ? _openSubject
+                  : (entry.username.isEmpty ? null : _openUser),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 12),
             child: Row(

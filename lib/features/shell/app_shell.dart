@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_strings.dart';
 import '../../core/auth/auth_service.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/settings/app_preferences.dart';
 import '../../data/bangumi_repository.dart';
 import '../browse/browse_page.dart';
 import '../discover/discover_page.dart';
@@ -16,12 +18,20 @@ class AppShell extends StatefulWidget {
     required this.authService,
     required this.themeMode,
     required this.onToggleTheme,
+    required this.locale,
+    required this.onLocaleChanged,
+    required this.appIconStyle,
+    required this.onAppIconStyleChanged,
   });
 
   final BangumiRepository repository;
   final AuthService? authService;
   final ThemeMode themeMode;
   final VoidCallback onToggleTheme;
+  final Locale locale;
+  final ValueChanged<Locale> onLocaleChanged;
+  final AppIconStyle appIconStyle;
+  final ValueChanged<AppIconStyle> onAppIconStyleChanged;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -29,52 +39,54 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
-  late final List<Widget> _pages;
 
-  @override
-  void initState() {
-    super.initState();
-    _pages = [
-      DiscoverPage(repository: widget.repository),
-      TimelinePage(repository: widget.repository),
-      BrowsePage(repository: widget.repository),
-      RakuenPage(repository: widget.repository),
-      ProfilePage(
-        authService: widget.authService,
-        repository: widget.repository,
-        themeMode: widget.themeMode,
-        onToggleTheme: widget.onToggleTheme,
+  List<Widget> get _pages => [
+    DiscoverPage(repository: widget.repository),
+    TimelinePage(repository: widget.repository),
+    BrowsePage(repository: widget.repository),
+    RakuenPage(repository: widget.repository),
+    ProfilePage(
+      authService: widget.authService,
+      repository: widget.repository,
+      themeMode: widget.themeMode,
+      onToggleTheme: widget.onToggleTheme,
+      locale: widget.locale,
+      onLocaleChanged: widget.onLocaleChanged,
+      appIconStyle: widget.appIconStyle,
+      onAppIconStyleChanged: widget.onAppIconStyleChanged,
+    ),
+  ];
+
+  List<_AppDestination> _destinations(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    return [
+      _AppDestination(
+        strings.t('discover'),
+        Icons.home_rounded,
+        Icons.home_outlined,
+      ),
+      _AppDestination(
+        strings.t('timeline'),
+        Icons.view_timeline_rounded,
+        Icons.view_timeline_outlined,
+      ),
+      _AppDestination(
+        strings.t('browse'),
+        Icons.explore_rounded,
+        Icons.explore_outlined,
+      ),
+      _AppDestination(
+        strings.t('rakuen'),
+        Icons.forum_rounded,
+        Icons.forum_outlined,
+      ),
+      _AppDestination(
+        strings.t('profile'),
+        Icons.account_circle_rounded,
+        Icons.account_circle_outlined,
       ),
     ];
   }
-
-  static const _destinations = <_AppDestination>[
-    _AppDestination(
-      AppStrings.discover,
-      Icons.home_rounded,
-      Icons.home_outlined,
-    ),
-    _AppDestination(
-      AppStrings.timeline,
-      Icons.view_timeline_rounded,
-      Icons.view_timeline_outlined,
-    ),
-    _AppDestination(
-      AppStrings.browse,
-      Icons.explore_rounded,
-      Icons.explore_outlined,
-    ),
-    _AppDestination(
-      AppStrings.rakuen,
-      Icons.forum_rounded,
-      Icons.forum_outlined,
-    ),
-    _AppDestination(
-      AppStrings.profile,
-      Icons.account_circle_rounded,
-      Icons.account_circle_outlined,
-    ),
-  ];
 
   void _select(int index) {
     if (index == _selectedIndex) return;
@@ -83,6 +95,8 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final destinations = _destinations(context);
+    final strings = AppLocalizations.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final showRail = constraints.maxWidth >= 760;
@@ -96,7 +110,7 @@ class _AppShellState extends State<AppShell> {
               selectedIndex: _selectedIndex,
               onDestinationSelected: _select,
               destinations: [
-                for (final item in _destinations)
+                for (final item in destinations)
                   NavigationDestination(
                     icon: Icon(item.icon),
                     selectedIcon: Icon(item.selectedIcon),
@@ -118,7 +132,10 @@ class _AppShellState extends State<AppShell> {
                 groupAlignment: -0.35,
                 leading: Padding(
                   padding: const EdgeInsets.only(top: 14, bottom: 22),
-                  child: _BrandMark(showLabel: extendRail),
+                  child: _BrandMark(
+                    showLabel: extendRail,
+                    iconStyle: widget.appIconStyle,
+                  ),
                 ),
                 trailing: Expanded(
                   child: Align(
@@ -126,7 +143,7 @@ class _AppShellState extends State<AppShell> {
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 18),
                       child: IconButton(
-                        tooltip: '切换主题',
+                        tooltip: strings.t('toggleTheme'),
                         onPressed: widget.onToggleTheme,
                         icon: Icon(
                           Theme.of(context).brightness == Brightness.dark
@@ -138,7 +155,7 @@ class _AppShellState extends State<AppShell> {
                   ),
                 ),
                 destinations: [
-                  for (final item in _destinations)
+                  for (final item in destinations)
                     NavigationRailDestination(
                       icon: Icon(item.icon),
                       selectedIcon: Icon(item.selectedIcon),
@@ -161,28 +178,22 @@ class _AppShellState extends State<AppShell> {
 }
 
 class _BrandMark extends StatelessWidget {
-  const _BrandMark({required this.showLabel});
+  const _BrandMark({required this.showLabel, required this.iconStyle});
 
   final bool showLabel;
+  final AppIconStyle iconStyle;
 
   @override
   Widget build(BuildContext context) {
-    final mark = Container(
-      width: 38,
-      height: 38,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Text(
-        'B',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0,
-        ),
+    final mark = ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: Image.asset(
+        iconStyle == AppIconStyle.anime
+            ? 'assets/branding/app_icon_anime.png'
+            : 'assets/branding/app_icon_source.png',
+        width: 38,
+        height: 38,
+        fit: BoxFit.cover,
       ),
     );
     if (!showLabel) return mark;

@@ -24,6 +24,7 @@ class EpisodeCommentsPage extends StatefulWidget {
 
 class _EpisodeCommentsPageState extends State<EpisodeCommentsPage> {
   late Future<List<CommunityReply>> _comments = _load();
+  bool _submitting = false;
 
   Future<List<CommunityReply>> _load() =>
       widget.repository.fetchEpisodeComments(widget.episode.id);
@@ -38,12 +39,85 @@ class _EpisodeCommentsPageState extends State<EpisodeCommentsPage> {
     ),
   );
 
+  Future<void> _openCommentDialog() async {
+    if (!widget.repository.isLoggedIn) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先登录后再发表评论')));
+      return;
+    }
+    final controller = TextEditingController();
+    final content = await showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('发表章节评论'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              minLines: 3,
+              maxLines: 8,
+              maxLength: 1000,
+              decoration: const InputDecoration(
+                hintText: '说说你对这一章节的看法…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (value.isNotEmpty) Navigator.pop(context, value);
+                },
+                child: const Text('发布'),
+              ),
+            ],
+          ),
+    );
+    controller.dispose();
+    if (content == null || !mounted) return;
+    setState(() => _submitting = true);
+    try {
+      await widget.repository.createEpisodeComment(widget.episode.id, content);
+      if (!mounted) return;
+      setState(() => _comments = _load());
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('评论已发布')));
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final episode = widget.episode;
     return Scaffold(
       appBar: AppBar(
         title: Text('章节 ${episode.sort.toString().replaceAll('.0', '')} 评论'),
+        actions: [
+          IconButton(
+            tooltip: '发表评论',
+            onPressed: _submitting ? null : _openCommentDialog,
+            icon:
+                _submitting
+                    ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Icon(Icons.add_comment_outlined),
+          ),
+        ],
       ),
       body: FutureBuilder<List<CommunityReply>>(
         future: _comments,

@@ -5,7 +5,7 @@ import 'package:html/parser.dart' as html;
 import '../core/network/app_image_cache.dart';
 
 final _richTokenPattern = RegExp(
-  r'(\(bgm(?:\d+|124_tv)\)|\[img\](https?://[^\[]+)\[/img\])',
+  r'(\((?:bgm(?:\d+|124_tv)|(?:musume|blake)_\d{2,3})\)|\[img(?:=\d+\s*,\s*\d+)?\]\s*((?:https?:)?//[^\[]+?)\s*\[/img\])',
   caseSensitive: false,
 );
 
@@ -19,6 +19,13 @@ String? bangumiEmojiUrl(String smileId) {
     RegExp(r'[^a-z0-9_]'),
     '',
   );
+  final characterSticker = RegExp(
+    r'^(musume|blake)_(\d{2,3})$',
+  ).firstMatch(normalized);
+  if (characterSticker != null) {
+    final family = characterSticker.group(1)!;
+    return 'https://lain.bgm.tv/img/smiles/$family/$normalized.gif';
+  }
   if (!normalized.startsWith('bgm')) return null;
   if (normalized == 'bgm124_tv') {
     return 'https://lain.bgm.tv/img/smiles/tv/101.gif';
@@ -36,6 +43,11 @@ String? bangumiEmojiUrl(String smileId) {
   if (id == 125) return 'https://lain.bgm.tv/img/smiles/tv/102.gif';
   if (id >= 200 && id <= 238) {
     return 'https://lain.bgm.tv/img/smiles/tv_vs/bgm_$id.png';
+  }
+  if (id >= 500 && id <= 529) {
+    const gifIds = <int>{500, 501, 505, 515, 516, 517, 518, 519, 521, 522, 523};
+    final extension = gifIds.contains(id) ? 'gif' : 'png';
+    return 'https://lain.bgm.tv/img/smiles/tv_500/bgm_$id.$extension';
   }
   return null;
 }
@@ -105,7 +117,7 @@ class BangumiRichText extends StatelessWidget {
         );
       }
       final token = match.group(0)!;
-      if (token.toLowerCase().startsWith('(bgm')) {
+      if (token.startsWith('(')) {
         final url = bangumiEmojiUrl(token.substring(1, token.length - 1));
         if (url == null) {
           spans.add(TextSpan(text: token));
@@ -118,9 +130,10 @@ class BangumiRichText extends StatelessWidget {
                 child: CachedNetworkImage(
                   imageUrl: url,
                   cacheManager: AppImageCache.manager,
-                  width: 24,
-                  height: 24,
-                  memCacheWidth: 72,
+                  width: token.toLowerCase().startsWith('(bgm') ? 24 : 55,
+                  height: token.toLowerCase().startsWith('(bgm') ? 24 : 55,
+                  memCacheWidth:
+                      token.toLowerCase().startsWith('(bgm') ? 72 : 165,
                   fit: BoxFit.contain,
                   errorWidget: (_, __, ___) => Text(token),
                 ),
@@ -129,7 +142,7 @@ class BangumiRichText extends StatelessWidget {
           );
         }
       } else {
-        final imageUrl = match.group(2)!;
+        final imageUrl = _normalizeImageUrl(match.group(2)!);
         spans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
@@ -168,6 +181,12 @@ class BangumiRichText extends StatelessWidget {
     );
     return selectable ? SelectionArea(child: richText) : richText;
   }
+}
+
+String _normalizeImageUrl(String input) {
+  final decoded = html.parseFragment(input).text?.trim() ?? input.trim();
+  final unescaped = decoded.replaceAll(r'\_', '_').replaceAll(r'\/', '/');
+  return unescaped.startsWith('//') ? 'https:$unescaped' : unescaped;
 }
 
 String _plainText(String input) {

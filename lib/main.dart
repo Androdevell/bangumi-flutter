@@ -7,11 +7,14 @@ import 'core/network/api_client.dart';
 import 'core/network/app_image_cache.dart';
 import 'core/network/cookie_session_client.dart';
 import 'core/network/platform_http_client.dart';
+import 'core/settings/app_preferences.dart';
 import 'data/bangumi_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final vault = PlatformSecureVault();
+  final preferences = AppPreferences(vault);
+  final appSettings = await preferences.load();
   final cookieStore = PersistentCookieStore(vault);
   await cookieStore.initialize();
 
@@ -30,6 +33,9 @@ Future<void> main() async {
   runApp(
     BangumiApp(
       authService: authService,
+      preferences: preferences,
+      initialLocale: appSettings.locale,
+      initialAppIconStyle: appSettings.iconStyle,
       repository: RemoteBangumiRepository(
         apiClient: ApiClient(client: apiTransport, authService: authService),
       ),

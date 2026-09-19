@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/models.dart';
@@ -12,6 +13,8 @@ import '../core/subject_detail_models.dart';
 abstract interface class BangumiRepository {
   bool get isLoggedIn;
   String get currentUsername;
+  Listenable get collectionChanges;
+  int get pendingSubjectCollectionDelta;
   Future<Map<String, List<Subject>>> fetchCalendar();
   Future<List<Subject>> fetchTrending({int type = 2, int limit = 20});
   Future<List<Subject>> fetchSubjects({
@@ -30,7 +33,9 @@ abstract interface class BangumiRepository {
   Future<TopicDetailData> fetchTopicDetails(Topic topic);
   Future<UserProfileData> fetchUserProfile(String username);
   Future<CharacterDetailData> fetchCharacterDetails(int id);
+  Future<PersonDetailData> fetchPersonDetails(int id);
   Future<List<CommunityReply>> fetchEpisodeComments(int episodeId);
+  Future<void> createEpisodeComment(int episodeId, String content);
   Future<List<CommunityReply>> fetchPersonComments(int personId);
   Future<void> updateSubjectCollection(
     int subjectId, {
@@ -38,6 +43,7 @@ abstract interface class BangumiRepository {
     required int rate,
     required String comment,
     required bool isPrivate,
+    bool wasCollected = true,
   });
   Future<void> updateEpisodeProgress(
     int episodeId,
@@ -64,12 +70,21 @@ class RemoteBangumiRepository implements BangumiRepository {
 
   final ApiClient _api;
   final http.Client _externalClient;
+  final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
+  final Map<String, int> _pendingSubjectCollectionDeltas = {};
 
   @override
   bool get isLoggedIn => _api.isLoggedIn;
 
   @override
   String get currentUsername => _api.currentUsername;
+
+  @override
+  Listenable get collectionChanges => _collectionChanges;
+
+  @override
+  int get pendingSubjectCollectionDelta =>
+      _pendingSubjectCollectionDeltas[currentUsername] ?? 0;
 
   @override
   Future<Map<String, List<Subject>>> fetchCalendar() async {
@@ -330,6 +345,29 @@ class RemoteBangumiRepository implements BangumiRepository {
   }
 
   @override
+  Future<void> createEpisodeComment(int episodeId, String content) async {
+    final value = content.trim();
+    if (value.isEmpty) throw const ApiException('评论内容不能为空');
+    final formHash = _api.formHash;
+    if (!_api.isLoggedIn || formHash.isEmpty) {
+      throw const ApiException('请先登录后再发表评论');
+    }
+    final json = await _api.postWebForm(
+      'subject/ep/$episodeId/new_reply?ajax=1',
+      referer: 'https://bgm.tv/ep/$episodeId',
+      fields: {
+        'lastview': '',
+        'formhash': formHash,
+        'content': value,
+        'submit': 'submit',
+      },
+    );
+    if (json is Map && json['status'] == 'error') {
+      throw ApiException('${json['msg'] ?? json['message'] ?? '评论发布失败'}');
+    }
+  }
+
+  @override
   Future<List<CommunityReply>> fetchPersonComments(int personId) async {
     final json = await _api.get('p1/persons/$personId/comments');
     return _items(json)
@@ -345,6 +383,7 @@ class RemoteBangumiRepository implements BangumiRepository {
     required int rate,
     required String comment,
     required bool isPrivate,
+    bool wasCollected = true,
   }) async {
     await _api.put(
       'p1/collections/subjects/$subjectId',
@@ -356,6 +395,14 @@ class RemoteBangumiRepository implements BangumiRepository {
         'tags': <String>[],
       },
     );
+    if (!wasCollected && type > 0 && currentUsername.isNotEmpty) {
+      _pendingSubjectCollectionDeltas.update(
+        currentUsername,
+        (value) => value + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    _collectionChanges.value++;
   }
 
   @override
@@ -369,13 +416,35 @@ class RemoteBangumiRepository implements BangumiRepository {
   );
 
   @override
-  Future<void> toggleCharacterCollection(int characterId, bool collected) =>
-      collected
-          ? _api.delete(
-            'p1/collections/characters/$characterId',
-            body: const {},
-          )
-          : _api.put('p1/collections/characters/$characterId', body: const {});
+  Future<void> toggleCharacterCollection(
+    int characterId,
+    bool collected,
+  ) async {
+    if (collected) {
+      await _api.delete(
+        'p1/collections/characters/$characterId',
+        body: const {},
+      );
+    } else {
+      await _api.put('p1/collections/characters/$characterId', body: const {});
+    }
+    _collectionChanges.value++;
+  }
+
+  @override
+  Future<PersonDetailData> fetchPersonDetails(int id) async {
+    final results = await Future.wait<dynamic>([
+      _api.get('p1/persons/$id'),
+      _safeJson(_api.get('p1/persons/$id/comments'), const []),
+    ]);
+    if (results.first is! Map) throw const ApiException('制作人员资料格式不正确');
+    return PersonDetailData(
+      person: PersonEntry.fromJson(
+        Map<String, dynamic>.from(results.first as Map),
+      ),
+      comments: _items(results[1]).map(CommunityReply.fromJson).toList(),
+    );
+  }
 
   @override
   Future<void> toggleFriend(String username, bool isFriend) {
@@ -581,6 +650,7 @@ class RemoteBangumiRepository implements BangumiRepository {
 
   @override
   void close() {
+    _collectionChanges.dispose();
     _api.close();
     _externalClient.close();
   }

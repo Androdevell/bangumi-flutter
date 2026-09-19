@@ -1,10 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/app_strings.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/community_models.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/network/app_image_cache.dart';
+import '../../core/settings/app_preferences.dart';
 import '../../core/update/app_update_service.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
@@ -18,12 +19,20 @@ class ProfilePage extends StatefulWidget {
     required this.repository,
     required this.themeMode,
     required this.onToggleTheme,
+    required this.locale,
+    required this.onLocaleChanged,
+    required this.appIconStyle,
+    required this.onAppIconStyleChanged,
   });
 
   final AuthService? authService;
   final BangumiRepository repository;
   final ThemeMode themeMode;
   final VoidCallback onToggleTheme;
+  final Locale locale;
+  final ValueChanged<Locale> onLocaleChanged;
+  final AppIconStyle appIconStyle;
+  final ValueChanged<AppIconStyle> onAppIconStyleChanged;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -39,8 +48,31 @@ class _ProfilePageState extends State<ProfilePage> {
   late final Future<String> _appVersion = _updateService.currentVersion();
   bool _checkingUpdate = false;
 
+  AppLocalizations get _strings => AppLocalizations.of(context);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.repository.collectionChanges.addListener(_refreshProfile);
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository) {
+      oldWidget.repository.collectionChanges.removeListener(_refreshProfile);
+      widget.repository.collectionChanges.addListener(_refreshProfile);
+      _refreshProfile();
+    }
+  }
+
+  void _refreshProfile() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    widget.repository.collectionChanges.removeListener(_refreshProfile);
     _updateService.close();
     super.dispose();
   }
@@ -59,23 +91,25 @@ class _ProfilePageState extends State<ProfilePage> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('图片缓存已清除')));
+    ).showSnackBar(SnackBar(content: Text(_strings.t('cacheCleared'))));
   }
 
   Future<void> _testNetwork() async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('正在连接 Bangumi…')));
+    messenger.showSnackBar(SnackBar(content: Text(_strings.t('connecting'))));
     try {
       await widget.repository.fetchTrending(limit: 1);
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
-        const SnackBar(content: Text('连接正常，可以访问 Bangumi')),
+        SnackBar(content: Text(_strings.t('connectionOk'))),
       );
     } on Object catch (error) {
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text('连接失败：$error')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('${_strings.t('connectionFailed')}：$error')),
+      );
     }
   }
 
@@ -87,7 +121,11 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       if (!result.updateAvailable) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('当前已是最新版 ${result.currentVersion}')),
+          SnackBar(
+            content: Text(
+              '${_strings.t('latestVersion')} ${result.currentVersion}',
+            ),
+          ),
         );
         return;
       }
@@ -95,19 +133,20 @@ class _ProfilePageState extends State<ProfilePage> {
         context: context,
         builder:
             (context) => AlertDialog(
-              title: const Text('发现新版本'),
+              title: Text(_strings.t('newVersion')),
               content: Text(
-                '当前版本 ${result.currentVersion}\n最新版本 ${result.latestVersion}',
+                '${_strings.t('currentVersion')} ${result.currentVersion}'
+                '\n${_strings.t('newestVersion')} ${result.latestVersion}',
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('稍后'),
+                  child: Text(_strings.t('later')),
                 ),
                 FilledButton.icon(
                   onPressed: () => Navigator.pop(context, true),
                   icon: const Icon(Icons.open_in_new_rounded),
-                  label: const Text('查看发布页'),
+                  label: Text(_strings.t('openRelease')),
                 ),
               ],
             ),
@@ -115,9 +154,9 @@ class _ProfilePageState extends State<ProfilePage> {
       if (open == true) await _updateService.openRelease(result);
     } on Object catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('检查更新失败：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_strings.t('updateFailed')}：$error')),
+        );
       }
     } finally {
       if (mounted) setState(() => _checkingUpdate = false);
@@ -139,16 +178,16 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('退出登录'),
-            content: const Text('将清除本机保存的登录会话。'),
+            title: Text(_strings.t('logout')),
+            content: Text(_strings.t('logoutMessage')),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
+                child: Text(_strings.t('cancel')),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('退出'),
+                child: Text(_strings.t('logoutAction')),
               ),
             ],
           ),
@@ -174,6 +213,71 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _chooseLanguage() async {
+    final selected = await showModalBottomSheet<Locale>(
+      context: context,
+      showDragHandle: true,
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.translate_rounded),
+                  title: Text(_strings.t('language')),
+                ),
+                for (final item in const [
+                  (Locale('zh'), '中文'),
+                  (Locale('en'), 'English'),
+                  (Locale('ja'), '日本語'),
+                ])
+                  RadioListTile<String>(
+                    value: item.$1.languageCode,
+                    groupValue: widget.locale.languageCode,
+                    title: Text(item.$2),
+                    onChanged: (_) => Navigator.pop(context, item.$1),
+                  ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+    );
+    if (selected != null) widget.onLocaleChanged(selected);
+  }
+
+  Future<void> _chooseAppIcon() async {
+    final selected = await showModalBottomSheet<AppIconStyle>(
+      context: context,
+      showDragHandle: true,
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.apps_rounded),
+                  title: Text(_strings.t('appIcon')),
+                ),
+                _IconChoice(
+                  style: AppIconStyle.classic,
+                  selected: widget.appIconStyle,
+                  label: _strings.t('classicIcon'),
+                  asset: 'assets/branding/app_icon_source.png',
+                ),
+                _IconChoice(
+                  style: AppIconStyle.anime,
+                  selected: widget.appIconStyle,
+                  label: _strings.t('animeIcon'),
+                  asset: 'assets/branding/app_icon_anime.png',
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+    );
+    if (selected != null) widget.onAppIconStyleChanged(selected);
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = widget.authService;
@@ -188,6 +292,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildPage(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context);
     final user = widget.authService?.user;
     return SafeArea(
       child: ContentFrame(
@@ -196,9 +301,9 @@ class _ProfilePageState extends State<ProfilePage> {
           key: const PageStorageKey('profile-scroll'),
           padding: const EdgeInsets.fromLTRB(24, 22, 24, 30),
           children: [
-            const PageHeader(
-              title: AppStrings.profile,
-              subtitle: '收藏、进度与客户端设置',
+            PageHeader(
+              title: strings.t('profile'),
+              subtitle: strings.t('profileSubtitle'),
             ),
             const SizedBox(height: 22),
             SurfaceBlock(
@@ -229,7 +334,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              user?.displayName ?? '访客模式',
+                              user?.displayName ?? strings.t('guestMode'),
                               style: const TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.w700,
@@ -238,7 +343,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             const SizedBox(height: 4),
                             Text(
                               user == null
-                                  ? '登录后同步收藏与观看进度'
+                                  ? strings.t('loginSync')
                                   : '@${user.username}',
                             ),
                           ],
@@ -250,10 +355,10 @@ class _ProfilePageState extends State<ProfilePage> {
                             ? FilledButton.icon(
                               onPressed: _openLogin,
                               icon: const Icon(Icons.login_rounded),
-                              label: const Text('登录'),
+                              label: Text(strings.t('login')),
                             )
                             : IconButton(
-                              tooltip: '退出登录',
+                              tooltip: strings.t('logout'),
                               onPressed: _logout,
                               icon: const Icon(Icons.logout_rounded),
                             ),
@@ -267,19 +372,22 @@ class _ProfilePageState extends State<ProfilePage> {
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           _Stat(
-                            value: values == null ? '--' : '${values.subjects}',
-                            label: '收藏',
+                            value:
+                                values == null
+                                    ? '--'
+                                    : '${values.subjects + widget.repository.pendingSubjectCollectionDelta}',
+                            label: strings.t('collections'),
                           ),
                           _Stat(
                             value:
                                 values == null
                                     ? '--'
                                     : '${values.characters + values.persons}',
-                            label: '人物',
+                            label: strings.t('people'),
                           ),
                           _Stat(
                             value: values == null ? '--' : '${values.friends}',
-                            label: '好友',
+                            label: strings.t('friends'),
                           ),
                         ],
                       );
@@ -301,7 +409,10 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 24),
-            Text('快捷入口', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              strings.t('shortcuts'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 10),
             Wrap(
               spacing: 10,
@@ -309,43 +420,46 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _Shortcut(
                   icon: Icons.bookmarks_outlined,
-                  label: '我的收藏',
+                  label: strings.t('myCollections'),
                   onTap: () => _openMyProfile(1),
                 ),
                 _Shortcut(
                   icon: Icons.theater_comedy_outlined,
-                  label: '人物收藏',
+                  label: strings.t('characterCollections'),
                   onTap: () => _openMyProfile(2),
                 ),
                 _Shortcut(
                   icon: Icons.article_outlined,
-                  label: '我的日志',
+                  label: strings.t('myBlogs'),
                   onTap: () => _openMyProfile(3),
                 ),
                 _Shortcut(
                   icon: Icons.list_alt_outlined,
-                  label: '我的目录',
+                  label: strings.t('myIndexes'),
                   onTap: () => _openMyProfile(4),
                 ),
                 _Shortcut(
                   icon: Icons.people_outline_rounded,
-                  label: '我的好友',
+                  label: strings.t('myFriends'),
                   onTap: () => _openMyProfile(5),
                 ),
                 _Shortcut(
                   icon: Icons.timeline_rounded,
-                  label: '我的时间线',
+                  label: strings.t('myTimeline'),
                   onTap: () => _openMyProfile(6),
                 ),
                 _Shortcut(
                   icon: Icons.bar_chart_rounded,
-                  label: '我的统计',
+                  label: strings.t('myStats'),
                   onTap: () => _openMyProfile(7),
                 ),
               ],
             ),
             const SizedBox(height: 26),
-            Text('账户', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              strings.t('account'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 10),
             SurfaceBlock(
               padding: EdgeInsets.zero,
@@ -353,9 +467,11 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.manage_accounts_outlined),
-                    title: const Text('账户资料'),
+                    title: Text(strings.t('accountProfile')),
                     subtitle: Text(
-                      user == null ? '登录后管理账户' : '@${user.username}',
+                      user == null
+                          ? strings.t('loginToManage')
+                          : '@${user.username}',
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: user == null ? _openLogin : () => _openMyProfile(0),
@@ -363,19 +479,22 @@ class _ProfilePageState extends State<ProfilePage> {
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.privacy_tip_outlined),
-                    title: const Text('隐私与可见性'),
-                    subtitle: const Text('收藏隐私可在编辑收藏时单独设置'),
+                    title: Text(strings.t('privacy')),
+                    subtitle: Text(strings.t('privacySubtitle')),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap:
                         () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('当前支持逐条收藏设置公开范围')),
+                          SnackBar(content: Text(strings.t('privacyHint'))),
                         ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 22),
-            Text('显示与性能', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              strings.t('displayPerformance'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 10),
             SurfaceBlock(
               padding: EdgeInsets.zero,
@@ -383,34 +502,63 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.palette_outlined),
-                    title: const Text('外观'),
+                    title: Text(strings.t('appearance')),
                     subtitle: Text(
                       Theme.of(context).brightness == Brightness.dark
-                          ? '深色主题'
-                          : '浅色主题',
+                          ? strings.t('darkTheme')
+                          : strings.t('lightTheme'),
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: widget.onToggleTheme,
                   ),
                   const Divider(height: 1),
-                  const ListTile(
-                    leading: Icon(Icons.speed_rounded),
-                    title: Text('屏幕刷新率'),
-                    subtitle: Text('跟随系统，支持最高 120Hz'),
-                    trailing: Icon(Icons.check_circle_outline_rounded),
+                  ListTile(
+                    leading: const Icon(Icons.translate_rounded),
+                    title: Text(strings.t('language')),
+                    subtitle: Text(strings.t('languageSubtitle')),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _chooseLanguage,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Image.asset(
+                        widget.appIconStyle == AppIconStyle.anime
+                            ? 'assets/branding/app_icon_anime.png'
+                            : 'assets/branding/app_icon_source.png',
+                        width: 36,
+                        height: 36,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    title: Text(strings.t('appIcon')),
+                    subtitle: Text(
+                      '${widget.appIconStyle == AppIconStyle.anime ? strings.t('animeIcon') : strings.t('classicIcon')} · '
+                      '${Theme.of(context).platform == TargetPlatform.android ? strings.t('iconAndroidHint') : strings.t('iconDesktopHint')}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _chooseAppIcon,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.speed_rounded),
+                    title: Text(strings.t('screenRefresh')),
+                    subtitle: Text(strings.t('screenRefreshSubtitle')),
+                    trailing: const Icon(Icons.check_circle_outline_rounded),
                   ),
                   const Divider(height: 1),
                   SwitchListTile(
                     secondary: const Icon(Icons.play_circle_outline_rounded),
-                    title: const Text('自动播放预览'),
+                    title: Text(strings.t('autoPlay')),
                     value: _autoPlay,
                     onChanged: (value) => setState(() => _autoPlay = value),
                   ),
                   const Divider(height: 1),
                   SwitchListTile(
                     secondary: const Icon(Icons.animation_outlined),
-                    title: const Text('减少界面动效'),
-                    subtitle: const Text('适合省电模式或低性能设备'),
+                    title: Text(strings.t('reduceMotion')),
+                    subtitle: Text(strings.t('reduceMotionSubtitle')),
                     value: _reduceMotion,
                     onChanged: (value) => setState(() => _reduceMotion = value),
                   ),
@@ -418,20 +566,26 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 22),
-            Text('通知', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              strings.t('notifications'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 10),
             SurfaceBlock(
               padding: EdgeInsets.zero,
               child: SwitchListTile(
                 secondary: const Icon(Icons.notifications_outlined),
-                title: const Text('更新提醒'),
-                subtitle: const Text('保留本机提醒偏好'),
+                title: Text(strings.t('updateReminder')),
+                subtitle: Text(strings.t('updateReminderSubtitle')),
                 value: _notifications,
                 onChanged: (value) => setState(() => _notifications = value),
               ),
             ),
             const SizedBox(height: 22),
-            Text('数据与网络', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              strings.t('dataNetwork'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 10),
             SurfaceBlock(
               padding: EdgeInsets.zero,
@@ -439,16 +593,16 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.cleaning_services_outlined),
-                    title: const Text('清除图片缓存'),
-                    subtitle: const Text('释放封面、头像与预览图片占用'),
+                    title: Text(strings.t('clearCache')),
+                    subtitle: Text(strings.t('clearCacheSubtitle')),
                     trailing: const Icon(Icons.delete_sweep_outlined),
                     onTap: _clearImageCache,
                   ),
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.network_check_rounded),
-                    title: const Text('网络诊断'),
-                    subtitle: const Text('测试 next.bgm.tv API 连接'),
+                    title: Text(strings.t('networkDiagnostics')),
+                    subtitle: Text(strings.t('networkDiagnosticsSubtitle')),
                     trailing: const Icon(Icons.play_arrow_rounded),
                     onTap: _testNetwork,
                   ),
@@ -456,7 +610,10 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
             const SizedBox(height: 22),
-            Text('关于', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              strings.t('about'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 10),
             SurfaceBlock(
               padding: EdgeInsets.zero,
@@ -469,7 +626,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       future: _appVersion,
                       builder:
                           (_, snapshot) => Text(
-                            '版本 ${snapshot.data ?? '读取中'} · Android 11+ / Windows',
+                            '${strings.t('version')} ${snapshot.data ?? strings.t('loading')} · Android 11+ / Windows',
                           ),
                     ),
                   ),
@@ -487,16 +644,16 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             )
                             : const Icon(Icons.system_update_outlined),
-                    title: const Text('检查更新'),
-                    subtitle: const Text('从 GitHub Releases 获取最新版本'),
+                    title: Text(strings.t('checkUpdate')),
+                    subtitle: Text(strings.t('checkUpdateSubtitle')),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: _checkingUpdate ? null : _checkUpdate,
                   ),
                   const Divider(height: 1),
-                  const ListTile(
-                    leading: Icon(Icons.api_outlined),
-                    title: Text('数据来源'),
-                    subtitle: Text('Bangumi Next API · next.bgm.tv'),
+                  ListTile(
+                    leading: const Icon(Icons.api_outlined),
+                    title: Text(strings.t('dataSource')),
+                    subtitle: const Text('Bangumi Next API · next.bgm.tv'),
                   ),
                 ],
               ),
@@ -524,6 +681,32 @@ class _Stat extends StatelessWidget {
       ],
     );
   }
+}
+
+class _IconChoice extends StatelessWidget {
+  const _IconChoice({
+    required this.style,
+    required this.selected,
+    required this.label,
+    required this.asset,
+  });
+
+  final AppIconStyle style;
+  final AppIconStyle selected;
+  final String label;
+  final String asset;
+
+  @override
+  Widget build(BuildContext context) => RadioListTile<AppIconStyle>(
+    value: style,
+    groupValue: selected,
+    secondary: ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: Image.asset(asset, width: 46, height: 46, fit: BoxFit.cover),
+    ),
+    title: Text(label),
+    onChanged: (value) => Navigator.pop(context, value),
+  );
 }
 
 class _Shortcut extends StatelessWidget {

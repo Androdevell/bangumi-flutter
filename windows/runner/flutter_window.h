@@ -3,6 +3,7 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
@@ -23,11 +24,18 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  bool SetAppIcon(bool anime);
+  void ReleaseCustomIcons();
+
   // The project to run.
   flutter::DartProject project_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      app_icon_channel_;
+  HICON custom_icon_big_ = nullptr;
+  HICON custom_icon_small_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

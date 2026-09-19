@@ -290,6 +290,68 @@ class CharacterDetailData {
 }
 
 @immutable
+class PersonDetailData {
+  const PersonDetailData({required this.person, required this.comments});
+
+  final PersonEntry person;
+  final List<CommunityReply> comments;
+}
+
+@immutable
+class PersonEntry {
+  const PersonEntry({
+    required this.id,
+    required this.name,
+    required this.originalName,
+    required this.imageUrl,
+    required this.info,
+    required this.summary,
+    required this.collects,
+    required this.careers,
+    required this.infobox,
+  });
+
+  factory PersonEntry.fromJson(Map<String, dynamic> json) => PersonEntry(
+    id: _int(json['id']),
+    name: _first([json['nameCN'], json['name_cn'], json['name']]),
+    originalName: _text(json['name']),
+    imageUrl: _image(json['images']),
+    info: _text(json['info']),
+    summary: _text(json['summary']),
+    collects: _int(json['collects']),
+    careers:
+        (json['career'] is List ? json['career'] as List : const [])
+            .map(_text)
+            .where((value) => value.isNotEmpty)
+            .toList(),
+    infobox:
+        _list(json['infobox'])
+            .map((item) {
+              final values = _list(item['values'])
+                  .map((value) {
+                    final label = _text(value['k']);
+                    final text = _text(value['v']);
+                    return label.isEmpty ? text : '$label：$text';
+                  })
+                  .where((value) => value.isNotEmpty && !value.endsWith('：'));
+              return '${_text(item['key'])}：${values.join('、')}';
+            })
+            .where((value) => !value.endsWith('：'))
+            .toList(),
+  );
+
+  final int id;
+  final String name;
+  final String originalName;
+  final String imageUrl;
+  final String info;
+  final String summary;
+  final int collects;
+  final List<String> careers;
+  final List<String> infobox;
+}
+
+@immutable
 class CharacterEntry {
   const CharacterEntry({
     required this.id,

@@ -8,7 +8,7 @@ import 'package:win_http/win_http.dart';
 const _userAgent =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
     'AppleWebKit/537.36 (KHTML, like Gecko) '
-    'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.0';
+    'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.3';
 
 http.Client createPlatformHttpClient() {
   if (Platform.isAndroid) {

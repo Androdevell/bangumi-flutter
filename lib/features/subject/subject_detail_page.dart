@@ -11,6 +11,7 @@ import '../../widgets/subject_card.dart';
 import '../character/character_detail_page.dart';
 import '../community/reaction_picker.dart';
 import '../episode/episode_comments_page.dart';
+import '../person/person_detail_page.dart';
 import '../user/user_profile_page.dart';
 
 class SubjectDetailPage extends StatefulWidget {
@@ -219,12 +220,14 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     );
     if (saved != true || !mounted) return;
     try {
+      final previousType = _interestType ?? details.interestType;
       await widget.repository.updateSubjectCollection(
         details.subject.id,
         type: type,
         rate: rate,
         comment: comment,
         isPrivate: isPrivate,
+        wasCollected: previousType > 0,
       );
       if (!mounted) return;
       setState(() => _interestType = type);
@@ -305,7 +308,10 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                     items: details.characters,
                                     repository: widget.repository,
                                   ),
-                                  _StaffSection(items: details.staffs),
+                                  _StaffSection(
+                                    items: details.staffs,
+                                    repository: widget.repository,
+                                  ),
                                   _RelationSection(
                                     items: details.relations,
                                     repository: widget.repository,
@@ -895,9 +901,10 @@ class _CharacterSection extends StatelessWidget {
 }
 
 class _StaffSection extends StatelessWidget {
-  const _StaffSection({required this.items});
+  const _StaffSection({required this.items, required this.repository});
 
   final List<SubjectStaff> items;
+  final BangumiRepository repository;
 
   @override
   Widget build(BuildContext context) {
@@ -926,6 +933,19 @@ class _StaffSection extends StatelessWidget {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap:
+              item.id <= 0
+                  ? null
+                  : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder:
+                          (_) => PersonDetailPage(
+                            personId: item.id,
+                            repository: repository,
+                          ),
+                    ),
+                  ),
         );
       },
     );

@@ -24,6 +24,12 @@ void main() {
 
 class _FakeRepository implements BangumiRepository {
   @override
+  final Listenable collectionChanges = ChangeNotifier();
+
+  @override
+  int get pendingSubjectCollectionDelta => 0;
+
+  @override
   bool get isLoggedIn => false;
 
   @override
@@ -109,7 +115,14 @@ class _FakeRepository implements BangumiRepository {
       throw UnimplementedError();
 
   @override
+  Future<PersonDetailData> fetchPersonDetails(int id) =>
+      throw UnimplementedError();
+
+  @override
   Future<List<CommunityReply>> fetchEpisodeComments(int episodeId) async => [];
+
+  @override
+  Future<void> createEpisodeComment(int episodeId, String content) async {}
 
   @override
   Future<List<CommunityReply>> fetchPersonComments(int personId) async => [];
@@ -121,6 +134,7 @@ class _FakeRepository implements BangumiRepository {
     required int rate,
     required String comment,
     required bool isPrivate,
+    bool wasCollected = true,
   }) async {}
 
   @override

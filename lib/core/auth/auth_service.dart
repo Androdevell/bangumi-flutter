@@ -38,7 +38,7 @@ class AuthService extends ChangeNotifier {
   static const _userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
       'AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.1';
+      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.3';
 
   final http.Client _client;
   final PersistentCookieStore _cookies;
