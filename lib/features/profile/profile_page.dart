@@ -375,7 +375,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             value:
                                 values == null
                                     ? '--'
-                                    : '${values.subjects + widget.repository.pendingSubjectCollectionDelta}',
+                                    : '${widget.repository.effectiveSubjectCollectionCount(user!.username, values.subjects)}',
                             label: strings.t('collections'),
                           ),
                           _Stat(

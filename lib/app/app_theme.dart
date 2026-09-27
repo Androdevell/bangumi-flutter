@@ -64,19 +64,21 @@ abstract final class AppTheme {
             ),
           ),
       cardTheme: CardThemeData(
-        elevation: 0,
+        elevation: 1,
+        shadowColor: scheme.shadow.withValues(alpha: 0.16),
+        surfaceTintColor: scheme.primary.withValues(alpha: 0.035),
         margin: EdgeInsets.zero,
         color: scheme.surfaceContainerLowest,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: scheme.outlineVariant.withValues(alpha: 0.55),
           ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 66,
-        elevation: 0,
+        height: 70,
+        elevation: 2,
         backgroundColor: scheme.surfaceContainerLowest,
         indicatorColor: scheme.primaryContainer,
         labelTextStyle: WidgetStatePropertyAll(
@@ -101,11 +103,11 @@ abstract final class AppTheme {
         filled: true,
         fillColor: scheme.surfaceContainerLow,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
             color: scheme.outlineVariant.withValues(alpha: 0.45),
           ),
@@ -113,6 +115,43 @@ abstract final class AppTheme {
       ),
       dividerColor: scheme.outlineVariant.withValues(alpha: 0.55),
       splashFactory: InkSparkle.splashFactory,
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        centerTitle: false,
+        backgroundColor: scheme.surface.withValues(alpha: 0.94),
+        surfaceTintColor: scheme.primary.withValues(alpha: 0.06),
+      ),
+      dialogTheme: DialogThemeData(
+        elevation: 8,
+        backgroundColor: scheme.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        elevation: 8,
+        backgroundColor: scheme.surfaceContainerLow,
+        modalBackgroundColor: scheme.surfaceContainerLow,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
     );
   }
 }

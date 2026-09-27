@@ -14,7 +14,7 @@ abstract interface class BangumiRepository {
   bool get isLoggedIn;
   String get currentUsername;
   Listenable get collectionChanges;
-  int get pendingSubjectCollectionDelta;
+  int effectiveSubjectCollectionCount(String username, int serverCount);
   Future<Map<String, List<Subject>>> fetchCalendar();
   Future<List<Subject>> fetchTrending({int type = 2, int limit = 20});
   Future<List<Subject>> fetchSubjects({
@@ -31,6 +31,7 @@ abstract interface class BangumiRepository {
   });
   Future<List<Topic>> fetchTopics({String type = 'all'});
   Future<TopicDetailData> fetchTopicDetails(Topic topic);
+  Future<void> createTopicReply(Topic topic, String content);
   Future<UserProfileData> fetchUserProfile(String username);
   Future<CharacterDetailData> fetchCharacterDetails(int id);
   Future<PersonDetailData> fetchPersonDetails(int id);
@@ -71,7 +72,7 @@ class RemoteBangumiRepository implements BangumiRepository {
   final ApiClient _api;
   final http.Client _externalClient;
   final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
-  final Map<String, int> _pendingSubjectCollectionDeltas = {};
+  final Map<String, int> _subjectCollectionCountFloor = {};
 
   @override
   bool get isLoggedIn => _api.isLoggedIn;
@@ -83,8 +84,10 @@ class RemoteBangumiRepository implements BangumiRepository {
   Listenable get collectionChanges => _collectionChanges;
 
   @override
-  int get pendingSubjectCollectionDelta =>
-      _pendingSubjectCollectionDeltas[currentUsername] ?? 0;
+  int effectiveSubjectCollectionCount(String username, int serverCount) {
+    final optimistic = _subjectCollectionCountFloor[username] ?? 0;
+    return optimistic > serverCount ? optimistic : serverCount;
+  }
 
   @override
   Future<Map<String, List<Subject>>> fetchCalendar() async {
@@ -237,6 +240,33 @@ class RemoteBangumiRepository implements BangumiRepository {
   }
 
   @override
+  Future<void> createTopicReply(Topic topic, String content) async {
+    final value = content.trim();
+    if (value.isEmpty) throw const ApiException('评论内容不能为空');
+    if (topic.type != 'group' && topic.type != 'subject') {
+      throw const ApiException('该类型暂不支持发表评论');
+    }
+    final formHash = _api.formHash;
+    if (!_api.isLoggedIn || formHash.isEmpty) {
+      throw const ApiException('请先登录后再发表评论');
+    }
+    final owner = topic.type == 'group' ? 'group' : 'subject';
+    final json = await _api.postWebForm(
+      '$owner/topic/${topic.id}/new_reply?ajax=1',
+      referer: 'https://bgm.tv/$owner/topic/${topic.id}',
+      fields: {
+        'lastview': '',
+        'formhash': formHash,
+        'content': value,
+        'submit': 'submit',
+      },
+    );
+    if (json is Map && json['status'] == 'error') {
+      throw ApiException('${json['msg'] ?? json['message'] ?? '评论发布失败'}');
+    }
+  }
+
+  @override
   Future<UserProfileData> fetchUserProfile(String username) async {
     final encoded = Uri.encodeComponent(username);
     final results = await Future.wait<dynamic>([
@@ -248,7 +278,7 @@ class RemoteBangumiRepository implements BangumiRepository {
       _safeJson(
         _api.get(
           'p1/users/$encoded/collections/subjects',
-          query: {'limit': '40'},
+          query: {'limit': '100'},
         ),
         const {},
       ),
@@ -280,10 +310,16 @@ class RemoteBangumiRepository implements BangumiRepository {
       ),
     ]);
     if (results.first is! Map) throw const ApiException('用户资料格式不正确');
+    final user = CommunityUser.fromJson(
+      Map<String, dynamic>.from(results[0] as Map),
+    );
+    _subjectCollectionCountFloor.update(
+      user.username,
+      (value) => value > user.stats.subjects ? value : user.stats.subjects,
+      ifAbsent: () => user.stats.subjects,
+    );
     return UserProfileData(
-      user: CommunityUser.fromJson(
-        Map<String, dynamic>.from(results[0] as Map),
-      ),
+      user: user,
       timeline:
           _items(results[1])
               .map(
@@ -396,7 +432,7 @@ class RemoteBangumiRepository implements BangumiRepository {
       },
     );
     if (!wasCollected && type > 0 && currentUsername.isNotEmpty) {
-      _pendingSubjectCollectionDeltas.update(
+      _subjectCollectionCountFloor.update(
         currentUsername,
         (value) => value + 1,
         ifAbsent: () => 1,

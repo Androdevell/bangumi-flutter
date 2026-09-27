@@ -245,18 +245,24 @@ class _TimelineTileState extends State<_TimelineTile> {
   Widget build(BuildContext context) {
     final entry = widget.entry;
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap:
-              entry.subjectId > 0
-                  ? _openSubject
-                  : (entry.username.isEmpty ? null : _openUser),
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      tween: Tween(begin: 0, end: 1),
+      builder:
+          (context, value, child) => Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, 12 * (1 - value)),
+              child: child,
+            ),
+          ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Card(
+          clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 9),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -293,65 +299,28 @@ class _TimelineTileState extends State<_TimelineTile> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        entry.user,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      BangumiRichText(
-                        '${entry.action}  ${entry.subject}',
-                        selectable: false,
-                      ),
-                      if (entry.imageUrl.isNotEmpty ||
-                          entry.detail.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(9),
-                          decoration: BoxDecoration(
-                            color: scheme.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                          child: Row(
-                            children: [
-                              if (entry.imageUrl.isNotEmpty) ...[
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(5),
-                                  child: CachedNetworkImage(
-                                    imageUrl: entry.imageUrl,
-                                    cacheManager: AppImageCache.manager,
-                                    width: 42,
-                                    height: 56,
-                                    memCacheWidth: 126,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                              ],
-                              Expanded(
-                                child: BangumiRichText(
-                                  entry.detail.isEmpty
-                                      ? entry.subject
-                                      : entry.detail,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                  selectable: false,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      if (_reactions.isNotEmpty) ...[
-                        const SizedBox(height: 9),
-                        ReactionSummary(reactions: _reactions),
-                      ],
-                      const SizedBox(height: 7),
                       Row(
                         children: [
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: entry.username.isEmpty ? null : _openUser,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  entry.user,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleSmall?.copyWith(
+                                    color: scheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                           Text(
                             [
                               entry.relativeTime(),
@@ -360,6 +329,109 @@ class _TimelineTileState extends State<_TimelineTile> {
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: scheme.onSurfaceVariant),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        entry.action,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      if (entry.subjectId > 0 ||
+                          entry.imageUrl.isNotEmpty ||
+                          entry.detail.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Material(
+                          color: scheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: entry.subjectId > 0 ? _openSubject : null,
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: SizedBox(
+                                      width: 52,
+                                      height: 70,
+                                      child:
+                                          entry.imageUrl.isEmpty
+                                              ? ColoredBox(
+                                                color:
+                                                    scheme.secondaryContainer,
+                                                child: Icon(
+                                                  Icons.movie_filter_outlined,
+                                                  color:
+                                                      scheme
+                                                          .onSecondaryContainer,
+                                                ),
+                                              )
+                                              : CachedNetworkImage(
+                                                imageUrl: entry.imageUrl,
+                                                cacheManager:
+                                                    AppImageCache.manager,
+                                                memCacheWidth: 156,
+                                                fit: BoxFit.cover,
+                                              ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          entry.subject,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style:
+                                              Theme.of(
+                                                context,
+                                              ).textTheme.titleSmall,
+                                        ),
+                                        if (entry.detail.isNotEmpty) ...[
+                                          const SizedBox(height: 5),
+                                          BangumiRichText(
+                                            entry.detail,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                            selectable: false,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  if (entry.subjectId > 0) ...[
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Icons.arrow_forward_ios_rounded,
+                                      size: 16,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else if (entry.subject.isNotEmpty) ...[
+                        const SizedBox(height: 7),
+                        BangumiRichText(entry.subject, selectable: false),
+                      ],
+                      if (_reactions.isNotEmpty) ...[
+                        const SizedBox(height: 9),
+                        ReactionSummary(reactions: _reactions),
+                      ],
+                      const SizedBox(height: 7),
+                      Row(
+                        children: [
                           const Spacer(),
                           if (entry.replies > 0) ...[
                             const Icon(

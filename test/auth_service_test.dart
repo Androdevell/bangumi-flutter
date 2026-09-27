@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:bangumi_flutter/core/auth/auth_service.dart';
+import 'package:bangumi_flutter/core/auth/auth_models.dart';
 import 'package:bangumi_flutter/core/auth/secure_vault.dart';
 import 'package:bangumi_flutter/core/network/cookie_session_client.dart';
 import 'package:bangumi_flutter/core/network/api_client.dart';
+import 'package:bangumi_flutter/core/models.dart';
 import 'package:bangumi_flutter/data/bangumi_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -33,6 +35,15 @@ void main() {
           final form = request.bodyFields;
           expect(form['once'], 'nonce');
           expect(form['email'], 'user@example.com');
+          if (form['captcha_challenge_field'] == 'wrong') {
+            return http.Response.bytes(
+              utf8.encode(
+                '<div id="colunmNotice"><div class="text">验证码输入错误</div></div>',
+              ),
+              200,
+              headers: {'content-type': 'text/html'},
+            );
+          }
           expect(form['captcha_challenge_field'], '1234');
           return http.Response(
             '<main id="main"><div id="header"><h1>测试用户</h1></div></main>'
@@ -105,6 +116,16 @@ void main() {
           expect(request.method, 'PUT');
           expect(request.headers['authorization'], 'Bearer access-token');
           return http.Response('', 204);
+        case '/group/topic/77/new_reply':
+          expect(request.url.queryParameters['ajax'], '1');
+          expect(request.headers['referer'], 'https://bgm.tv/group/topic/77');
+          expect(request.bodyFields['content'], '超展开评论');
+          expect(request.bodyFields['formhash'], 'form-token');
+          return http.Response(
+            jsonEncode({'status': 'ok'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
       }
       return http.Response('not found', 404);
     });
@@ -118,6 +139,21 @@ void main() {
 
     final challenge = await auth.beginLogin();
     final captcha = await auth.loadCaptcha();
+    await expectLater(
+      auth.login(
+        email: 'user@example.com',
+        password: 'temporary-password',
+        captcha: 'wrong',
+        challenge: challenge,
+      ),
+      throwsA(
+        isA<AuthException>().having(
+          (error) => error.message,
+          'message',
+          '验证码输入错误',
+        ),
+      ),
+    );
     await auth.login(
       email: 'user@example.com',
       password: 'temporary-password',
@@ -145,7 +181,19 @@ void main() {
       isPrivate: false,
       wasCollected: false,
     );
-    expect(repository.pendingSubjectCollectionDelta, 1);
+    expect(repository.effectiveSubjectCollectionCount('tester', 0), 1);
+    expect(repository.effectiveSubjectCollectionCount('tester', 1), 1);
     expect(collectionNotifications, 1);
+    await repository.createTopicReply(
+      Topic(
+        id: 77,
+        type: 'group',
+        title: '测试讨论',
+        group: '测试小组',
+        replies: 0,
+        updatedAt: DateTime(2026),
+      ),
+      ' 超展开评论 ',
+    );
   });
 }

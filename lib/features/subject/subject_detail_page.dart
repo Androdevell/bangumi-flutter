@@ -32,8 +32,8 @@ class SubjectDetailPage extends StatefulWidget {
 
 class _SubjectDetailPageState extends State<SubjectDetailPage> {
   static const _tabNames = [
-    '章节',
     '简介',
+    '章节',
     '预览',
     '吐槽',
     '角色',
@@ -293,11 +293,11 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                               ? const LoadingView(label: '正在加载条目资料…')
                               : TabBarView(
                                 children: [
+                                  _SummarySection(details: details),
                                   _EpisodeSection(
                                     items: details.episodes,
                                     repository: widget.repository,
                                   ),
-                                  _SummarySection(details: details),
                                   _PreviewSection(items: details.previews),
                                   _CommentSection(
                                     items: details.comments,

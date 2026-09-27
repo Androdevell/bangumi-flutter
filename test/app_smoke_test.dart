@@ -27,7 +27,8 @@ class _FakeRepository implements BangumiRepository {
   final Listenable collectionChanges = ChangeNotifier();
 
   @override
-  int get pendingSubjectCollectionDelta => 0;
+  int effectiveSubjectCollectionCount(String username, int serverCount) =>
+      serverCount;
 
   @override
   bool get isLoggedIn => false;
@@ -95,6 +96,9 @@ class _FakeRepository implements BangumiRepository {
   @override
   Future<TopicDetailData> fetchTopicDetails(Topic topic) =>
       throw UnimplementedError();
+
+  @override
+  Future<void> createTopicReply(Topic topic, String content) async {}
 
   @override
   Future<List<Subject>> fetchTrending({int type = 2, int limit = 20}) async => [

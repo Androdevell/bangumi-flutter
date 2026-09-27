@@ -24,6 +24,7 @@ class TopicDetailPage extends StatefulWidget {
 
 class _TopicDetailPageState extends State<TopicDetailPage> {
   late Future<TopicDetailData> _detail = _load();
+  bool _submitting = false;
 
   Future<TopicDetailData> _load() =>
       widget.repository.fetchTopicDetails(widget.topic);
@@ -41,9 +42,90 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
     );
   }
 
+  Future<void> _openReplyDialog() async {
+    if (!widget.repository.isLoggedIn) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先登录后再发表评论')));
+      return;
+    }
+    final controller = TextEditingController();
+    final content = await showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            icon: const Icon(Icons.add_comment_outlined),
+            title: const Text('发表评论'),
+            content: SizedBox(
+              width: 520,
+              child: TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: 4,
+                maxLines: 10,
+                maxLength: 2000,
+                decoration: const InputDecoration(
+                  hintText: '参与讨论，写下你的看法…',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (value.isNotEmpty) Navigator.pop(context, value);
+                },
+                icon: const Icon(Icons.send_rounded),
+                label: const Text('发布'),
+              ),
+            ],
+          ),
+    );
+    controller.dispose();
+    if (content == null || !mounted) return;
+    setState(() => _submitting = true);
+    try {
+      await widget.repository.createTopicReply(widget.topic, content);
+      if (!mounted) return;
+      setState(() => _detail = _load());
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('评论已发布')));
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.topic.typeLabel)),
+    appBar: AppBar(
+      title: Text(widget.topic.typeLabel),
+      actions: [
+        IconButton.filledTonal(
+          tooltip: '发表评论',
+          onPressed: _submitting ? null : _openReplyDialog,
+          icon:
+              _submitting
+                  ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                  : const Icon(Icons.add_comment_outlined),
+        ),
+        const SizedBox(width: 10),
+      ],
+    ),
     body: FutureBuilder<TopicDetailData>(
       future: _detail,
       builder: (context, snapshot) {

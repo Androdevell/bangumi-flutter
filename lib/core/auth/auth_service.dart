@@ -38,7 +38,7 @@ class AuthService extends ChangeNotifier {
   static const _userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
       'AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.3';
+      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.4';
 
   final http.Client _client;
   final PersistentCookieStore _cookies;
@@ -76,7 +76,7 @@ class AuthService extends ChangeNotifier {
     }
     final response = await _request('GET', _webUri('login'));
     _requireSuccess(response, '加载登录页面失败');
-    final document = html.parse(response.body);
+    final document = html.parse(_responseText(response));
     final loginForm = document.querySelector('#loginForm');
 
     if (loginForm == null) {
@@ -134,7 +134,7 @@ class AuthService extends ChangeNotifier {
       followRedirects: true,
     );
     _requireSuccess(response, '提交登录失败');
-    final document = html.parse(response.body);
+    final document = html.parse(_responseText(response));
     final parsedUser = _parseUser(document);
     if (parsedUser == null) {
       final message =
@@ -256,7 +256,7 @@ class AuthService extends ChangeNotifier {
     final location = response.headers[HttpHeaders.locationHeader];
     final code = _authorizationCode(location);
     if (code.isEmpty) {
-      final document = html.parse(response.body);
+      final document = html.parse(_responseText(response));
       final message =
           document.querySelector('#colunmNotice .text')?.text.trim();
       throw AuthException(
@@ -281,7 +281,7 @@ class AuthService extends ChangeNotifier {
     _requireSuccess(response, '获取登录令牌失败');
     try {
       final decoded = Map<String, dynamic>.from(
-        jsonDecode(response.body) as Map,
+        jsonDecode(_responseText(response)) as Map,
       );
       final token = AuthToken.fromJson({
         ...decoded,
@@ -395,6 +395,9 @@ class AuthService extends ChangeNotifier {
   }
 
   Uri _webUri(String path) => Uri.parse('https://bgm.tv/').resolve(path);
+
+  String _responseText(http.Response response) =>
+      utf8.decode(response.bodyBytes, allowMalformed: true);
 
   void _requireSuccess(http.Response response, String message) {
     if (response.statusCode < 200 || response.statusCode >= 300) {

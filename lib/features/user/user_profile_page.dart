@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/community_models.dart';
+import '../../core/models.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
@@ -30,6 +31,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
   late Future<UserProfileData> _profile = _load();
   bool? _isFriend;
   bool _friendBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.repository.collectionChanges.addListener(_onCollectionChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.repository.collectionChanges.removeListener(_onCollectionChanged);
+    super.dispose();
+  }
+
+  void _onCollectionChanged() {
+    if (mounted && widget.repository.currentUsername == widget.username) {
+      setState(() {});
+    }
+  }
 
   Future<UserProfileData> _load() =>
       widget.repository.fetchUserProfile(widget.username);
@@ -77,6 +96,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  void _openTimelineSubject(TimelineEntry entry) {
+    if (entry.subjectId <= 0) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => SubjectDetailPage(
+              subject: Subject(
+                id: entry.subjectId,
+                title: entry.subject,
+                imageUrl: entry.imageUrl,
+              ),
+              heroTag:
+                  'user-${widget.username}-timeline-${entry.id}-${entry.subjectId}',
+              repository: widget.repository,
+            ),
+      ),
+    );
+  }
+
   void _openUser(String username) => Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder:
@@ -110,6 +148,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
         final data = snapshot.data!;
         final user = data.user;
         final isSelf = widget.repository.currentUsername == user.username;
+        final subjectCount = widget.repository.effectiveSubjectCollectionCount(
+          user.username,
+          user.stats.subjects,
+        );
         final tabs = const ['时光机', '收藏', '人物', '日志', '目录', '好友', '时间线', '统计'];
         return DefaultTabController(
           length: tabs.length,
@@ -147,19 +189,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     Expanded(
                       child: TabBarView(
                         children: [
-                          _TimeMachine(user: user, data: data),
-                          _ContentList(
+                          _TimeMachine(
+                            user: user,
+                            data: data,
+                            subjectCount: subjectCount,
+                            onSubjectTap: _openTimelineSubject,
+                          ),
+                          _CollectionBrowser(
                             items: data.collections,
-                            empty: '暂无公开收藏',
                             onTap: _openSubject,
-                            collection: true,
                           ),
                           _MonoList(data: data, repository: widget.repository),
                           _ContentList(items: data.blogs, empty: '暂无日志'),
                           _ContentList(items: data.indexes, empty: '暂无目录'),
                           _FriendList(items: data.friends, onTap: _openUser),
-                          _TimelineList(items: data.timeline),
-                          _StatsView(user: user),
+                          _TimelineList(
+                            items: data.timeline,
+                            onSubjectTap: _openTimelineSubject,
+                          ),
+                          _StatsView(user: user, subjectCount: subjectCount),
                         ],
                       ),
                     ),
@@ -212,9 +260,16 @@ class _UserHeader extends StatelessWidget {
 }
 
 class _TimeMachine extends StatelessWidget {
-  const _TimeMachine({required this.user, required this.data});
+  const _TimeMachine({
+    required this.user,
+    required this.data,
+    required this.subjectCount,
+    required this.onSubjectTap,
+  });
   final CommunityUser user;
   final UserProfileData data;
+  final int subjectCount;
+  final ValueChanged<TimelineEntry> onSubjectTap;
   @override
   Widget build(BuildContext context) {
     final stats = user.stats;
@@ -229,7 +284,7 @@ class _TimeMachine extends StatelessWidget {
                 children: [
                   _TimeMachineStat(
                     label: '收藏',
-                    value: stats.subjects,
+                    value: subjectCount,
                     icon: Icons.bookmarks_outlined,
                   ),
                   _TimeMachineStat(
@@ -285,13 +340,19 @@ class _TimeMachine extends StatelessWidget {
                   children: [
                     Expanded(flex: 3, child: _CollectionOverview(data: data)),
                     const SizedBox(width: 24),
-                    Expanded(flex: 2, child: _TimelineOverview(data: data)),
+                    Expanded(
+                      flex: 2,
+                      child: _TimelineOverview(
+                        data: data,
+                        onSubjectTap: onSubjectTap,
+                      ),
+                    ),
                   ],
                 )
               else ...[
                 _CollectionOverview(data: data),
                 const SizedBox(height: 26),
-                _TimelineOverview(data: data),
+                _TimelineOverview(data: data, onSubjectTap: onSubjectTap),
               ],
             ],
           ),
@@ -377,8 +438,9 @@ class _CollectionOverview extends StatelessWidget {
 }
 
 class _TimelineOverview extends StatelessWidget {
-  const _TimelineOverview({required this.data});
+  const _TimelineOverview({required this.data, required this.onSubjectTap});
   final UserProfileData data;
+  final ValueChanged<TimelineEntry> onSubjectTap;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -427,31 +489,35 @@ class _TimelineOverview extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 9),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        BangumiRichText(
-                          '${item.action}  ${item.subject}',
-                          selectable: false,
-                        ),
-                        if (item.detail.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: item.subjectId > 0 ? () => onSubjectTap(item) : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           BangumiRichText(
-                            item.detail,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            '${item.action}  ${item.subject}',
                             selectable: false,
                           ),
+                          if (item.detail.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            BangumiRichText(
+                              item.detail,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                              selectable: false,
+                            ),
+                          ],
+                          const SizedBox(height: 4),
+                          Text(
+                            item.relativeTime(),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                         ],
-                        const SizedBox(height: 4),
-                        Text(
-                          item.relativeTime(),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -496,94 +562,279 @@ class _TimeMachineStat extends StatelessWidget {
   );
 }
 
-class _ContentList extends StatelessWidget {
-  const _ContentList({
-    required this.items,
-    required this.empty,
-    this.onTap,
-    this.collection = false,
-  });
+class _CollectionBrowser extends StatefulWidget {
+  const _CollectionBrowser({required this.items, required this.onTap});
+
   final List<UserContentItem> items;
-  final String empty;
-  final ValueChanged<UserContentItem>? onTap;
-  final bool collection;
+  final ValueChanged<UserContentItem> onTap;
+
+  @override
+  State<_CollectionBrowser> createState() => _CollectionBrowserState();
+}
+
+class _CollectionBrowserState extends State<_CollectionBrowser> {
+  static const _subjectTypes = <(int, String, IconData)>[
+    (0, '全部', Icons.apps_rounded),
+    (2, '动画', Icons.live_tv_rounded),
+    (1, '书籍', Icons.menu_book_rounded),
+    (3, '音乐', Icons.album_rounded),
+    (4, '游戏', Icons.sports_esports_rounded),
+    (6, '三次元', Icons.movie_rounded),
+  ];
+  static const _collectionTypes = <(int, String)>[
+    (0, '全部状态'),
+    (1, '想看'),
+    (2, '看过'),
+    (3, '在看'),
+    (4, '搁置'),
+    (5, '抛弃'),
+  ];
+
+  int _subjectType = 0;
+  int _collectionType = 0;
+
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return EmptyView(message: empty);
-    if (collection) {
-      return GridView.builder(
-        padding: const EdgeInsets.all(14),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 390,
-          mainAxisExtent: 126,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-        ),
-        itemCount: items.length,
-        itemBuilder: (_, index) {
-          final item = items[index];
-          return SurfaceBlock(
-            padding: EdgeInsets.zero,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: onTap == null ? null : () => onTap!(item),
-              child: Row(
-                children: [
-                  if (item.imageUrl.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(7),
-                      ),
-                      child: CachedNetworkImage(
-                        imageUrl: item.imageUrl,
-                        cacheManager: AppImageCache.manager,
-                        width: 84,
-                        height: 126,
-                        memCacheWidth: 252,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall,
+    final filtered =
+        widget.items
+            .where(
+              (item) =>
+                  (_subjectType == 0 || item.subjectType == _subjectType) &&
+                  (_collectionType == 0 ||
+                      item.collectionType == _collectionType),
+            )
+            .toList();
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          child: SurfaceBlock(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final type in _subjectTypes)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            avatar: Icon(type.$3, size: 17),
+                            label: Text(type.$2),
+                            selected: _subjectType == type.$1,
+                            onSelected:
+                                (_) => setState(() => _subjectType = type.$1),
                           ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              item.subtitle.isEmpty ? '已收藏' : item.subtitle,
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final status in _collectionTypes)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(status.$2),
+                            selected: _collectionType == status.$1,
+                            onSelected:
+                                (_) =>
+                                    setState(() => _collectionType = status.$1),
+                          ),
+                        ),
+                      Text(
+                        '${filtered.length} 项',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child:
+                filtered.isEmpty
+                    ? const EmptyView(
+                      key: ValueKey('empty-collection-filter'),
+                      message: '当前筛选下暂无公开收藏',
+                    )
+                    : GridView.builder(
+                      key: ValueKey('$_subjectType-$_collectionType'),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 440,
+                            mainAxisExtent: 162,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                          ),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, index) {
+                        final item = filtered[index];
+                        return _CollectionCard(
+                          item: item,
+                          onTap: () => widget.onTap(item),
+                        );
+                      },
+                    ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CollectionCard extends StatelessWidget {
+  const _CollectionCard({required this.item, required this.onTap});
+
+  final UserContentItem item;
+  final VoidCallback onTap;
+
+  String get _typeLabel => switch (item.subjectType) {
+    1 => '书籍',
+    2 => '动画',
+    3 => '音乐',
+    4 => '游戏',
+    6 => '三次元',
+    _ => '条目',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return HoverLift(
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 108,
+                height: double.infinity,
+                child:
+                    item.imageUrl.isEmpty
+                        ? ColoredBox(
+                          color: scheme.secondaryContainer,
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: scheme.onSecondaryContainer,
+                          ),
+                        )
+                        : CachedNetworkImage(
+                          imageUrl: item.imageUrl,
+                          cacheManager: AppImageCache.manager,
+                          memCacheWidth: 324,
+                          fit: BoxFit.cover,
+                        ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 5,
+                        children: [
+                          _CollectionBadge(
+                            label: _typeLabel,
+                            color: scheme.secondary,
+                          ),
+                          _CollectionBadge(
+                            label:
+                                item.subtitle.isEmpty ? '已收藏' : item.subtitle,
+                            color: scheme.primary,
                           ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (item.info.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          item.info,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      const Spacer(),
+                      Row(
+                        children: [
+                          if (item.rate > 0) ...[
+                            Icon(
+                              Icons.star_rounded,
+                              color: scheme.tertiary,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 3),
+                            Text('${item.rate}/10'),
+                          ],
+                          const Spacer(),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 18,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          );
-        },
-      );
-    }
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CollectionBadge extends StatelessWidget {
+  const _CollectionBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.13),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+    ),
+  );
+}
+
+class _ContentList extends StatelessWidget {
+  const _ContentList({required this.items, required this.empty});
+  final List<UserContentItem> items;
+  final String empty;
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return EmptyView(message: empty);
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: items.length,
@@ -614,9 +865,6 @@ class _ContentList extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-          trailing:
-              onTap == null ? null : const Icon(Icons.chevron_right_rounded),
-          onTap: onTap == null ? null : () => onTap!(item),
         );
       },
     );
@@ -715,8 +963,9 @@ class _FriendList extends StatelessWidget {
 }
 
 class _TimelineList extends StatelessWidget {
-  const _TimelineList({required this.items});
-  final List<dynamic> items;
+  const _TimelineList({required this.items, required this.onSubjectTap});
+  final List<TimelineEntry> items;
+  final ValueChanged<TimelineEntry> onSubjectTap;
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const EmptyView(message: '暂无公开时间线');
@@ -748,6 +997,11 @@ class _TimelineList extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             selectable: false,
           ),
+          trailing:
+              item.subjectId > 0
+                  ? const Icon(Icons.arrow_forward_ios_rounded, size: 16)
+                  : null,
+          onTap: item.subjectId > 0 ? () => onSubjectTap(item) : null,
         );
       },
     );
@@ -755,13 +1009,14 @@ class _TimelineList extends StatelessWidget {
 }
 
 class _StatsView extends StatelessWidget {
-  const _StatsView({required this.user});
+  const _StatsView({required this.user, required this.subjectCount});
   final CommunityUser user;
+  final int subjectCount;
   @override
   Widget build(BuildContext context) {
     final stats = user.stats;
     final entries = [
-      ('全部收藏', stats.subjects, Icons.bookmarks_outlined),
+      ('全部收藏', subjectCount, Icons.bookmarks_outlined),
       ('看过', stats.watched, Icons.done_all_rounded),
       ('角色', stats.characters, Icons.theater_comedy_outlined),
       ('人物', stats.persons, Icons.person_search_outlined),

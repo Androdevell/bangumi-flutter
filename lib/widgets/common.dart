@@ -99,27 +99,32 @@ class _HoverLiftState extends State<HoverLift> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedScale(
-        scale: _hovered ? 1.015 : 1,
+      child: AnimatedSlide(
+        offset: _hovered ? const Offset(0, -0.018) : Offset.zero,
         duration: const Duration(milliseconds: 170),
         curve: Curves.easeOutCubic,
-        child: AnimatedContainer(
+        child: AnimatedScale(
+          scale: _hovered ? 1.012 : 1,
           duration: const Duration(milliseconds: 170),
-          decoration: BoxDecoration(
-            boxShadow:
-                _hovered
-                    ? [
-                      BoxShadow(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.shadow.withValues(alpha: 0.10),
-                        blurRadius: 18,
-                        offset: const Offset(0, 7),
-                      ),
-                    ]
-                    : const [],
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 170),
+            decoration: BoxDecoration(
+              boxShadow:
+                  _hovered
+                      ? [
+                        BoxShadow(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.shadow.withValues(alpha: 0.13),
+                          blurRadius: 24,
+                          offset: const Offset(0, 9),
+                        ),
+                      ]
+                      : const [],
+            ),
+            child: widget.child,
           ),
-          child: widget.child,
         ),
       ),
     );
@@ -138,11 +143,16 @@ class SurfaceBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).dividerColor),
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      elevation: 1,
+      shadowColor: scheme.shadow.withValues(alpha: 0.12),
+      surfaceTintColor: scheme.primary.withValues(alpha: 0.035),
+      color: scheme.surfaceContainerLowest,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Theme.of(context).dividerColor),
       ),
       child: Padding(padding: padding, child: child),
     );
