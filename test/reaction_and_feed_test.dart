@@ -29,7 +29,6 @@ void main() {
         client: client,
         baseUri: Uri.parse('https://next.bgm.tv/'),
       ),
-      externalClient: client,
     );
 
     await repository.setTimelineReaction(12, '54');

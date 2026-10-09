@@ -8,9 +8,26 @@ plugins {
 }
 
 val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
+val keystorePropertiesFile = rootProject.file(
+    providers.gradleProperty("bangumi.signingProperties").orElse("key.properties").get(),
+)
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use(keystoreProperties::load)
+}
+
+val signingFields = listOf("keyAlias", "keyPassword", "storeFile", "storePassword")
+val releaseSigningReady = keystorePropertiesFile.exists() &&
+    signingFields.all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && it.name.contains("Release", ignoreCase = true) }) {
+        if (!releaseSigningReady) {
+            throw GradleException("Release 构建必须提供完整的 key.properties，拒绝使用 debug 签名")
+        }
+        if (!file(keystoreProperties.getProperty("storeFile")).isFile) {
+            throw GradleException("Release 签名文件不存在，请检查 key.properties 的 storeFile")
+        }
+    }
 }
 
 android {
@@ -39,7 +56,7 @@ android {
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (releaseSigningReady) {
             create("release") {
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -51,9 +68,10 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName(
-                if (keystorePropertiesFile.exists()) "release" else "debug",
-            )
+            signingConfig = signingConfigs.findByName("release")
+            ndk {
+                abiFilters.add("arm64-v8a")
+            }
         }
     }
 }

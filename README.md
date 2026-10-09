@@ -42,14 +42,53 @@ flutter run -d windows `
 
 ## 构建
 
+### OAuth 与签名
+
+源码不再内置 OAuth 凭据。请先在 Bangumi 开发者后台重置已泄露的旧密钥，
+在本机创建已被 Git 忽略的 `oauth-config.json`：
+
+```json
+{
+  "BGM_OAUTH_APP_ID": "your-application-id",
+  "BGM_OAUTH_APP_SECRET": "your-new-application-secret"
+}
+```
+
+不得提交真实凭据、`android/key.properties` 或签名文件。
+CI 构建时应从加密 Secrets 注入，不要输出密钥或将配置文件作为构建产物上传。
+移动/桌面客户端中的构建参数仍可从二进制提取，并非保密边界；
+若需要真正保密，必须改用服务端 OAuth 令牌交换。
+不提供 OAuth 参数仍可运行浏览功能，登录入口会明确提示配置缺失。
+
+Android Release 必须提供 `android/key.properties` 的 `storeFile`、`storePassword`、
+`keyAlias`、`keyPassword`，且签名文件必须存在；缺失时拒绝构建，不回退 debug 签名。
+继续使用原正式密钥，以确保旧用户可覆盖安装。
+
 ```powershell
-flutter build apk --release --target-platform android-arm64
-flutter build windows --release
+flutter build apk --release --target-platform android-arm64 --dart-define-from-file=oauth-config.json
+flutter build windows --release --dart-define-from-file=oauth-config.json
 ```
 
 生成位置：
 
 - Android：`build/app/outputs/flutter-apk/`
 - Windows：`build/windows/x64/runner/Release/`
+
+Windows 需要分发整个 Release 文件夹，不能只复制 exe。
+
+## 安全与隐私修复
+
+1.1.5 删除固定 CDN IP，使用系统 DNS（OkHttp 自动尝试解析结果中的多个地址），
+保留仅针对 Bangumi 域名的 TLS 分片兼容处理与正常证书校验。
+连接失败只记录域名及异常类别，不记录 URL 查询参数、请求内容或凭据。
+Android 关闭自动备份，单独排除安全存储的云备份与设备迁移；
+Keystore 不可用时不再静默删除密文，新设备需重新登录。
+豆瓣剧照预览已停用，不再向豆瓣发送浏览的条目标题。
+
+安全回归检查通过 GitHub Actions 执行：依赖解析、静态分析、单元/widget 测试与覆盖率生成。
+真实网络测试默认跳过，不会在 CI 使用真实账户。
+
+规则依据：[Android 自动备份说明](https://developer.android.com/identity/data/autobackup)、
+[OkHttp 多地址连接说明](https://github.com/square/okhttp/blob/master/README.md)。
 
 本项目是非官方第三方客户端，与 Bangumi 官方无隶属关系。

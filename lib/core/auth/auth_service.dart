@@ -16,14 +16,8 @@ class AuthService extends ChangeNotifier {
     required http.Client client,
     required PersistentCookieStore cookies,
     required SecureVault vault,
-    String appId = const String.fromEnvironment(
-      'BGM_OAUTH_APP_ID',
-      defaultValue: _defaultAppId,
-    ),
-    String appSecret = const String.fromEnvironment(
-      'BGM_OAUTH_APP_SECRET',
-      defaultValue: _defaultAppSecret,
-    ),
+    String appId = const String.fromEnvironment('BGM_OAUTH_APP_ID'),
+    String appSecret = const String.fromEnvironment('BGM_OAUTH_APP_SECRET'),
   }) : _client = client,
        _cookies = cookies,
        _vault = vault,
@@ -32,13 +26,11 @@ class AuthService extends ChangeNotifier {
 
   static const _userStorageKey = 'bangumi.auth.user.v1';
   static const _tokenStorageKey = 'bangumi.auth.token.v1';
-  static const _defaultAppId = 'bgm285565606da641d78';
-  static const _defaultAppSecret = '2f6af7bc16f05f70537ec24076164d5c';
   static const _callback = 'http://localhost/callback';
   static const _userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
       'AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.4';
+      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.5';
 
   final http.Client _client;
   final PersistentCookieStore _cookies;
@@ -49,21 +41,37 @@ class AuthService extends ChangeNotifier {
   AuthUser? _user;
   AuthToken? _token;
   Future<bool>? _refreshing;
+  int _sessionGeneration = 0;
+  Future<void> _storageOperations = Future.value();
 
   AuthUser? get user => _user;
   bool get isLoggedIn => _user != null && _token != null;
 
   Future<void> initialize() async {
+    String? storedUser;
+    String? storedToken;
     try {
-      final storedUser = await _vault.read(_userStorageKey);
-      final storedToken = await _vault.read(_tokenStorageKey);
+      storedUser = await _vault.read(_userStorageKey);
+      storedToken = await _vault.read(_tokenStorageKey);
+    } on Object {
+      debugPrint('安全存储暂不可用，保留已保存的凭据');
+      return;
+    }
+    try {
       if (storedUser != null && storedToken != null) {
-        _user = AuthUser.fromJson(
+        final user = AuthUser.fromJson(
           Map<String, dynamic>.from(jsonDecode(storedUser) as Map),
         );
-        _token = AuthToken.fromJson(
+        final token = AuthToken.fromJson(
           Map<String, dynamic>.from(jsonDecode(storedToken) as Map),
         );
+        if (user.username.isEmpty ||
+            token.accessToken.isEmpty ||
+            token.refreshToken.isEmpty) {
+          throw const FormatException('无效的已保存登录凭据');
+        }
+        _user = user;
+        _token = token;
       }
     } on Object {
       await _clearCredentials();
@@ -74,6 +82,7 @@ class AuthService extends ChangeNotifier {
     if (_appId.isEmpty || _appSecret.isEmpty) {
       throw const AuthException('当前构建未配置 Bangumi OAuth，请通过 dart-define 提供应用凭据');
     }
+    final generation = _sessionGeneration;
     final response = await _request('GET', _webUri('login'));
     _requireSuccess(response, '加载登录页面失败');
     final document = html.parse(_responseText(response));
@@ -82,7 +91,7 @@ class AuthService extends ChangeNotifier {
     if (loginForm == null) {
       final existingUser = _parseUser(document);
       if (existingUser != null) {
-        await _completeLogin(existingUser);
+        await _completeLogin(existingUser, generation);
         return const LoginChallenge({});
       }
       throw const AuthException('登录页面格式发生变化，请稍后重试');
@@ -116,6 +125,7 @@ class AuthService extends ChangeNotifier {
     required String captcha,
     required LoginChallenge challenge,
   }) async {
+    final generation = _sessionGeneration;
     if (email.trim().isEmpty || password.isEmpty || captcha.trim().isEmpty) {
       throw const AuthException('请填写邮箱、密码和验证码');
     }
@@ -144,7 +154,7 @@ class AuthService extends ChangeNotifier {
       );
     }
 
-    await _completeLogin(parsedUser);
+    await _completeLogin(parsedUser, generation);
   }
 
   Future<String?> validAccessToken() async {
@@ -162,23 +172,24 @@ class AuthService extends ChangeNotifier {
     try {
       return await future;
     } finally {
-      _refreshing = null;
+      if (identical(_refreshing, future)) _refreshing = null;
     }
   }
 
   Future<void> logout() async {
+    _sessionGeneration++;
+    _refreshing = null;
     _user = null;
     _token = null;
-    await Future.wait([
-      _cookies.clear(),
-      _vault.delete(_userStorageKey),
-      _vault.delete(_tokenStorageKey),
-    ]);
     notifyListeners();
+    await Future.wait([_cookies.clear(), _clearStoredCredentials()]);
   }
 
-  Future<void> _completeLogin(AuthUser parsedUser) async {
-    final token = await _authorize(parsedUser.formHash);
+  Future<void> _completeLogin(AuthUser parsedUser, int generation) async {
+    final token = await _authorize(parsedUser.formHash, generation);
+    if (generation != _sessionGeneration) {
+      throw const AuthException('登录已取消，请重新登录');
+    }
     var user = parsedUser;
     try {
       final profileResponse = await _request(
@@ -192,7 +203,7 @@ class AuthService extends ChangeNotifier {
       );
       if (profileResponse.statusCode >= 200 &&
           profileResponse.statusCode < 300) {
-        final decoded = jsonDecode(profileResponse.body);
+        final decoded = jsonDecode(_responseText(profileResponse));
         if (decoded is Map) {
           final data =
               decoded['data'] is Map ? decoded['data'] as Map : decoded;
@@ -203,13 +214,20 @@ class AuthService extends ChangeNotifier {
       // The parsed web profile is enough to finish login if enrichment fails.
     }
 
+    if (generation != _sessionGeneration) {
+      throw const AuthException('登录已取消，请重新登录');
+    }
     _user = user;
     _token = token;
-    await _persistCredentials();
+    await _persistCredentials(generation);
+    if (generation != _sessionGeneration) {
+      throw const AuthException('登录已取消，请重新登录');
+    }
     notifyListeners();
   }
 
   Future<bool> _refreshAccessTokenImpl() async {
+    final generation = _sessionGeneration;
     final current = _token;
     final currentUser = _user;
     if (current == null || currentUser == null) return false;
@@ -218,25 +236,31 @@ class AuthService extends ChangeNotifier {
       final refreshed = await _requestToken({
         'grant_type': 'refresh_token',
         'refresh_token': current.refreshToken,
-      });
+      }, generation);
+      if (generation != _sessionGeneration) return false;
       _token = refreshed;
-      await _persistCredentials();
+      await _persistCredentials(generation);
+      if (generation != _sessionGeneration) return false;
       notifyListeners();
       return true;
     } on Object {
-      if (currentUser.formHash.isEmpty) return false;
+      if (generation != _sessionGeneration) return false;
       try {
-        _token = await _authorize(currentUser.formHash);
-        await _persistCredentials();
+        final refreshed = await _authorize(currentUser.formHash, generation);
+        if (generation != _sessionGeneration) return false;
+        _token = refreshed;
+        await _persistCredentials(generation);
+        if (generation != _sessionGeneration) return false;
         notifyListeners();
         return true;
       } on Object {
+        if (generation == _sessionGeneration) await logout();
         return false;
       }
     }
   }
 
-  Future<AuthToken> _authorize(String formHash) async {
+  Future<AuthToken> _authorize(String formHash, int generation) async {
     if (formHash.isEmpty) {
       throw const AuthException('登录成功，但未找到授权参数');
     }
@@ -252,6 +276,7 @@ class AuthService extends ChangeNotifier {
       authorizeUri,
       fields: {'formhash': formHash, 'client_id': _appId, 'submit': '授权'},
       followRedirects: false,
+      sessionGeneration: generation,
     );
     final location = response.headers[HttpHeaders.locationHeader];
     final code = _authorizationCode(location);
@@ -263,13 +288,20 @@ class AuthService extends ChangeNotifier {
         message?.isNotEmpty == true ? message! : 'Bangumi OAuth 授权失败',
       );
     }
-    return _requestToken({'grant_type': 'authorization_code', 'code': code});
+    return _requestToken({
+      'grant_type': 'authorization_code',
+      'code': code,
+    }, generation);
   }
 
-  Future<AuthToken> _requestToken(Map<String, String> grant) async {
+  Future<AuthToken> _requestToken(
+    Map<String, String> grant,
+    int generation,
+  ) async {
     final response = await _request(
       'POST',
       _webUri('oauth/access_token'),
+      sessionGeneration: generation,
       fields: {
         ...grant,
         'redirect_uri': _callback,
@@ -302,12 +334,17 @@ class AuthService extends ChangeNotifier {
     Map<String, String>? headers,
     Map<String, String>? fields,
     bool followRedirects = true,
+    int? sessionGeneration,
   }) async {
+    final generation = sessionGeneration ?? _sessionGeneration;
     var method = initialMethod;
     var uri = initialUri;
     var currentFields = fields;
 
     for (var redirects = 0; redirects <= 5; redirects++) {
+      if (generation != _sessionGeneration) {
+        throw const AuthException('登录会话已变更，请重新登录');
+      }
       final request =
           http.Request(method, uri)
             ..followRedirects = false
@@ -325,13 +362,26 @@ class AuthService extends ChangeNotifier {
           .send(request)
           .timeout(const Duration(seconds: 25));
       final response = await http.Response.fromStream(streamed);
+      if (generation != _sessionGeneration) {
+        throw const AuthException('登录会话已变更，请重新登录');
+      }
       final location = response.headers[HttpHeaders.locationHeader];
       final isRedirect =
           response.statusCode >= 300 && response.statusCode < 400;
       if (!followRedirects || !isRedirect || location == null) return response;
       if (redirects == 5) throw const AuthException('登录跳转次数过多');
 
-      uri = uri.resolve(location);
+      final nextUri = uri.resolve(location);
+      if (nextUri.scheme != 'https' ||
+          !const {
+            'bgm.tv',
+            'bangumi.tv',
+            'chii.in',
+            'next.bgm.tv',
+          }.contains(nextUri.host)) {
+        throw const AuthException('拒绝向非 Bangumi 地址转发登录请求');
+      }
+      uri = nextUri;
       if (response.statusCode == 301 ||
           response.statusCode == 302 ||
           response.statusCode == 303) {
@@ -405,22 +455,38 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<void> _persistCredentials() async {
+  Future<void> _persistCredentials(int generation) {
     final user = _user;
     final token = _token;
-    if (user == null || token == null) return;
-    await Future.wait([
-      _vault.write(_userStorageKey, jsonEncode(user.toJson())),
-      _vault.write(_tokenStorageKey, jsonEncode(token.toJson())),
-    ]);
+    return _queueStorage(() async {
+      if (generation != _sessionGeneration || user == null || token == null) {
+        return;
+      }
+      await Future.wait([
+        _vault.write(_userStorageKey, jsonEncode(user.toJson())),
+        _vault.write(_tokenStorageKey, jsonEncode(token.toJson())),
+      ]);
+    });
   }
 
-  Future<void> _clearCredentials() async {
-    _user = null;
-    _token = null;
+  /// 串行保存与清除凭据，确保退出登录的删除发生在旧写入之后。
+  Future<void> _queueStorage(Future<void> Function() operation) {
+    final pending = _storageOperations.then((_) => operation());
+    _storageOperations = pending.catchError((Object _) {});
+    return pending;
+  }
+
+  Future<void> _clearStoredCredentials() => _queueStorage(() async {
     await Future.wait([
       _vault.delete(_userStorageKey),
       _vault.delete(_tokenStorageKey),
     ]);
+  });
+
+  Future<void> _clearCredentials() async {
+    _sessionGeneration++;
+    _user = null;
+    _token = null;
+    await _clearStoredCredentials();
   }
 }

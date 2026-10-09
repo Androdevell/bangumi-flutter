@@ -15,6 +15,10 @@ class PersistentCookieStore {
 
   final SecureVault _vault;
   final List<_StoredCookie> _cookies = [];
+  int _generation = 0;
+  Future<void> _storageOperations = Future.value();
+
+  int get generation => _generation;
 
   Future<void> initialize() async {
     final encoded = await _vault.read(_storageKey);
@@ -49,7 +53,12 @@ class PersistentCookieStore {
         .join('; ');
   }
 
-  Future<void> capture(Uri uri, String? setCookieHeader) async {
+  Future<void> capture(
+    Uri uri,
+    String? setCookieHeader, {
+    int? requestGeneration,
+  }) async {
+    if (requestGeneration != null && requestGeneration != _generation) return;
     if (setCookieHeader == null || setCookieHeader.isEmpty) return;
     for (final value in setCookieHeader.split(_cookieSeparator)) {
       _captureOne(uri, value.trim());
@@ -59,8 +68,9 @@ class PersistentCookieStore {
   }
 
   Future<void> clear() async {
+    _generation++;
     _cookies.clear();
-    await _vault.delete(_storageKey);
+    await _queueStorage(() => _vault.delete(_storageKey));
   }
 
   void _captureOne(Uri uri, String value) {
@@ -105,10 +115,21 @@ class PersistentCookieStore {
     return slash <= 0 ? '/' : requestPath.substring(0, slash);
   }
 
-  Future<void> _persist() => _vault.write(
-    _storageKey,
-    jsonEncode(_cookies.map((cookie) => cookie.toJson()).toList()),
-  );
+  Future<void> _persist() {
+    final generation = _generation;
+    final encoded = jsonEncode(
+      _cookies.map((cookie) => cookie.toJson()).toList(),
+    );
+    return _queueStorage(() async {
+      if (generation == _generation) await _vault.write(_storageKey, encoded);
+    });
+  }
+
+  Future<void> _queueStorage(Future<void> Function() operation) {
+    final pending = _storageOperations.then((_) => operation());
+    _storageOperations = pending.catchError((Object _) {});
+    return pending;
+  }
 }
 
 class CookieSessionClient extends http.BaseClient {
@@ -119,6 +140,7 @@ class CookieSessionClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final generation = _cookies.generation;
     final stored = _cookies.headerFor(request.url);
     final existing = request.headers[HttpHeaders.cookieHeader];
     if (stored != null) {
@@ -130,6 +152,7 @@ class CookieSessionClient extends http.BaseClient {
     await _cookies.capture(
       request.url,
       response.headers[HttpHeaders.setCookieHeader],
+      requestGeneration: generation,
     );
     return response;
   }

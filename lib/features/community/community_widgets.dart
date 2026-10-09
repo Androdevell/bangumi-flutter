@@ -69,6 +69,7 @@ class CommunityReplyList extends StatelessWidget {
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder:
           (context, index) => _ReplyTile(
+            key: ValueKey('reply:${items[index].id}:$currentUsername'),
             item: items[index],
             currentUsername: currentUsername,
             onUserTap: onUserTap,
@@ -80,6 +81,7 @@ class CommunityReplyList extends StatelessWidget {
 
 class _ReplyTile extends StatefulWidget {
   const _ReplyTile({
+    super.key,
     required this.item,
     required this.currentUsername,
     required this.onUserTap,
@@ -102,6 +104,24 @@ class _ReplyTileState extends State<_ReplyTile> {
       reaction.value: reaction.count,
   };
   bool _busy = false;
+  int _revision = 0;
+
+  @override
+  void didUpdateWidget(covariant _ReplyTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.item, widget.item) ||
+        oldWidget.currentUsername != widget.currentUsername) {
+      _revision++;
+      _busy = false;
+      _selectedValue = _findSelectedValue();
+      _reactions
+        ..clear()
+        ..addAll({
+          for (final reaction in widget.item.reactions)
+            reaction.value: reaction.count,
+        });
+    }
+  }
 
   String? _findSelectedValue() {
     for (final reaction in widget.item.reactions) {
@@ -114,16 +134,18 @@ class _ReplyTileState extends State<_ReplyTile> {
 
   Future<void> _toggle() async {
     if (_busy) return;
+    final revision = _revision;
+    final item = widget.item;
     final picked = await showReactionPicker(
       context,
       selectedValue: _selectedValue,
     );
-    if (picked == null || !mounted) return;
+    if (picked == null || !mounted || revision != _revision) return;
     final nextValue = picked.isEmpty ? null : picked;
     setState(() => _busy = true);
     try {
-      await widget.onLike(widget.item, nextValue);
-      if (!mounted) return;
+      await widget.onLike(item, nextValue);
+      if (!mounted || revision != _revision) return;
       setState(() {
         if (_selectedValue != null) {
           _reactions[_selectedValue!] = (_reactions[_selectedValue!] ?? 1) - 1;
@@ -135,13 +157,13 @@ class _ReplyTileState extends State<_ReplyTile> {
         _selectedValue = nextValue;
       });
     } on Object catch (error) {
-      if (mounted) {
+      if (mounted && revision == _revision) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && revision == _revision) setState(() => _busy = false);
     }
   }
 

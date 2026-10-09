@@ -31,7 +31,9 @@ class _TimelinePageState extends State<TimelinePage> {
 
   Future<void> _reload() async {
     final future = _load();
-    setState(() => _entries = future);
+    setState(() {
+      _entries = future;
+    });
     await future;
   }
 
@@ -125,7 +127,15 @@ class _TimelinePageState extends State<TimelinePage> {
         widgets.add(const SizedBox(height: 8));
         lastDate = date;
       }
-      widgets.add(_TimelineTile(entry: entry, repository: widget.repository));
+      widgets.add(
+        _TimelineTile(
+          key: ValueKey(
+            'timeline:${entry.id}:${widget.repository.currentUsername}',
+          ),
+          entry: entry,
+          repository: widget.repository,
+        ),
+      );
     }
     return widgets;
   }
@@ -155,7 +165,11 @@ class _DateHeader extends StatelessWidget {
 }
 
 class _TimelineTile extends StatefulWidget {
-  const _TimelineTile({required this.entry, required this.repository});
+  const _TimelineTile({
+    super.key,
+    required this.entry,
+    required this.repository,
+  });
   final TimelineEntry entry;
   final BangumiRepository repository;
 
@@ -169,6 +183,22 @@ class _TimelineTileState extends State<_TimelineTile> {
   );
   late final Map<String, int> _reactions = Map.of(widget.entry.reactions);
   bool _busy = false;
+  int _revision = 0;
+
+  @override
+  void didUpdateWidget(covariant _TimelineTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.entry, widget.entry)) {
+      _revision++;
+      _busy = false;
+      _selectedValue = widget.entry.reactionBy(
+        widget.repository.currentUsername,
+      );
+      _reactions
+        ..clear()
+        ..addAll(widget.entry.reactions);
+    }
+  }
 
   Future<void> _react() async {
     if (!widget.repository.isLoggedIn) {
@@ -178,16 +208,18 @@ class _TimelineTileState extends State<_TimelineTile> {
       return;
     }
     if (_busy) return;
+    final revision = _revision;
+    final entry = widget.entry;
     final picked = await showReactionPicker(
       context,
       selectedValue: _selectedValue,
     );
-    if (picked == null || !mounted) return;
+    if (picked == null || !mounted || revision != _revision) return;
     final nextValue = picked.isEmpty ? null : picked;
     setState(() => _busy = true);
     try {
-      await widget.repository.setTimelineReaction(widget.entry.id, nextValue);
-      if (!mounted) return;
+      await widget.repository.setTimelineReaction(entry.id, nextValue);
+      if (!mounted || revision != _revision) return;
       setState(() {
         if (_selectedValue != null) {
           _reactions[_selectedValue!] = (_reactions[_selectedValue!] ?? 1) - 1;
@@ -199,13 +231,13 @@ class _TimelineTileState extends State<_TimelineTile> {
         _selectedValue = nextValue;
       });
     } on Object catch (error) {
-      if (mounted) {
+      if (mounted && revision == _revision) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && revision == _revision) setState(() => _busy = false);
     }
   }
 

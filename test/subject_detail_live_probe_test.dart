@@ -15,7 +15,7 @@ void main() {
 
       expect(details.subject.title, isNotEmpty);
       expect(details.episodes, isNotEmpty);
-      expect(details.previews, isNotEmpty);
+      expect(details.previews, isEmpty);
       expect(details.comments, isNotEmpty);
       expect(details.characters, isNotEmpty);
       expect(details.staffs, isNotEmpty);
@@ -39,7 +39,7 @@ void main() {
                     'User-Agent':
                         'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
                         'Chrome/131.0 Mobile Safari/537.36',
-                    'Referer': 'https://movie.douban.com/',
+                    'Referer': 'https://bgm.tv/',
                   },
                 )
                 .timeout(const Duration(seconds: 12));

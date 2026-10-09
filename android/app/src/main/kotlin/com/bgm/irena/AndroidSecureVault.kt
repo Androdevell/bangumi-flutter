@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.nio.ByteBuffer
@@ -56,11 +57,16 @@ class AndroidSecureVault(context: Context) : MethodChannel.MethodCallHandler {
             val iv = ByteArray(ivLength).also(buffer::get)
             val encrypted = ByteArray(buffer.remaining()).also(buffer::get)
             val cipher = Cipher.getInstance(TRANSFORMATION).apply {
-                init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
+                val storedKey = getExistingKey()
+                if (storedKey == null) {
+                    Log.w("BangumiSecureVault", "Keystore key unavailable; encrypted session retained")
+                    return null
+                }
+                init(Cipher.DECRYPT_MODE, storedKey, GCMParameterSpec(128, iv))
             }
             cipher.doFinal(encrypted).toString(Charsets.UTF_8)
-        } catch (_: Exception) {
-            preferences.edit().remove(key).apply()
+        } catch (error: Exception) {
+            Log.w("BangumiSecureVault", "Session decryption failed: ${error.javaClass.simpleName}; ciphertext retained")
             null
         }
     }
@@ -80,9 +86,13 @@ class AndroidSecureVault(context: Context) : MethodChannel.MethodCallHandler {
             .apply()
     }
 
-    private fun getOrCreateKey(): SecretKey {
+    private fun getExistingKey(): SecretKey? {
         val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return keyStore.getKey(KEY_ALIAS, null) as? SecretKey
+    }
+
+    private fun getOrCreateKey(): SecretKey {
+        getExistingKey()?.let { return it }
 
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
             .apply {

@@ -37,19 +37,19 @@ class ApiClient {
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) => _request('PUT', path, query: query, body: body);
+  }) => _request('PUT', path, query: query, body: body, requiresAuth: true);
 
   Future<dynamic> patch(
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) => _request('PATCH', path, query: query, body: body);
+  }) => _request('PATCH', path, query: query, body: body, requiresAuth: true);
 
   Future<dynamic> delete(
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) => _request('DELETE', path, query: query, body: body);
+  }) => _request('DELETE', path, query: query, body: body, requiresAuth: true);
 
   bool get isLoggedIn => _authService?.isLoggedIn ?? false;
   String get currentUsername => _authService?.user?.username ?? '';
@@ -75,15 +75,19 @@ class ApiClient {
       final response = await http.Response.fromStream(
         await _client.send(request).timeout(const Duration(seconds: 20)),
       );
-      if (response.statusCode < 200 || response.statusCode >= 400) {
+      final text = utf8.decode(response.bodyBytes, allowMalformed: true).trim();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
-          '服务器返回 ${response.statusCode}',
+          response.statusCode >= 300 && response.statusCode < 400
+              ? '评论未发布，登录会话可能已过期，请重新登录后再试'
+              : '服务器返回 ${response.statusCode}',
           statusCode: response.statusCode,
-          details: response.body,
+          details: text,
         );
       }
-      final text = utf8.decode(response.bodyBytes).trim();
-      if (text.isEmpty || response.statusCode >= 300) return null;
+      if (text.isEmpty) {
+        throw const ApiException('未收到评论发布确认，请刷新确认后再试');
+      }
       try {
         return jsonDecode(text);
       } on FormatException {
@@ -105,19 +109,26 @@ class ApiClient {
     String path, {
     Map<String, String>? query,
     Object? body,
+    bool requiresAuth = false,
   }) async {
     final uri = _baseUri.resolve(path).replace(queryParameters: query);
 
     try {
       var accessToken = await _authService?.validAccessToken();
+      if (requiresAuth && _authService != null && accessToken == null) {
+        throw const ApiException('登录已失效，请重新登录后再操作');
+      }
       var response = await _send(method, uri, body, accessToken);
       if (response.statusCode == HttpStatus.unauthorized &&
           accessToken != null &&
           await (_authService?.refreshAccessToken() ?? Future.value(false))) {
         accessToken = await _authService?.validAccessToken();
+        if (requiresAuth && accessToken == null) {
+          throw const ApiException('登录已失效，请重新登录后再操作');
+        }
         response = await _send(method, uri, body, accessToken);
       }
-      final text = utf8.decode(response.bodyBytes);
+      final text = utf8.decode(response.bodyBytes, allowMalformed: true);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
           '服务器返回 ${response.statusCode}',

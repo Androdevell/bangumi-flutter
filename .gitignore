@@ -33,8 +33,10 @@ migrate_working_dir/
 .pub/
 /build/
 /dist/
+/coverage/
 .env
 .env.*
+oauth-config.json
 *.keystore
 *.jks
 key.properties

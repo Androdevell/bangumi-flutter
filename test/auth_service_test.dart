@@ -134,6 +134,8 @@ void main() {
       client: sessionClient,
       cookies: cookies,
       vault: vault,
+      appId: 'test-app',
+      appSecret: 'test-secret',
     );
     await auth.initialize();
 
@@ -168,7 +170,6 @@ void main() {
 
     final repository = RemoteBangumiRepository(
       apiClient: ApiClient(client: sessionClient, authService: auth),
-      externalClient: rawClient,
     );
     await repository.createEpisodeComment(9122, ' 章节评论 ');
     var collectionNotifications = 0;

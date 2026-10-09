@@ -8,6 +8,31 @@ import 'package:http/testing.dart';
 
 void main() {
   test(
+    'subject details never query third-party previews or leak title',
+    () async {
+      final hosts = <String>[];
+      final client = MockClient((request) async {
+        hosts.add(request.url.host);
+        expect(request.url.queryParameters.containsKey('q'), isFalse);
+        if (request.url.path == '/p1/subjects/42') {
+          return http.Response(
+            '{"id":42,"name":"private title","type":2}',
+            200,
+          );
+        }
+        return http.Response('{"data":[]}', 200);
+      });
+      final repository = RemoteBangumiRepository(
+        apiClient: ApiClient(client: client),
+      );
+      final details = await repository.fetchSubjectDetails(42);
+      expect(details.previews, isEmpty);
+      expect(hosts, everyElement('next.bgm.tv'));
+      repository.close();
+    },
+  );
+
+  test(
     'repository sends the original search contract and parses its page',
     () async {
       late http.Request captured;

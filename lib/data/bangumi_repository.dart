@@ -1,13 +1,8 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 
 import '../core/models.dart';
 import '../core/community_models.dart';
 import '../core/network/api_client.dart';
-import '../core/network/platform_http_client.dart';
 import '../core/subject_detail_models.dart';
 
 abstract interface class BangumiRepository {
@@ -65,12 +60,10 @@ abstract interface class BangumiRepository {
 }
 
 class RemoteBangumiRepository implements BangumiRepository {
-  RemoteBangumiRepository({ApiClient? apiClient, http.Client? externalClient})
-    : _api = apiClient ?? ApiClient(),
-      _externalClient = externalClient ?? createPlatformHttpClient();
+  RemoteBangumiRepository({ApiClient? apiClient})
+    : _api = apiClient ?? ApiClient();
 
   final ApiClient _api;
-  final http.Client _externalClient;
   final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
   final Map<String, int> _subjectCollectionCountFloor = {};
 
@@ -144,12 +137,11 @@ class RemoteBangumiRepository implements BangumiRepository {
   @override
   Future<SubjectDetailData> fetchSubjectDetails(int id) async {
     final subjectJson = await _fetchSubjectJson(id);
-    final subject = Subject.fromJson(subjectJson);
     final results = await Future.wait<List<Object>>([
       _safeItems(
         _fetchItems('p1/subjects/$id/episodes', SubjectEpisode.fromJson, 100),
       ),
-      _safeItems(_fetchPreviews(subject)),
+      Future.value(const <Object>[]),
       _safeItems(
         _fetchItems('p1/subjects/$id/comments', SubjectComment.fromJson, 40),
       ),
@@ -261,9 +253,7 @@ class RemoteBangumiRepository implements BangumiRepository {
         'submit': 'submit',
       },
     );
-    if (json is Map && json['status'] == 'error') {
-      throw ApiException('${json['msg'] ?? json['message'] ?? '评论发布失败'}');
-    }
+    _requireReplyConfirmation(json);
   }
 
   @override
@@ -398,9 +388,7 @@ class RemoteBangumiRepository implements BangumiRepository {
         'submit': 'submit',
       },
     );
-    if (json is Map && json['status'] == 'error') {
-      throw ApiException('${json['msg'] ?? json['message'] ?? '评论发布失败'}');
-    }
+    _requireReplyConfirmation(json);
   }
 
   @override
@@ -577,92 +565,15 @@ class RemoteBangumiRepository implements BangumiRepository {
     }
   }
 
-  Future<List<SubjectPreview>> _fetchPreviews(Subject subject) async {
-    if (subject.title.isEmpty) return const [];
-    final suggestionUri = _signedDoubanUri(
-      Uri.https('frodo.douban.com', '/api/v2/search/suggestion', {
-        'q': subject.title,
-        'apikey': _doubanApiKey,
-      }),
-    );
-    final suggestionResponse = await _externalClient
-        .get(suggestionUri, headers: {'User-Agent': _doubanUserAgent})
-        .timeout(const Duration(seconds: 12));
-    if (suggestionResponse.statusCode != 200) return const [];
-    final suggestion = jsonDecode(utf8.decode(suggestionResponse.bodyBytes));
-    if (suggestion is! Map || suggestion['cards'] is! List) return const [];
-    final cards = (suggestion['cards'] as List).whereType<Map>();
-    Map<dynamic, dynamic>? selected;
-    for (final card in cards) {
-      if ('${card['target_type']}' != 'explore') {
-        selected = card;
-        break;
-      }
+  /// 只接受站点明确的发布确认，未知响应不能作为成功。
+  void _requireReplyConfirmation(dynamic json) {
+    if (json is Map && json['status'] == 'error') {
+      throw ApiException('${json['msg'] ?? json['message'] ?? '评论发布失败'}');
     }
-    final targetId = selected?['target_id']?.toString() ?? '';
-    final targetType = selected?['target_type']?.toString() ?? 'tv';
-    if (targetId.isEmpty) return const [];
-
-    final photoUri = _signedDoubanUri(
-      Uri.https('frodo.douban.com', '/api/v2/$targetType/$targetId/photos', {
-        'start': '0',
-        'count': '60',
-        'apikey': _doubanApiKey,
-      }),
-    );
-    final photoResponse = await _externalClient
-        .get(photoUri, headers: {'User-Agent': _doubanUserAgent})
-        .timeout(const Duration(seconds: 12));
-    if (photoResponse.statusCode != 200) return const [];
-    final payload = jsonDecode(utf8.decode(photoResponse.bodyBytes));
-    if (payload is! Map || payload['photos'] is! List) return const [];
-    return (payload['photos'] as List)
-        .whereType<Map>()
-        .map((photo) {
-          final image = _asMap(photo['image']);
-          final normal = _asMap(image['normal']);
-          final large = _asMap(image['large']);
-          return SubjectPreview(
-            id: '${photo['id'] ?? ''}',
-            imageUrl: _secureImageUrl('${normal['url'] ?? large['url'] ?? ''}'),
-            largeImageUrl: _secureImageUrl(
-              '${large['url'] ?? normal['url'] ?? ''}',
-            ),
-            width: (large['width'] as num?)?.toInt() ?? 0,
-            height: (large['height'] as num?)?.toInt() ?? 0,
-          );
-        })
-        .where((photo) => photo.imageUrl.isNotEmpty)
-        .toList();
+    if (json is! Map || !(json['status'] == 'ok' || json['posts'] is Map)) {
+      throw const ApiException('未收到评论发布确认，请刷新确认后再试');
+    }
   }
-
-  Uri _signedDoubanUri(Uri uri) {
-    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final source = 'GET&${Uri.encodeComponent(uri.path)}&$timestamp';
-    final signature = base64Encode(
-      Hmac(
-        sha1,
-        utf8.encode(_doubanSignKey),
-      ).convert(utf8.encode(source)).bytes,
-    );
-    return uri.replace(
-      queryParameters: {
-        ...uri.queryParameters,
-        '_sig': signature,
-        '_ts': '$timestamp',
-      },
-    );
-  }
-
-  String _secureImageUrl(String value) =>
-      value.startsWith('//')
-          ? 'https:$value'
-          : value.replaceFirst(RegExp(r'^http://'), 'https://');
-
-  Map<String, dynamic> _asMap(dynamic value) =>
-      value is Map
-          ? value.map((key, item) => MapEntry('$key', item))
-          : const {};
 
   Future<dynamic> _safeJson(Future<dynamic> request, dynamic fallback) async {
     try {
@@ -688,13 +599,5 @@ class RemoteBangumiRepository implements BangumiRepository {
   void close() {
     _collectionChanges.dispose();
     _api.close();
-    _externalClient.close();
   }
-
-  static const _doubanApiKey = '0dad551ec0f84ed02907ff5c42e8ec70';
-  static const _doubanSignKey = 'bf7dddc7c9cfe6f7';
-  static const _doubanUserAgent =
-      'api-client/1 com.douban.frodo/7.65.0(277) Android/33 '
-      'product/coral vendor/Google model/Pixel 4 XL brand/google rom/android '
-      'network/wifi platform/mobile nd/1';
 }

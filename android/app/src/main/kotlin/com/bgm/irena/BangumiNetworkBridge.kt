@@ -1,6 +1,7 @@
 package com.bgm.irena
 
 import android.app.Activity
+import android.util.Log
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import okhttp3.Call
@@ -21,10 +22,8 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketAddress
-import java.net.UnknownHostException
 import java.nio.ByteBuffer
 import java.security.KeyStore
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.net.SocketFactory
 import javax.net.ssl.SSLContext
@@ -82,6 +81,7 @@ class BangumiNetworkBridge(
 
         requestClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, error: IOException) {
+                Log.w("BangumiNetwork", "Request failed: host=${request.url.host}, type=${error.javaClass.simpleName}")
                 activity.runOnUiThread {
                     result.error("network_error", error.message ?: "Network request failed", null)
                 }
@@ -110,56 +110,25 @@ class BangumiNetworkBridge(
     }
 
     private fun createClient(): OkHttpClient {
-        val hosts = mapOf(
-            "bangumi.tv" to listOf("178.79.181.137"),
-            "bgm.tv" to CLOUDFLARE_IPS,
-            "api.bgm.tv" to CLOUDFLARE_IPS,
-            "next.bgm.tv" to CLOUDFLARE_IPS,
-            "lain.bgm.tv" to CLOUDFLARE_IPS,
+        val hosts = setOf(
+            "bangumi.tv", "bgm.tv", "api.bgm.tv", "next.bgm.tv", "lain.bgm.tv",
         )
-        val fragmentationPolicy = DomainTlsFragmentationPolicy(hosts.keys)
+        val fragmentationPolicy = DomainTlsFragmentationPolicy(hosts)
         return OkHttpClient.Builder()
-            .dns(AntiSniDns(hosts))
+            .dns(Dns.SYSTEM)
+            .retryOnConnectionFailure(true)
             .socketFactory(AntiSniSocketFactory(fragmentationPolicy))
             .sslSocketFactory(antiSniTlsEngine.socketFactory, antiSniTlsEngine.trustManager)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
             .build()
     }
 
     companion object {
         const val CHANNEL_NAME = "com.xiaoyv.bangumi/network"
 
-        private val CLOUDFLARE_IPS = listOf(
-            "104.26.8.23",
-            "104.26.9.23",
-            "172.67.73.67",
-        )
-    }
-}
-
-private class AntiSniDns(
-    initialHosts: Map<String, List<String>>,
-    private val delegate: Dns = Dns.SYSTEM,
-) : Dns {
-    private val hostsMap = ConcurrentHashMap(initialHosts)
-
-    override fun lookup(hostname: String): List<InetAddress> {
-        val addresses = hostsMap[hostname]?.mapNotNull { ip ->
-            runCatching {
-                InetAddress.getByAddress(hostname, InetAddress.getByName(ip).address)
-            }.getOrNull()
-        }.orEmpty()
-        if (addresses.isNotEmpty()) return addresses
-
-        return try {
-            delegate.lookup(hostname)
-        } catch (error: Exception) {
-            throw UnknownHostException(
-                "Unable to resolve host: $hostname. Cause: ${error.message}",
-            )
-        }
     }
 }
 

@@ -52,7 +52,9 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
       widget.repository.fetchSubjectDetails(widget.subject.id);
 
   void _retry() {
-    setState(() => _details = _load());
+    setState(() {
+      _details = _load();
+    });
   }
 
   void _openUser(String username) {
@@ -624,12 +626,14 @@ class _PreviewSection extends StatelessWidget {
     'User-Agent':
         'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
         'Chrome/131.0 Mobile Safari/537.36',
-    'Referer': 'https://movie.douban.com/',
+    'Referer': 'https://bgm.tv/',
   };
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无预览图片');
+    if (items.isEmpty) {
+      return const EmptyView(message: '第三方剧照预览已停用，以保护浏览隐私');
+    }
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -713,6 +717,9 @@ class _CommentSection extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder:
           (context, index) => _SubjectCommentTile(
+            key: ValueKey(
+              'subject-comment:${items[index].id}:${repository.currentUsername}',
+            ),
             item: items[index],
             repository: repository,
             onUserTap: onUserTap,
@@ -723,6 +730,7 @@ class _CommentSection extends StatelessWidget {
 
 class _SubjectCommentTile extends StatefulWidget {
   const _SubjectCommentTile({
+    super.key,
     required this.item,
     required this.repository,
     required this.onUserTap,
@@ -742,22 +750,37 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
   );
   late final Map<String, int> _reactions = Map.of(widget.item.reactions);
   bool _busy = false;
+  int _revision = 0;
+
+  @override
+  void didUpdateWidget(covariant _SubjectCommentTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.item, widget.item)) {
+      _revision++;
+      _busy = false;
+      _selectedValue = widget.item.reactionBy(
+        widget.repository.currentUsername,
+      );
+      _reactions
+        ..clear()
+        ..addAll(widget.item.reactions);
+    }
+  }
 
   Future<void> _toggleLike() async {
     if (_busy || !widget.repository.isLoggedIn) return;
+    final revision = _revision;
+    final item = widget.item;
     final picked = await showReactionPicker(
       context,
       selectedValue: _selectedValue,
     );
-    if (picked == null || !mounted) return;
+    if (picked == null || !mounted || revision != _revision) return;
     final nextValue = picked.isEmpty ? null : picked;
     setState(() => _busy = true);
     try {
-      await widget.repository.setSubjectCommentReaction(
-        widget.item.id,
-        nextValue,
-      );
-      if (!mounted) return;
+      await widget.repository.setSubjectCommentReaction(item.id, nextValue);
+      if (!mounted || revision != _revision) return;
       setState(() {
         if (_selectedValue != null) {
           _reactions[_selectedValue!] = (_reactions[_selectedValue!] ?? 1) - 1;
@@ -769,13 +792,13 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
         _selectedValue = nextValue;
       });
     } on Object catch (error) {
-      if (mounted) {
+      if (mounted && revision == _revision) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && revision == _revision) setState(() => _busy = false);
     }
   }
 
