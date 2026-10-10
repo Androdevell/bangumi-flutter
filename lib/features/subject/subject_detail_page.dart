@@ -16,6 +16,7 @@ import '../community/reaction_picker.dart';
 import '../episode/episode_comments_page.dart';
 import '../person/person_detail_page.dart';
 import '../user/user_profile_page.dart';
+import 'subject_preview_panel.dart';
 
 class SubjectDetailPage extends StatefulWidget {
   const SubjectDetailPage({
@@ -342,7 +343,12 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                       repository: widget.repository,
                                     ),
                                   ),
-                                  _PreviewSection(items: details.previews),
+                                  SubjectPreviewPanel(
+                                    subject: subject,
+                                    service: previewServiceFor(
+                                      widget.repository,
+                                    ),
+                                  ),
                                   _section(
                                     details,
                                     'comments',
@@ -691,86 +697,6 @@ class _SummarySection extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _PreviewSection extends StatelessWidget {
-  const _PreviewSection({required this.items});
-
-  final List<SubjectPreview> items;
-
-  static const _imageHeaders = {
-    'User-Agent':
-        'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 '
-        'Chrome/131.0 Mobile Safari/537.36',
-    'Referer': 'https://bgm.tv/',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return const EmptyView(message: '第三方剧照预览已停用，以保护浏览隐私');
-    }
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 340,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 1.55,
-      ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(7),
-          child: InkWell(
-            onTap:
-                () => showDialog<void>(
-                  context: context,
-                  builder:
-                      (context) => Dialog.fullscreen(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            InteractiveViewer(
-                              minScale: 0.5,
-                              maxScale: 5,
-                              child: _NetworkArtwork(
-                                imageUrl: item.largeImageUrl,
-                                fallbackImageUrl: item.imageUrl,
-                                fit: BoxFit.contain,
-                                fallbackIcon:
-                                    Icons.image_not_supported_outlined,
-                                httpHeaders: _imageHeaders,
-                              ),
-                            ),
-                            Positioned(
-                              top: 12,
-                              right: 12,
-                              child: SafeArea(
-                                child: IconButton.filledTonal(
-                                  tooltip: '关闭',
-                                  onPressed: () => Navigator.pop(context),
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                ),
-            child: _NetworkArtwork(
-              imageUrl: item.imageUrl,
-              fallbackImageUrl: item.largeImageUrl,
-              fit: BoxFit.cover,
-              fallbackIcon: Icons.image_not_supported_outlined,
-              httpHeaders: _imageHeaders,
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -1471,16 +1397,12 @@ class _NetworkArtwork extends StatelessWidget {
     required this.fit,
     required this.fallbackIcon,
     this.alignment = Alignment.center,
-    this.httpHeaders,
-    this.fallbackImageUrl = '',
   });
 
   final String imageUrl;
   final BoxFit fit;
   final IconData fallbackIcon;
   final Alignment alignment;
-  final Map<String, String>? httpHeaders;
-  final String fallbackImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -1498,35 +1420,18 @@ class _NetworkArtwork extends StatelessWidget {
                     .round()
                     .clamp(1, 1600)
                 : 600;
-        final alternate =
-            fallbackImageUrl.isEmpty || fallbackImageUrl == imageUrl
-                ? fallback
-                : CachedNetworkImage(
-                  memCacheWidth: width,
-                  imageUrl: fallbackImageUrl,
-                  cacheManager: AppImageCache.manager,
-                  fit: fit,
-                  alignment: alignment,
-                  httpHeaders: httpHeaders,
-                  fadeInDuration: Duration.zero,
-                  fadeOutDuration: Duration.zero,
-                  placeholderFadeInDuration: Duration.zero,
-                  placeholder: (_, __) => fallback,
-                  errorWidget: (_, __, ___) => fallback,
-                );
         return CachedNetworkImage(
           memCacheWidth: width,
           imageUrl: imageUrl,
           cacheManager: AppImageCache.manager,
           fit: fit,
           alignment: alignment,
-          httpHeaders: httpHeaders,
           fadeInDuration: Duration.zero,
           fadeOutDuration: Duration.zero,
           placeholderFadeInDuration: Duration.zero,
           useOldImageOnUrlChange: true,
           placeholder: (_, __) => fallback,
-          errorWidget: (_, __, ___) => alternate,
+          errorWidget: (_, __, ___) => fallback,
         );
       },
     );

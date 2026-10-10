@@ -6,10 +6,15 @@ enum AppIconStyle { classic, anime }
 
 @immutable
 class AppPreferenceSnapshot {
-  const AppPreferenceSnapshot({required this.locale, required this.iconStyle});
+  const AppPreferenceSnapshot({
+    required this.locale,
+    required this.iconStyle,
+    this.thirdPartyPreviews = false,
+  });
 
   final Locale locale;
   final AppIconStyle iconStyle;
+  final bool thirdPartyPreviews;
 }
 
 class AppPreferences {
@@ -17,6 +22,7 @@ class AppPreferences {
 
   static const _localeKey = 'app.preference.locale';
   static const _iconKey = 'app.preference.icon';
+  static const _previewsKey = 'app.preference.thirdPartyPreviews.v1';
 
   final SecureVault _vault;
 
@@ -24,6 +30,7 @@ class AppPreferences {
     final values = await Future.wait([
       _vault.read(_localeKey),
       _vault.read(_iconKey),
+      _vault.read(_previewsKey),
     ]);
     final localeCode = switch (values[0]) {
       'en' => 'en',
@@ -37,6 +44,7 @@ class AppPreferences {
     return AppPreferenceSnapshot(
       locale: Locale(localeCode),
       iconStyle: iconStyle,
+      thirdPartyPreviews: values[2] == 'true',
     );
   }
 
@@ -45,4 +53,7 @@ class AppPreferences {
 
   Future<void> setIconStyle(AppIconStyle style) =>
       _vault.write(_iconKey, style.name);
+
+  Future<void> setThirdPartyPreviews(bool enabled) =>
+      _vault.write(_previewsKey, '$enabled');
 }

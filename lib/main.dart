@@ -7,6 +7,7 @@ import 'core/network/api_client.dart';
 import 'core/network/app_image_cache.dart';
 import 'core/network/cookie_session_client.dart';
 import 'core/network/platform_http_client.dart';
+import 'core/network/third_party_preview_service.dart';
 import 'core/settings/app_preferences.dart';
 import 'data/bangumi_repository.dart';
 
@@ -37,6 +38,10 @@ Future<void> main() async {
       initialLocale: appSettings.locale,
       initialAppIconStyle: appSettings.iconStyle,
       repository: RemoteBangumiRepository(
+        previewService: ThirdPartyPreviewService(
+          enabled: appSettings.thirdPartyPreviews,
+          persist: preferences.setThirdPartyPreviews,
+        ),
         apiClient: ApiClient(client: apiTransport, authService: authService),
       ),
     ),

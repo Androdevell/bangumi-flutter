@@ -9,6 +9,7 @@ import '../../core/settings/app_preferences.dart';
 import '../../core/update/app_update_service.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/third_party_preview_setting.dart';
 import '../auth/login_page.dart';
 import '../user/user_profile_page.dart';
 
@@ -511,6 +512,11 @@ class _ProfilePageState extends State<ProfilePage> {
                           SnackBar(content: Text(strings.t('privacyHint'))),
                         ),
                   ),
+                  if (previewServiceFor(widget.repository)
+                      case final service?) ...[
+                    const Divider(height: 1),
+                    ThirdPartyPreviewSetting(service: service),
+                  ],
                 ],
               ),
             ),

@@ -4,6 +4,7 @@ import '../core/models.dart';
 import '../core/paged.dart';
 import '../core/community_models.dart';
 import '../core/network/api_client.dart';
+import '../core/network/third_party_preview_service.dart';
 import '../core/subject_detail_models.dart';
 
 abstract interface class BangumiRepository {
@@ -77,6 +78,15 @@ abstract interface class RefreshableRepository {
   void invalidateCache();
 }
 
+abstract interface class SubjectPreviewRepository {
+  ThirdPartyPreviewService get previewService;
+}
+
+ThirdPartyPreviewService? previewServiceFor(BangumiRepository repository) =>
+    repository is SubjectPreviewRepository
+        ? (repository as SubjectPreviewRepository).previewService
+        : null;
+
 void invalidateRepositoryCache(BangumiRepository repository) {
   if (repository is RefreshableRepository) {
     (repository as RefreshableRepository).invalidateCache();
@@ -125,9 +135,16 @@ class RemoteBangumiRepository
     implements
         BangumiRepository,
         SubjectPagingRepository,
+        SubjectPreviewRepository,
         RefreshableRepository {
-  RemoteBangumiRepository({ApiClient? apiClient})
-    : _api = apiClient ?? ApiClient();
+  RemoteBangumiRepository({
+    ApiClient? apiClient,
+    ThirdPartyPreviewService? previewService,
+  }) : _api = apiClient ?? ApiClient(),
+       previewService = previewService ?? ThirdPartyPreviewService();
+
+  @override
+  final ThirdPartyPreviewService previewService;
 
   final ApiClient _api;
   final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
@@ -823,6 +840,7 @@ class RemoteBangumiRepository
 
   @override
   void close() {
+    previewService.dispose();
     _collectionChanges.dispose();
     _api.close();
   }
