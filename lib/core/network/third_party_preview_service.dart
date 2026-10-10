@@ -92,7 +92,11 @@ class ThirdPartyPreviewService extends ChangeNotifier {
     });
   }
 
-  Future<Object?> _get(Uri uri, int generation) async {
+  Future<Object?> _get(
+    Uri uri,
+    int generation, {
+    bool allowPhotoRedirect = false,
+  }) async {
     if (!_allowed(generation)) return null;
     final client = _client ??= _clientFactory();
     final request =
@@ -107,6 +111,36 @@ class ThirdPartyPreviewService extends ChangeNotifier {
         .send(request)
         .timeout(const Duration(seconds: 12));
     if (!_allowed(generation)) return null;
+    // 只接受同一作品 movie/tv 的规范化跳转，不跟随验证页或外部地址。
+    if (allowPhotoRedirect &&
+        {301, 302, 307, 308}.contains(response.statusCode)) {
+      final location = response.headers['location'];
+      final target = location == null ? null : Uri.tryParse(location);
+      final resolved = target == null ? null : uri.resolveUri(target);
+      final match = RegExp(
+        r'^/rexxar/api/v2/(movie|tv)/(\d+)/photos$',
+      ).firstMatch(uri.path);
+      if (match != null &&
+          resolved != null &&
+          resolved.scheme == 'https' &&
+          resolved.host == 'm.douban.com' &&
+          resolved.userInfo.isEmpty &&
+          (!resolved.hasPort || resolved.port == 443) &&
+          resolved.fragment.isEmpty &&
+          resolved.path ==
+              '/rexxar/api/v2/${match[1] == 'movie' ? 'tv' : 'movie'}/${match[2]}/photos' &&
+          resolved.query == uri.query) {
+        await response.stream
+            .fold<int>(0, (size, chunk) {
+              if (size + chunk.length > 2 * 1024 * 1024) {
+                throw const PreviewException(PreviewFailure.invalidResponse);
+              }
+              return size + chunk.length;
+            })
+            .timeout(const Duration(seconds: 12));
+        return _get(resolved, generation);
+      }
+    }
     if (response.statusCode != 200) {
       throw const PreviewException(PreviewFailure.unavailable);
     }
@@ -170,6 +204,7 @@ class ThirdPartyPreviewService extends ChangeNotifier {
           {'start': '0', 'count': '24'},
         ),
         generation,
+        allowPhotoRedirect: true,
       );
       if (!_allowed(generation)) return const [];
       if (payload is! Map || payload['photos'] is! List) {

@@ -287,7 +287,8 @@ class ApiClient {
     final request = http.Request(method, uri)
       ..headers.addAll({
         HttpHeaders.acceptHeader: 'application/json',
-        HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
+        if (body != null)
+          HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
         HttpHeaders.acceptLanguageHeader:
             'zh-CN,zh;q=0.8,zh-TW;q=0.6,zh-HK;q=0.4,en;q=0.2',
         HttpHeaders.cookieHeader: 'kira=4',

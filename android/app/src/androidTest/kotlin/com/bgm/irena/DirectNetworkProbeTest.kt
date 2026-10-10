@@ -12,6 +12,37 @@ import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class DirectNetworkProbeTest {
+    @Test fun tvPreviewCanonicalRedirectAndImageWorkWithoutProxy() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("runDirectPreviewProbe") == "true")
+        val client = createBangumiNetworkClient().newBuilder()
+            .proxy(Proxy.NO_PROXY).followRedirects(false).followSslRedirects(false).build()
+        try {
+            val movieUrl = "https://m.douban.com/rexxar/api/v2/movie/36575506/photos?start=0&count=24"
+            val tvUrl = "https://m.douban.com/rexxar/api/v2/tv/36575506/photos?start=0&count=24"
+            fun request(url: String) = Request.Builder().url(url)
+                .header("Referer", "https://m.douban.com/")
+                .header("User-Agent", "Mozilla/5.0").build()
+            client.newCall(request(movieUrl)).execute().use { response ->
+                assertEquals(301, response.code)
+                assertEquals(tvUrl, response.request.url.resolve(response.header("Location")!!)!!.toString())
+            }
+            val imageUrl = client.newCall(request(tvUrl)).execute().use { response ->
+                assertEquals(200, response.code)
+                val photos = JSONObject(response.body!!.string()).getJSONArray("photos")
+                assertTrue(photos.length() > 0)
+                photos.getJSONObject(0).getJSONObject("image").getJSONObject("normal").getString("url")
+            }
+            client.newCall(request(imageUrl)).execute().use { response ->
+                assertEquals(200, response.code)
+                assertTrue(response.header("Content-Type").orEmpty().startsWith("image/"))
+                assertTrue(response.body!!.bytes().isNotEmpty())
+            }
+        } finally {
+            client.dispatcher.executorService.shutdown()
+            client.connectionPool.evictAll()
+        }
+    }
+
     @Test fun publicPreviewApiAndImageWorkWithoutPrivateKeys() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("runDirectPreviewProbe") == "true")
         val client = createBangumiNetworkClient().newBuilder().proxy(Proxy.NO_PROXY).build()

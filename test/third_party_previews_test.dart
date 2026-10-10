@@ -58,6 +58,138 @@ class _Vault implements SecureVault {
 }
 
 void main() {
+  for (final status in [301, 302, 307, 308]) {
+    test('same subject movie to TV redirect $status loads photos', () async {
+      final requests = <http.Request>[];
+      final service = ThirdPartyPreviewService(
+        enabled: true,
+        clientFactory:
+            () => MockClient((request) async {
+              requests.add(request);
+              expect(request.followRedirects, false);
+              expect(request.headers.containsKey('authorization'), false);
+              expect(request.headers.containsKey('cookie'), false);
+              if (request.url.host == 'movie.douban.com') {
+                return jsonResponse(suggestions);
+              }
+              if (request.url.path.contains('/movie/')) {
+                return http.Response(
+                  '',
+                  status,
+                  headers: {
+                    'location':
+                        '/rexxar/api/v2/tv/1291561/photos?start=0&count=24',
+                  },
+                );
+              }
+              return jsonResponse(photos);
+            }),
+      );
+      addTearDown(service.dispose);
+      expect(
+        (await service.fetch(subject)).single.imageUrl,
+        'https://img3.doubanio.com/a.jpg',
+      );
+      expect(requests.length, 3);
+      expect(requests.last.url.path, '/rexxar/api/v2/tv/1291561/photos');
+    });
+  }
+
+  for (final target in [
+    'https://sec.douban.com/c?verify=1',
+    'https://evil.example/rexxar/api/v2/tv/1291561/photos?start=0&count=24',
+    'http://m.douban.com/rexxar/api/v2/tv/1291561/photos?start=0&count=24',
+    'https://user@m.douban.com/rexxar/api/v2/tv/1291561/photos?start=0&count=24',
+    'https://m.douban.com:444/rexxar/api/v2/tv/1291561/photos?start=0&count=24',
+    '/rexxar/api/v2/tv/999/photos?start=0&count=24',
+    '/rexxar/api/v2/tv/1291561/photos?start=0&count=24&apikey=foreign',
+    '/rexxar/api/v2/tv/1291561/photos?start=0&count=24#verify',
+    '/rexxar/api/v2/movie/1291561/photos?start=0&count=24',
+    '/accounts/login',
+  ]) {
+    test('noncanonical photo redirect is rejected: $target', () async {
+      var requests = 0;
+      final service = ThirdPartyPreviewService(
+        enabled: true,
+        clientFactory:
+            () => MockClient((request) async {
+              requests++;
+              return request.url.host == 'movie.douban.com'
+                  ? jsonResponse(suggestions)
+                  : http.Response('', 301, headers: {'location': target});
+            }),
+      );
+      addTearDown(service.dispose);
+      await expectLater(
+        service.fetch(subject),
+        throwsA(isA<PreviewException>()),
+      );
+      expect(requests, 2);
+    });
+  }
+
+  test('movie/TV redirect loop stops after one redirect', () async {
+    var requests = 0;
+    final service = ThirdPartyPreviewService(
+      enabled: true,
+      clientFactory:
+          () => MockClient((request) async {
+            requests++;
+            if (request.url.host == 'movie.douban.com') {
+              return jsonResponse(suggestions);
+            }
+            final kind = request.url.path.contains('/movie/') ? 'tv' : 'movie';
+            return http.Response(
+              '',
+              301,
+              headers: {
+                'location':
+                    '/rexxar/api/v2/$kind/1291561/photos?start=0&count=24',
+              },
+            );
+          }),
+    );
+    addTearDown(service.dispose);
+    await expectLater(service.fetch(subject), throwsA(isA<PreviewException>()));
+    expect(requests, 3);
+  });
+
+  test(
+    'revoking permission during redirect never requests TV photos',
+    () async {
+      final redirect = Completer<http.Response>();
+      final photoRequested = Completer<void>();
+      var requests = 0;
+      final service = ThirdPartyPreviewService(
+        enabled: true,
+        clientFactory:
+            () => MockClient((request) async {
+              requests++;
+              if (request.url.host == 'movie.douban.com') {
+                return jsonResponse(suggestions);
+              }
+              photoRequested.complete();
+              return redirect.future;
+            }),
+      );
+      addTearDown(service.dispose);
+      final pending = service.fetch(subject);
+      await photoRequested.future;
+      await service.setEnabled(false);
+      redirect.complete(
+        http.Response(
+          '',
+          301,
+          headers: {
+            'location': '/rexxar/api/v2/tv/1291561/photos?start=0&count=24',
+          },
+        ),
+      );
+      expect(await pending, isEmpty);
+      expect(requests, 2);
+    },
+  );
+
   test(
     'new and upgraded installations default off, preference survives reload',
     () async {
