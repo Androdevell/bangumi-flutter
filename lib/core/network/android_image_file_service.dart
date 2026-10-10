@@ -21,7 +21,7 @@ class AndroidImageFileService extends FileService {
       'url': url,
       'headers': {
         HttpHeaders.userAgentHeader:
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.7',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.1.8',
         ...?headers,
       },
     });

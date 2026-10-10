@@ -59,6 +59,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.bgm.irena"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 30
@@ -95,4 +96,8 @@ flutter {
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.conscrypt:conscrypt-android:2.6.3")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

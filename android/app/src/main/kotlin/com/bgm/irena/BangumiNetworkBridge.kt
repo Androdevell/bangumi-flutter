@@ -6,7 +6,6 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.Dns
 import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -36,7 +35,7 @@ import javax.net.ssl.X509TrustManager
 class BangumiNetworkBridge(
     private val activity: Activity,
 ) : MethodChannel.MethodCallHandler {
-    private val client = createClient()
+    private val client = createBangumiNetworkClient()
     private val imageClient = client.newBuilder()
         .dispatcher(Dispatcher().apply { maxRequests = 3; maxRequestsPerHost = 3 })
         .callTimeout(40, TimeUnit.SECONDS)
@@ -182,29 +181,32 @@ class BangumiNetworkBridge(
         })
     }
 
-    private fun createClient(): OkHttpClient {
-        val hosts = setOf(
-            "bangumi.tv", "bgm.tv", "api.bgm.tv", "next.bgm.tv", "lain.bgm.tv",
-        )
-        val fragmentationPolicy = DomainTlsFragmentationPolicy(hosts)
-        return OkHttpClient.Builder()
-            .dns(Dns.SYSTEM)
-            .retryOnConnectionFailure(true)
-            .socketFactory(AntiSniSocketFactory(fragmentationPolicy))
-            .sslSocketFactory(antiSniTlsEngine.socketFactory, antiSniTlsEngine.trustManager)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
-            .callTimeout(20, TimeUnit.SECONDS)
-            .build()
-    }
-
     companion object {
         const val CHANNEL_NAME = "com.xiaoyv.bangumi/network"
         private const val MAX_API_BYTES = 4L * 1024 * 1024
         private const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
 
     }
+}
+
+/**
+ * API 与图片共用的直连配置，也供原生设备网络探针验证。
+ */
+internal fun createBangumiNetworkClient(): OkHttpClient {
+    val hosts = setOf(
+        "bangumi.tv", "bgm.tv", "api.bgm.tv", "next.bgm.tv", "lain.bgm.tv", "chii.in",
+    )
+    val fragmentationPolicy = DomainTlsFragmentationPolicy(hosts)
+    return OkHttpClient.Builder()
+        .dns(BangumiDns())
+        .retryOnConnectionFailure(true)
+        .socketFactory(AntiSniSocketFactory(fragmentationPolicy))
+        .sslSocketFactory(antiSniTlsEngine.socketFactory, antiSniTlsEngine.trustManager)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.SECONDS)
+        .build()
 }
 
 private fun interface TlsFragmentationPolicy {

@@ -109,8 +109,13 @@ Android 图片传输采用临时文件流，不再整张图片通过 MethodChann
 
 ## 安全与隐私修复
 
-1.1.5 删除固定 CDN IP，使用系统 DNS（OkHttp 自动尝试解析结果中的多个地址），
-保留仅针对 Bangumi 域名的 TLS 分片兼容处理与正常证书校验。
+1.1.5 改用系统 DNS 后，在解析受干扰的网络上产生了 Android 直连回归。
+1.1.8 为本站六个域名增加限时 HTTPS DNS 查询（每个解析器最多两秒）和 TTL 缓存；
+查询失败时使用已核对的多地址应急路由，三十秒后重试加密解析。
+备用 CDN 地址不是永久解析结果，未来路由变化仍可能需要更新版本；不能保证在所有运营商网络上都可直连。
+非本站域名仍使用系统 DNS，保留仅针对 Bangumi 域名的 TLS 分片兼容与正常证书校验。
+加密解析仅提交域名和 A 记录类型，不提交账户、Cookie 或 OAuth 凭据。
+协议参考：[Cloudflare DoH JSON 文档](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/dns-json/)。
 连接失败只记录域名及异常类别，不记录 URL 查询参数、请求内容或凭据。
 Android 关闭自动备份，单独排除安全存储的云备份与设备迁移；
 Keystore 不可用时不再静默删除密文，新设备需重新登录。

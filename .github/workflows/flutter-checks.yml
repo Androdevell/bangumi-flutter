@@ -21,3 +21,10 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --fatal-infos
       - run: flutter test --coverage
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android DNS regression tests
+        working-directory: android
+        run: bash ./gradlew :app:testDebugUnitTest -Ptarget-platform=android-arm64 --console=plain
