@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
@@ -8,24 +9,74 @@ import '../auth/auth_service.dart';
 import 'platform_http_client.dart';
 
 class ApiClient {
-  ApiClient({http.Client? client, Uri? baseUri, AuthService? authService})
-    : _client = client ?? createPlatformHttpClient(),
-      _authService = authService,
-      _baseUri =
-          baseUri ??
-          Uri.parse(
-            const String.fromEnvironment(
-              'BGM_API_BASE_URL',
-              defaultValue: 'https://next.bgm.tv/',
-            ),
-          );
+  ApiClient({
+    http.Client? client,
+    Uri? baseUri,
+    AuthService? authService,
+    Duration cacheTtl = const Duration(minutes: 5),
+    Future<void> Function(Duration)? delay,
+    DateTime Function()? clock,
+  }) : _client = client ?? createPlatformHttpClient(),
+       _cacheTtl = cacheTtl,
+       _delay = delay ?? Future<void>.delayed,
+       _clock = clock ?? DateTime.now,
+       _authService = authService,
+       _baseUri =
+           baseUri ??
+           Uri.parse(
+             const String.fromEnvironment(
+               'BGM_API_BASE_URL',
+               defaultValue: 'https://next.bgm.tv/',
+             ),
+           ) {
+    _authService?.addListener(clearCache);
+  }
 
   final http.Client _client;
   final AuthService? _authService;
   final Uri _baseUri;
+  final Duration _cacheTtl;
+  final Future<void> Function(Duration) _delay;
+  final DateTime Function() _clock;
+  final Map<String, ({DateTime at, dynamic value})> _cache = {};
+  final Map<String, Future<dynamic>> _inFlight = {};
+  int _cacheGeneration = 0;
+  final Queue<Completer<void>> _waiters = Queue();
+  int _activeRequests = 0;
+
+  void clearCache() {
+    _cacheGeneration++;
+    _cache.clear();
+    _inFlight.clear();
+  }
+
+  Future<dynamic> _cachedGet(String path, Map<String, String>? query) async {
+    final keys = query?.keys.toList() ?? <String>[];
+    keys.sort();
+    final key =
+        '$currentUsername:$path:${jsonEncode({for (final k in keys) k: query![k]})}';
+    final cached = _cache[key];
+    if (cached != null && _clock().difference(cached.at) < _cacheTtl) {
+      return cached.value;
+    }
+    if (_inFlight[key] case final running?) return running;
+    final generation = _cacheGeneration;
+    final request = _request('GET', path, query: query);
+    _inFlight[key] = request;
+    try {
+      final result = await request;
+      if (generation == _cacheGeneration) {
+        if (_cache.length >= 200) _cache.remove(_cache.keys.first);
+        _cache[key] = (at: _clock(), value: result);
+      }
+      return result;
+    } finally {
+      if (identical(_inFlight[key], request)) _inFlight.remove(key);
+    }
+  }
 
   Future<dynamic> get(String path, {Map<String, String>? query}) =>
-      _request('GET', path, query: query);
+      _cachedGet(path, query);
 
   Future<dynamic> post(
     String path, {
@@ -88,6 +139,7 @@ class ApiClient {
       if (text.isEmpty) {
         throw const ApiException('未收到评论发布确认，请刷新确认后再试');
       }
+      clearCache();
       try {
         return jsonDecode(text);
       } on FormatException {
@@ -131,11 +183,16 @@ class ApiClient {
       final text = utf8.decode(response.bodyBytes, allowMalformed: true);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
-          '服务器返回 ${response.statusCode}',
+          response.statusCode == 401
+              ? '登录已失效，请重新登录'
+              : response.statusCode == 429
+              ? '请求过于频繁，请稍后重试'
+              : '服务器返回 ${response.statusCode}',
           statusCode: response.statusCode,
           details: text,
         );
       }
+      if (method != 'GET' && method != 'POST') clearCache();
       if (text.trim().isEmpty) return null;
       try {
         return jsonDecode(text);
@@ -157,6 +214,76 @@ class ApiClient {
     Object? body,
     String? accessToken,
   ) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final response = await _sendLimited(method, uri, body, accessToken);
+        if (method != 'GET' ||
+            attempt >= 2 ||
+            !{429, 502, 503, 504}.contains(response.statusCode)) {
+          return response;
+        }
+        final wait = _retryDelay(response, attempt);
+        // 长时间限流交给 UI 提示，不提前重试违反服务端的 Retry-After。
+        if (wait > const Duration(seconds: 10)) return response;
+        await _delay(wait);
+      } on Object catch (error) {
+        if (method != 'GET' ||
+            attempt >= 2 ||
+            !(error is SocketException ||
+                error is TimeoutException ||
+                error is http.ClientException)) {
+          rethrow;
+        }
+        await _delay(Duration(milliseconds: 500 * (1 << attempt)));
+      }
+    }
+  }
+
+  Duration _retryDelay(http.Response response, int attempt) {
+    final header = response.headers['retry-after'];
+    if (header != null) {
+      final seconds = int.tryParse(header);
+      if (seconds != null && seconds >= 0) return Duration(seconds: seconds);
+      try {
+        final wait = HttpDate.parse(header).difference(_clock());
+        return wait.isNegative ? Duration.zero : wait;
+      } on FormatException {
+        /* 使用短退避 */
+      }
+    }
+    return Duration(milliseconds: 500 * (1 << attempt));
+  }
+
+  Future<http.Response> _sendLimited(
+    String method,
+    Uri uri,
+    Object? body,
+    String? accessToken,
+  ) async {
+    if (_activeRequests >= 3) {
+      final waiter = Completer<void>();
+      _waiters.add(waiter);
+      await waiter.future;
+    } else {
+      _activeRequests++;
+    }
+    try {
+      return await _sendOnce(method, uri, body, accessToken);
+    } finally {
+      if (_waiters.isEmpty) {
+        _activeRequests--;
+      } else {
+        _waiters.removeFirst().complete();
+      }
+    }
+  }
+
+  Future<http.Response> _sendOnce(
+    String method,
+    Uri uri,
+    Object? body,
+    String? accessToken,
+  ) async {
     final request = http.Request(method, uri)
       ..headers.addAll({
         HttpHeaders.acceptHeader: 'application/json',
@@ -171,10 +298,16 @@ class ApiClient {
     final streamed = await _client
         .send(request)
         .timeout(const Duration(seconds: 20));
-    return http.Response.fromStream(streamed);
+    return http.Response.fromStream(
+      streamed,
+    ).timeout(const Duration(seconds: 20));
   }
 
-  void close() => _client.close();
+  void close() {
+    _authService?.removeListener(clearCache);
+    clearCache();
+    _client.close();
+  }
 }
 
 class ApiException implements Exception {

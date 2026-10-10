@@ -6,6 +6,7 @@ import '../../core/network/api_client.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/section_failure_notice.dart';
 import '../community/community_widgets.dart';
 import '../user/user_profile_page.dart';
 
@@ -55,7 +56,11 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
               snapshot.hasError
                   ? NetworkErrorView(
                     error: snapshot.error!,
-                    onRetry: () => setState(() => _details = _load()),
+                    onRetry:
+                        () => setState(() {
+                          invalidateRepositoryCache(widget.repository);
+                          _details = _load();
+                        }),
                   )
                   : data == null
                   ? const LoadingView(label: '正在加载制作人员资料…')
@@ -64,6 +69,14 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
                       maxWidth: 960,
                       child: Column(
                         children: [
+                          SectionFailureNotice(
+                            errors: data.sectionErrors,
+                            onRetry:
+                                () => setState(() {
+                                  invalidateRepositoryCache(widget.repository);
+                                  _details = _load();
+                                }),
+                          ),
                           _PersonHeader(person: data.person),
                           const TabBar(
                             tabs: [Tab(text: '详细资料'), Tab(text: '吐槽')],

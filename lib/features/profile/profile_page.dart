@@ -47,6 +47,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late final AppUpdateService _updateService = AppUpdateService();
   late final Future<String> _appVersion = _updateService.currentVersion();
   bool _checkingUpdate = false;
+  late Future<int> _cacheUsage = AppImageCache.diskUsageBytes();
 
   AppLocalizations get _strings => AppLocalizations.of(context);
 
@@ -54,11 +55,17 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     widget.repository.collectionChanges.addListener(_refreshProfile);
+    widget.authService?.addListener(_refreshProfile);
   }
 
   @override
   void didUpdateWidget(covariant ProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.authService != widget.authService) {
+      oldWidget.authService?.removeListener(_refreshProfile);
+      widget.authService?.addListener(_refreshProfile);
+      _profile = null;
+    }
     if (oldWidget.repository != widget.repository) {
       oldWidget.repository.collectionChanges.removeListener(_refreshProfile);
       widget.repository.collectionChanges.addListener(_refreshProfile);
@@ -67,12 +74,18 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _refreshProfile() {
-    if (mounted) setState(() {});
+    invalidateRepositoryCache(widget.repository);
+    if (mounted) {
+      setState(() {
+        _profile = null;
+      });
+    }
   }
 
   @override
   void dispose() {
     widget.repository.collectionChanges.removeListener(_refreshProfile);
+    widget.authService?.removeListener(_refreshProfile);
     _updateService.close();
     super.dispose();
   }
@@ -89,6 +102,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _clearImageCache() async {
     await AppImageCache.clear();
     if (!mounted) return;
+    setState(() {
+      _cacheUsage = AppImageCache.diskUsageBytes();
+    });
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(_strings.t('cacheCleared'))));
@@ -321,6 +337,12 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ? CachedNetworkImageProvider(
                                   user!.avatarUrl,
                                   cacheManager: AppImageCache.manager,
+                                  maxWidth:
+                                      (62 *
+                                              MediaQuery.devicePixelRatioOf(
+                                                context,
+                                              ))
+                                          .round(),
                                 )
                                 : null,
                         child:
@@ -365,9 +387,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     ],
                   );
                   final stats = FutureBuilder<UserProfileData>(
+                    key: ValueKey(user?.username ?? 'guest'),
                     future: _ensureProfile(user?.username ?? ''),
                     builder: (context, snapshot) {
-                      final values = snapshot.data?.user.stats;
+                      final values =
+                          user == null ? null : snapshot.data?.user.stats;
                       return Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
@@ -594,7 +618,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   ListTile(
                     leading: const Icon(Icons.cleaning_services_outlined),
                     title: Text(strings.t('clearCache')),
-                    subtitle: Text(strings.t('clearCacheSubtitle')),
+                    subtitle: FutureBuilder<int>(
+                      future: _cacheUsage,
+                      builder:
+                          (context, snapshot) => Text(
+                            '${strings.t('clearCacheSubtitle')}\n${strings.t('cacheUsage')}: ${snapshot.hasData ? '${(snapshot.data! / (1024 * 1024)).toStringAsFixed(1)} MB' : '—'}',
+                          ),
+                    ),
                     trailing: const Icon(Icons.delete_sweep_outlined),
                     onTap: _clearImageCache,
                   ),

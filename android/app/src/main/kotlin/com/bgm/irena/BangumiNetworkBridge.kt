@@ -7,6 +7,7 @@ import io.flutter.plugin.common.MethodChannel
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Dns
+import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -16,6 +17,7 @@ import org.conscrypt.Conscrypt
 import java.io.ByteArrayOutputStream
 import java.io.FilterOutputStream
 import java.io.IOException
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
@@ -35,15 +37,20 @@ class BangumiNetworkBridge(
     private val activity: Activity,
 ) : MethodChannel.MethodCallHandler {
     private val client = createClient()
+    private val imageClient = client.newBuilder()
+        .dispatcher(Dispatcher().apply { maxRequests = 3; maxRequestsPerHost = 3 })
+        .callTimeout(40, TimeUnit.SECONDS)
+        .followSslRedirects(false)
+        .build()
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        if (call.method != "request") {
+        if (call.method != "request" && call.method != "downloadImage") {
             result.notImplemented()
             return
         }
 
         val arguments = call.arguments as? Map<*, *>
-        val method = arguments?.get("method") as? String
+        val method = if (call.method == "downloadImage") "GET" else arguments?.get("method") as? String
         val url = arguments?.get("url") as? String
         if (method.isNullOrBlank() || url.isNullOrBlank()) {
             result.error("invalid_request", "HTTP method or URL is missing", null)
@@ -68,6 +75,14 @@ class BangumiNetworkBridge(
             )
         }
         val request = requestBuilder.method(method, requestBody).build()
+        if (call.method == "downloadImage") {
+            if (!request.url.isHttps) {
+                result.error("invalid_image_url", "图片地址必须使用 HTTPS", null)
+                return
+            }
+            downloadImage(request, result)
+            return
+        }
 
         val followRedirects = arguments["followRedirects"] as? Boolean ?: true
         val requestClient = if (followRedirects) {
@@ -88,8 +103,21 @@ class BangumiNetworkBridge(
             }
 
             override fun onResponse(call: Call, response: Response) {
+                try {
                 response.use {
-                    val responseBody = it.body?.bytes() ?: ByteArray(0)
+                    val output = ByteArrayOutputStream()
+                    it.body?.byteStream()?.use { input ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            if (output.size().toLong() + count > MAX_API_BYTES) {
+                                throw IOException("API response exceeds size limit")
+                            }
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                    val responseBody = output.toByteArray()
                     val headers = it.headers.names().associateWith { name ->
                         it.headers.values(name).joinToString(", ")
                     }
@@ -104,6 +132,51 @@ class BangumiNetworkBridge(
                             ),
                         )
                     }
+                }
+                } catch (error: Exception) {
+                    activity.runOnUiThread { result.error("network_error", "读取网络响应失败：${error.javaClass.simpleName}", null) }
+                }
+            }
+        })
+    }
+
+    private fun downloadImage(request: Request, result: MethodChannel.Result) {
+        imageClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, error: IOException) {
+                activity.runOnUiThread { result.error("image_download_error", "图片下载失败：${error.javaClass.simpleName}", null) }
+            }
+            override fun onResponse(call: Call, response: Response) {
+                var temporary: File? = null
+                try {
+                    response.use {
+                        val headers = it.headers.names().associateWith { name -> it.headers.values(name).joinToString(", ") }
+                        var length = 0L
+                        if (it.code == 200) {
+                            val body = it.body ?: throw IOException("Empty image response")
+                            if (body.contentLength() > MAX_IMAGE_BYTES) throw IOException("Image exceeds size limit")
+                            val folder = File(activity.cacheDir, "bangumi_image_transfer").apply { mkdirs() }
+                            folder.listFiles()?.filter { file -> System.currentTimeMillis() - file.lastModified() > TimeUnit.HOURS.toMillis(1) }?.forEach { file -> file.delete() }
+                            val file = File.createTempFile("bgm-image-", ".part", folder)
+                            temporary = file
+                            body.byteStream().use { input ->
+                                file.outputStream().use { output ->
+                                    val buffer = ByteArray(64 * 1024)
+                                    while (true) {
+                                        val count = input.read(buffer)
+                                        if (count < 0) break
+                                        length += count
+                                        if (length > MAX_IMAGE_BYTES) throw IOException("Image exceeds size limit")
+                                        output.write(buffer, 0, count)
+                                    }
+                                }
+                            }
+                        }
+                        val path = temporary?.absolutePath
+                        activity.runOnUiThread { result.success(mapOf("statusCode" to it.code, "headers" to headers, "path" to path, "length" to length)) }
+                    }
+                } catch (error: Exception) {
+                    temporary?.delete()
+                    activity.runOnUiThread { result.error("image_download_error", "图片下载失败或超过 20 MB：${error.javaClass.simpleName}", null) }
                 }
             }
         })
@@ -128,6 +201,8 @@ class BangumiNetworkBridge(
 
     companion object {
         const val CHANNEL_NAME = "com.xiaoyv.bangumi/network"
+        private const val MAX_API_BYTES = 4L * 1024 * 1024
+        private const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
 
     }
 }

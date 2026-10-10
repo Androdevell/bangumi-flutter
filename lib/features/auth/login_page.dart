@@ -25,6 +25,7 @@ class _LoginPageState extends State<LoginPage> {
   Uint8List? _captcha;
   String? _error;
   bool _loading = true;
+  bool _captchaBusy = false;
   bool _submitting = false;
   bool _passwordVisible = false;
 
@@ -46,38 +47,13 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _prepare() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-      _captcha = null;
-      _captchaController.clear();
-    });
-    try {
-      final challenge = await widget.authService.beginLogin();
-      if (!mounted) return;
-      if (widget.authService.isLoggedIn) {
-        Navigator.of(context).pop(true);
-        return;
-      }
-      final captcha = await widget.authService.loadCaptcha();
-      if (!mounted) return;
-      setState(() {
-        _challenge = challenge;
-        _captcha = captcha;
-        _loading = false;
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = '$error';
-        _loading = false;
-      });
-    }
-  }
+  Future<void> _prepare() => _refreshCaptcha(initial: true);
 
   Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false) || _challenge == null) {
+    if (_submitting ||
+        _captchaBusy ||
+        !(_formKey.currentState?.validate() ?? false) ||
+        _challenge == null) {
       return;
     }
     setState(() {
@@ -104,9 +80,22 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _refreshCaptcha() async {
+  Future<void> _refreshCaptcha({bool initial = false}) async {
+    if (_captchaBusy || _submitting) return;
+    setState(() {
+      _captchaBusy = true;
+      if (initial) {
+        _loading = true;
+        _error = null;
+      }
+    });
     try {
       final challenge = await widget.authService.beginLogin();
+      if (!mounted) return;
+      if (widget.authService.isLoggedIn) {
+        Navigator.of(context).pop(true);
+        return;
+      }
       final captcha = await widget.authService.loadCaptcha();
       if (!mounted) return;
       setState(() {
@@ -117,6 +106,13 @@ class _LoginPageState extends State<LoginPage> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() => _error = '$error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _captchaBusy = false;
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -218,7 +214,9 @@ class _LoginPageState extends State<LoginPage> {
                     controller: _captchaController,
                     textInputAction: TextInputAction.done,
                     validator: _required,
-                    onFieldSubmitted: (_) => _submitting ? null : _submit(),
+                    onFieldSubmitted: (_) {
+                      if (!_submitting && !_captchaBusy) _submit();
+                    },
                     decoration: const InputDecoration(
                       labelText: '验证码',
                       prefixIcon: Icon(Icons.verified_user_outlined),
@@ -230,7 +228,10 @@ class _LoginPageState extends State<LoginPage> {
                   message: '刷新验证码',
                   child: InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: _submitting ? null : _refreshCaptcha,
+                    onTap:
+                        _submitting || _captchaBusy
+                            ? null
+                            : () => _refreshCaptcha(),
                     child: Ink(
                       width: 126,
                       height: 56,
@@ -239,7 +240,9 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child:
-                          _captcha == null
+                          _captchaBusy
+                              ? const Center(child: CircularProgressIndicator())
+                              : _captcha == null
                               ? const Icon(Icons.refresh_rounded)
                               : ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
@@ -262,7 +265,7 @@ class _LoginPageState extends State<LoginPage> {
             ],
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: _submitting ? null : _submit,
+              onPressed: _submitting || _captchaBusy ? null : _submit,
               icon:
                   _submitting
                       ? const SizedBox.square(

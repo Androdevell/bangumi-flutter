@@ -15,7 +15,12 @@ import 'person_comments_page.dart';
 import 'topic_detail_page.dart';
 
 class RakuenPage extends StatefulWidget {
-  const RakuenPage({super.key, required this.repository});
+  const RakuenPage({
+    super.key,
+    required this.repository,
+    this.sessionRevision = 0,
+  });
+  final int sessionRevision;
   final BangumiRepository repository;
 
   @override
@@ -25,6 +30,16 @@ class RakuenPage extends StatefulWidget {
 class _RakuenPageState extends State<RakuenPage> {
   int _category = 0;
   late Future<List<Topic>> _topics = _load();
+
+  @override
+  void didUpdateWidget(covariant RakuenPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionRevision != widget.sessionRevision ||
+        oldWidget.repository != widget.repository) {
+      if (!widget.repository.isLoggedIn && _category == 2) _category = 0;
+      _topics = _load();
+    }
+  }
 
   static const _categories = [
     ('全部', 'all', Icons.dynamic_feed_outlined),
@@ -40,9 +55,20 @@ class _RakuenPageState extends State<RakuenPage> {
       widget.repository.fetchTopics(type: _categories[_category].$2);
 
   Future<void> _reload() async {
+    invalidateRepositoryCache(widget.repository);
     final future = _load();
-    setState(() => _topics = future);
-    await future;
+    setState(() {
+      _topics = future;
+    });
+    try {
+      await future;
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
   }
 
   void _select(int value) {
@@ -238,7 +264,10 @@ class _TopicTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final hot = topic.replies >= 20;
-    final fresh = DateTime.now().difference(topic.updatedAt).inMinutes <= 20;
+    final fresh =
+        topic.updatedAt != null &&
+        DateTime.now().difference(topic.updatedAt!).inMinutes >= 0 &&
+        DateTime.now().difference(topic.updatedAt!).inMinutes <= 20;
     return Material(
       color: Colors.transparent,
       child: InkWell(

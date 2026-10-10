@@ -5,6 +5,7 @@ import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/comment_composer.dart';
 import '../community/community_widgets.dart';
 import '../user/user_profile_page.dart';
 
@@ -49,50 +50,20 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
       ).showSnackBar(const SnackBar(content: Text('请先登录后再发表评论')));
       return;
     }
-    final controller = TextEditingController();
-    final content = await showDialog<String>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            icon: const Icon(Icons.add_comment_outlined),
-            title: const Text('发表评论'),
-            content: SizedBox(
-              width: 520,
-              child: TextField(
-                controller: controller,
-                autofocus: true,
-                minLines: 4,
-                maxLines: 10,
-                maxLength: 2000,
-                decoration: const InputDecoration(
-                  hintText: '参与讨论，写下你的看法…',
-                  alignLabelWithHint: true,
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              FilledButton.icon(
-                onPressed: () {
-                  final value = controller.text.trim();
-                  if (value.isNotEmpty) Navigator.pop(context, value);
-                },
-                icon: const Icon(Icons.send_rounded),
-                label: const Text('发布'),
-              ),
-            ],
-          ),
+    final content = await showCommentComposer(
+      context,
+      title: '发表评论',
+      hint: '参与讨论，写下你的看法…',
+      maxLength: 2000,
     );
-    controller.dispose();
     if (content == null || !mounted) return;
     setState(() => _submitting = true);
     try {
       await widget.repository.createTopicReply(widget.topic, content);
       if (!mounted) return;
-      setState(() => _detail = _load());
+      setState(() {
+        _detail = _load();
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('评论已发布')));
@@ -132,7 +103,10 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
         if (snapshot.hasError) {
           return NetworkErrorView(
             error: snapshot.error!,
-            onRetry: () => setState(() => _detail = _load()),
+            onRetry:
+                () => setState(() {
+                  _detail = _load();
+                }),
           );
         }
         if (!snapshot.hasData) {

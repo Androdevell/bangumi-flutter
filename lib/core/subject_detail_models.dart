@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'json_utils.dart' as dates;
 
 import 'models.dart';
 
@@ -23,10 +24,12 @@ class SubjectDetailData {
     this.interestRate = 0,
     this.interestComment = '',
     this.interestPrivate = false,
+    this.sectionErrors = const {},
   });
 
   factory SubjectDetailData.fromSubjectJson({
     required Map<String, dynamic> json,
+    Map<String, String> sectionErrors = const {},
     required List<SubjectEpisode> episodes,
     required List<SubjectPreview> previews,
     required List<SubjectComment> comments,
@@ -42,6 +45,7 @@ class SubjectDetailData {
     final interest = _map(json['interest']);
     return SubjectDetailData(
       subject: Subject.fromJson(json),
+      sectionErrors: sectionErrors,
       infobox: _list(json['infobox']).map(SubjectInfoField.fromJson).toList(),
       tags: _list(json['tags']).map(SubjectTag.fromJson).toList(),
       ratingDistribution:
@@ -71,6 +75,7 @@ class SubjectDetailData {
   }
 
   final Subject subject;
+  final Map<String, String> sectionErrors;
   final List<SubjectInfoField> infobox;
   final List<SubjectTag> tags;
   final List<int> ratingDistribution;
@@ -233,7 +238,7 @@ class SubjectComment {
   final String avatarUrl;
   final int rate;
   final String comment;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
   final int reactionCount;
   final Set<String> reactedBy;
   final Map<String, int> reactions;
@@ -387,7 +392,7 @@ class SubjectIndex {
   final String userName;
   final String username;
   final String avatarUrl;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
 }
 
 @immutable
@@ -425,7 +430,7 @@ class SubjectReview {
   final String userName;
   final String username;
   final String avatarUrl;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
 }
 
 @immutable
@@ -459,7 +464,7 @@ class SubjectTopic {
   final String userName;
   final String username;
   final String avatarUrl;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
 }
 
 Map<String, dynamic> _map(dynamic value) {
@@ -500,17 +505,7 @@ String _image(dynamic value) {
   ]);
 }
 
-DateTime _date(dynamic value) {
-  if (value is num) {
-    final milliseconds =
-        value.abs() < 100000000000 ? value.toInt() * 1000 : value.toInt();
-    return DateTime.fromMillisecondsSinceEpoch(
-      milliseconds,
-      isUtc: true,
-    ).toLocal();
-  }
-  return DateTime.tryParse(_text(value))?.toLocal() ?? DateTime.now();
-}
+DateTime? _date(dynamic value) => dates.parseDate(value);
 
 String _characterRole(int value) => switch (value) {
   1 => '主角',

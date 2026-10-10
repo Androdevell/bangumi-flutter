@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/app_strings.dart';
 import '../../core/models.dart';
-import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../../widgets/subject_card.dart';
 import '../search/subject_search_delegate.dart';
 import '../subject/subject_detail_page.dart';
+import '../subject/subject_navigation.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key, required this.repository});
@@ -24,38 +23,25 @@ class _DiscoverPageState extends State<DiscoverPage> {
   int _selectedDay = DateTime.now().weekday - 1;
   late Future<Map<String, List<Subject>>> _calendar =
       widget.repository.fetchCalendar();
-  final Set<String> _warmedPosters = {};
 
   static const _apiDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _dayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
   Future<void> _refresh() async {
+    invalidateRepositoryCache(widget.repository);
     final future = widget.repository.fetchCalendar();
-    setState(() => _calendar = future);
-    await future;
-  }
-
-  void _warmPosters(List<Subject> subjects) {
-    final pending =
-        subjects
-            .map((item) => item.imageUrl)
-            .where((url) => url.isNotEmpty && _warmedPosters.add(url))
-            .toList();
-    if (pending.isEmpty) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      for (final url in pending) {
-        precacheImage(
-          CachedNetworkImageProvider(
-            url,
-            cacheManager: AppImageCache.manager,
-            maxWidth: 520,
-          ),
-          context,
-          onError: (_, __) {},
-        );
-      }
+    setState(() {
+      _calendar = future;
     });
+    try {
+      await future;
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
   }
 
   @override
@@ -71,7 +57,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 calendar == null
                     ? const <Subject>[]
                     : _subjectsForDay(calendar);
-            _warmPosters(subjects);
             return RefreshIndicator(
               onRefresh: _refresh,
               child: CustomScrollView(
@@ -183,8 +168,15 @@ class _DiscoverPageState extends State<DiscoverPage> {
                         delegate: SliverChildBuilderDelegate(
                           (context, index) => SubjectCard(
                             subject: subjects[index],
-                            index: subjects[index].id,
-                            repository: widget.repository,
+                            heroTag: 'discover-$index-${subjects[index].id}',
+                            onTap:
+                                () => openSubjectDetails(
+                                  context,
+                                  subject: subjects[index],
+                                  repository: widget.repository,
+                                  heroTag:
+                                      'discover-$index-${subjects[index].id}',
+                                ),
                           ),
                           childCount: subjects.length,
                         ),

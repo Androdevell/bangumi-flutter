@@ -12,7 +12,12 @@ import '../subject/subject_detail_page.dart';
 import '../user/user_profile_page.dart';
 
 class TimelinePage extends StatefulWidget {
-  const TimelinePage({super.key, required this.repository});
+  const TimelinePage({
+    super.key,
+    required this.repository,
+    this.sessionRevision = 0,
+  });
+  final int sessionRevision;
 
   final BangumiRepository repository;
 
@@ -24,17 +29,36 @@ class _TimelinePageState extends State<TimelinePage> {
   int _filter = 0;
   late Future<List<TimelineEntry>> _entries = _load();
 
+  @override
+  void didUpdateWidget(covariant TimelinePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionRevision != widget.sessionRevision ||
+        oldWidget.repository != widget.repository) {
+      if (!widget.repository.isLoggedIn && _filter == 1) _filter = 0;
+      _entries = _load();
+    }
+  }
+
   Future<List<TimelineEntry>> _load() => widget.repository.fetchTimeline(
     mode: _filter == 1 ? 'friends' : 'all',
     category: _filter == 2 ? 5 : null,
   );
 
   Future<void> _reload() async {
+    invalidateRepositoryCache(widget.repository);
     final future = _load();
     setState(() {
       _entries = future;
     });
-    await future;
+    try {
+      await future;
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
   }
 
   void _select(int value) {
@@ -503,7 +527,8 @@ class _TimelineTileState extends State<_TimelineTile> {
   }
 }
 
-String _dateLabel(DateTime date) {
+String _dateLabel(DateTime? date) {
+  if (date == null) return '时间未知';
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(date.year, date.month, date.day);

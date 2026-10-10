@@ -29,7 +29,9 @@ class CommunityAvatar extends StatelessWidget {
               : CachedNetworkImageProvider(
                 user.avatarUrl,
                 cacheManager: AppImageCache.manager,
-                maxWidth: (radius * 4).round(),
+                maxWidth:
+                    (radius * 2 * MediaQuery.devicePixelRatioOf(context))
+                        .round(),
               ),
       child:
           user.avatarUrl.isEmpty
@@ -38,10 +40,17 @@ class CommunityAvatar extends StatelessWidget {
     );
     return onTap == null
         ? avatar
-        : InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: avatar,
+        : Semantics(
+          label: '查看 ${user.nickname} 的个人资料',
+          button: true,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              child: Center(widthFactor: 1, heightFactor: 1, child: avatar),
+            ),
+          ),
         );
   }
 }

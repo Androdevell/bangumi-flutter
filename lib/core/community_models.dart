@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'json_utils.dart' as dates;
+import 'collection_labels.dart';
 
 import 'models.dart';
 
@@ -57,7 +59,7 @@ class CommunityUser {
   final String sign;
   final String bio;
   final String location;
-  final DateTime joinedAt;
+  final DateTime? joinedAt;
   final bool isFriend;
   final UserStats stats;
 }
@@ -109,7 +111,7 @@ class CommunityReply {
   final int id;
   final String content;
   final CommunityUser user;
-  final DateTime createdAt;
+  final DateTime? createdAt;
   final List<CommunityReply> replies;
   final List<CommunityReaction> reactions;
 
@@ -161,7 +163,10 @@ class UserContentItem {
     return UserContentItem(
       id: _int(json['id']),
       title: _first([json['nameCN'], json['name_cn'], json['name']]),
-      subtitle: _collectionLabel(_int(interest['type'])),
+      subtitle: collectionLabel(
+        subjectType: _int(json['type']),
+        status: _int(interest['type']),
+      ),
       imageUrl: _image(json['images']),
       subjectType: _int(json['type']),
       collectionType: _int(interest['type']),
@@ -244,14 +249,15 @@ class TopicDetailData {
   final String title;
   final String groupName;
   final CommunityUser creator;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   final List<CommunityReply> replies;
 }
 
 @immutable
 class UserProfileData {
   const UserProfileData({
+    this.sectionErrors = const {},
     required this.user,
     required this.timeline,
     required this.collections,
@@ -262,6 +268,7 @@ class UserProfileData {
     required this.friends,
   });
 
+  final Map<String, String> sectionErrors;
   final CommunityUser user;
   final List<TimelineEntry> timeline;
   final List<UserContentItem> collections;
@@ -275,6 +282,7 @@ class UserProfileData {
 @immutable
 class CharacterDetailData {
   const CharacterDetailData({
+    this.sectionErrors = const {},
     required this.character,
     required this.works,
     required this.collectors,
@@ -282,6 +290,7 @@ class CharacterDetailData {
     required this.indexes,
   });
 
+  final Map<String, String> sectionErrors;
   final CharacterEntry character;
   final List<CharacterWork> works;
   final List<CommunityUser> collectors;
@@ -291,8 +300,13 @@ class CharacterDetailData {
 
 @immutable
 class PersonDetailData {
-  const PersonDetailData({required this.person, required this.comments});
+  const PersonDetailData({
+    this.sectionErrors = const {},
+    required this.person,
+    required this.comments,
+  });
 
+  final Map<String, String> sectionErrors;
   final PersonEntry person;
   final List<CommunityReply> comments;
 }
@@ -449,21 +463,4 @@ String _image(dynamic value) {
   ]);
 }
 
-DateTime _date(dynamic value) {
-  if (value is num) {
-    final millis =
-        value.abs() < 100000000000 ? value.toInt() * 1000 : value.toInt();
-    return DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true).toLocal();
-  }
-  return DateTime.tryParse(_text(value))?.toLocal() ??
-      DateTime.fromMillisecondsSinceEpoch(0);
-}
-
-String _collectionLabel(int type) => switch (type) {
-  1 => '想看',
-  2 => '看过',
-  3 => '在看',
-  4 => '搁置',
-  5 => '抛弃',
-  _ => '',
-};
+DateTime? _date(dynamic value) => dates.parseDate(value);

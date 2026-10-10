@@ -5,6 +5,7 @@ import '../../core/subject_detail_models.dart';
 import '../../core/network/api_client.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/comment_composer.dart';
 import '../community/community_widgets.dart';
 import '../user/user_profile_page.dart';
 
@@ -46,45 +47,20 @@ class _EpisodeCommentsPageState extends State<EpisodeCommentsPage> {
       ).showSnackBar(const SnackBar(content: Text('请先登录后再发表评论')));
       return;
     }
-    final controller = TextEditingController();
-    final content = await showDialog<String>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('发表章节评论'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              minLines: 3,
-              maxLines: 8,
-              maxLength: 1000,
-              decoration: const InputDecoration(
-                hintText: '说说你对这一章节的看法…',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final value = controller.text.trim();
-                  if (value.isNotEmpty) Navigator.pop(context, value);
-                },
-                child: const Text('发布'),
-              ),
-            ],
-          ),
+    final content = await showCommentComposer(
+      context,
+      title: '发表章节评论',
+      hint: '说说你对这一章节的看法…',
+      maxLength: 1000,
     );
-    controller.dispose();
     if (content == null || !mounted) return;
     setState(() => _submitting = true);
     try {
       await widget.repository.createEpisodeComment(widget.episode.id, content);
       if (!mounted) return;
-      setState(() => _comments = _load());
+      setState(() {
+        _comments = _load();
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('评论已发布')));
@@ -125,7 +101,10 @@ class _EpisodeCommentsPageState extends State<EpisodeCommentsPage> {
           if (snapshot.hasError) {
             return NetworkErrorView(
               error: snapshot.error!,
-              onRetry: () => setState(() => _comments = _load()),
+              onRetry:
+                  () => setState(() {
+                    _comments = _load();
+                  }),
             );
           }
           if (!snapshot.hasData) return const LoadingView(label: '正在加载章节评论…');

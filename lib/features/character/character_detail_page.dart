@@ -6,6 +6,7 @@ import '../../core/network/app_image_cache.dart';
 import '../../core/network/api_client.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/section_failure_notice.dart';
 import '../../widgets/subject_card.dart';
 import '../community/community_widgets.dart';
 import '../subject/subject_detail_page.dart';
@@ -98,7 +99,11 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
               snapshot.hasError
                   ? NetworkErrorView(
                     error: snapshot.error!,
-                    onRetry: () => setState(() => _details = _load()),
+                    onRetry:
+                        () => setState(() {
+                          invalidateRepositoryCache(widget.repository);
+                          _details = _load();
+                        }),
                   )
                   : data == null
                   ? const LoadingView(label: '正在加载角色资料…')
@@ -107,6 +112,14 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
                       maxWidth: 1050,
                       child: Column(
                         children: [
+                          SectionFailureNotice(
+                            errors: data.sectionErrors,
+                            onRetry:
+                                () => setState(() {
+                                  invalidateRepositoryCache(widget.repository);
+                                  _details = _load();
+                                }),
+                          ),
                           _CharacterHeader(character: data.character),
                           const TabBar(
                             isScrollable: true,

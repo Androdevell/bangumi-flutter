@@ -3,21 +3,19 @@ import 'package:flutter/material.dart';
 
 import '../core/models.dart';
 import '../core/network/app_image_cache.dart';
-import '../data/bangumi_repository.dart';
-import '../features/subject/subject_detail_page.dart';
 import 'common.dart';
 
 class SubjectCard extends StatelessWidget {
   const SubjectCard({
     super.key,
     required this.subject,
-    required this.index,
-    required this.repository,
+    required this.heroTag,
+    required this.onTap,
   });
 
   final Subject subject;
-  final int index;
-  final BangumiRepository repository;
+  final String heroTag;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -25,28 +23,23 @@ class SubjectCard extends StatelessWidget {
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap:
-              () => Navigator.of(context).push(
-                PageRouteBuilder<void>(
-                  pageBuilder:
-                      (_, animation, __) => SubjectDetailPage(
-                        subject: subject,
-                        heroTag: 'subject-$index',
-                        repository: repository,
-                      ),
-                  transitionsBuilder: (_, animation, __, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  transitionDuration: const Duration(milliseconds: 300),
-                ),
-              ),
+          onTap: onTap,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Hero(
-                  tag: 'subject-$index',
-                  child: PosterArt(subject: subject, cacheWidth: 520),
+                  tag: heroTag,
+                  child: LayoutBuilder(
+                    builder:
+                        (context, constraints) => PosterArt(
+                          subject: subject,
+                          cacheWidth: (constraints.maxWidth *
+                                  MediaQuery.devicePixelRatioOf(context))
+                              .round()
+                              .clamp(1, 1600),
+                        ),
+                  ),
                 ),
               ),
               Padding(

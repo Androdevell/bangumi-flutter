@@ -2,10 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models.dart';
+import '../../core/json_utils.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../core/subject_detail_models.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/section_failure_notice.dart';
+import '../../core/collection_labels.dart';
 import '../../widgets/bangumi_rich_text.dart';
 import '../../widgets/subject_card.dart';
 import '../character/character_detail_page.dart';
@@ -52,10 +55,19 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
       widget.repository.fetchSubjectDetails(widget.subject.id);
 
   void _retry() {
+    invalidateRepositoryCache(widget.repository);
     setState(() {
       _details = _load();
     });
   }
+
+  Widget _section(SubjectDetailData details, String key, Widget child) =>
+      details.sectionErrors[key] == null
+          ? child
+          : NetworkErrorView(
+            error: details.sectionErrors[key]!,
+            onRetry: _retry,
+          );
 
   void _openUser(String username) {
     if (username.isEmpty) return;
@@ -82,12 +94,25 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     var rate = details.interestRate;
     var comment = details.interestComment;
     var isPrivate = details.interestPrivate;
-    const statuses = [
-      (1, '想看', Icons.bookmark_add_outlined),
-      (2, '看过', Icons.done_all_rounded),
-      (3, '在看', Icons.play_circle_outline_rounded),
+    final statuses = [
+      (
+        1,
+        collectionLabel(subjectType: details.subject.type, status: 1),
+        Icons.bookmark_add_outlined,
+      ),
+      (
+        2,
+        collectionLabel(subjectType: details.subject.type, status: 2),
+        Icons.done_all_rounded,
+      ),
+      (
+        3,
+        collectionLabel(subjectType: details.subject.type, status: 3),
+        Icons.play_circle_outline_rounded,
+      ),
       (4, '搁置', Icons.pause_circle_outline_rounded),
       (5, '抛弃', Icons.block_outlined),
+      (0, '取消收藏', Icons.bookmark_remove_outlined),
     ];
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -258,6 +283,11 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
             appBar: AppBar(
               title: Text(subject.title),
               actions: [
+                IconButton(
+                  tooltip: '刷新',
+                  onPressed: _retry,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
                 if (details != null)
                   IconButton(
                     tooltip: '收藏与评价',
@@ -276,12 +306,20 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                 child: Column(
                   children: [
                     _SubjectHeader(subject: subject, heroTag: widget.heroTag),
+                    if (details != null)
+                      SectionFailureNotice(
+                        errors: details.sectionErrors,
+                        onRetry: _retry,
+                      ),
                     Material(
                       color: Theme.of(context).colorScheme.surface,
-                      child: TabBar(
-                        isScrollable: true,
-                        tabAlignment: TabAlignment.start,
-                        tabs: [for (final name in _tabNames) Tab(text: name)],
+                      child: IgnorePointer(
+                        ignoring: details == null,
+                        child: TabBar(
+                          isScrollable: true,
+                          tabAlignment: TabAlignment.start,
+                          tabs: [for (final name in _tabNames) Tab(text: name)],
+                        ),
                       ),
                     ),
                     Expanded(
@@ -296,40 +334,72 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                               : TabBarView(
                                 children: [
                                   _SummarySection(details: details),
-                                  _EpisodeSection(
-                                    items: details.episodes,
-                                    repository: widget.repository,
+                                  _section(
+                                    details,
+                                    'episodes',
+                                    _EpisodeSection(
+                                      items: details.episodes,
+                                      repository: widget.repository,
+                                    ),
                                   ),
                                   _PreviewSection(items: details.previews),
-                                  _CommentSection(
-                                    items: details.comments,
-                                    repository: widget.repository,
-                                    onUserTap: _openUser,
+                                  _section(
+                                    details,
+                                    'comments',
+                                    _CommentSection(
+                                      items: details.comments,
+                                      repository: widget.repository,
+                                      onUserTap: _openUser,
+                                    ),
                                   ),
-                                  _CharacterSection(
-                                    items: details.characters,
-                                    repository: widget.repository,
+                                  _section(
+                                    details,
+                                    'characters',
+                                    _CharacterSection(
+                                      items: details.characters,
+                                      repository: widget.repository,
+                                    ),
                                   ),
-                                  _StaffSection(
-                                    items: details.staffs,
-                                    repository: widget.repository,
+                                  _section(
+                                    details,
+                                    'staffs',
+                                    _StaffSection(
+                                      items: details.staffs,
+                                      repository: widget.repository,
+                                    ),
                                   ),
-                                  _RelationSection(
-                                    items: details.relations,
-                                    repository: widget.repository,
-                                    parentSubjectId: subject.id,
+                                  _section(
+                                    details,
+                                    'relations',
+                                    _RelationSection(
+                                      items: details.relations,
+                                      repository: widget.repository,
+                                      parentSubjectId: subject.id,
+                                    ),
                                   ),
-                                  _IndexSection(
-                                    items: details.indexes,
-                                    onUserTap: _openUser,
+                                  _section(
+                                    details,
+                                    'indexes',
+                                    _IndexSection(
+                                      items: details.indexes,
+                                      onUserTap: _openUser,
+                                    ),
                                   ),
-                                  _ReviewSection(
-                                    items: details.reviews,
-                                    onUserTap: _openUser,
+                                  _section(
+                                    details,
+                                    'reviews',
+                                    _ReviewSection(
+                                      items: details.reviews,
+                                      onUserTap: _openUser,
+                                    ),
                                   ),
-                                  _TopicSection(
-                                    items: details.topics,
-                                    onUserTap: _openUser,
+                                  _section(
+                                    details,
+                                    'topics',
+                                    _TopicSection(
+                                      items: details.topics,
+                                      onUserTap: _openUser,
+                                    ),
                                   ),
                                   _InsightSection(details: details),
                                 ],
@@ -373,7 +443,15 @@ class _SubjectHeader extends StatelessWidget {
                 height: posterWidth * 1.4,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(7),
-                  child: Hero(tag: heroTag, child: PosterArt(subject: subject)),
+                  child: Hero(
+                    tag: heroTag,
+                    child: PosterArt(
+                      subject: subject,
+                      cacheWidth:
+                          (posterWidth * MediaQuery.devicePixelRatioOf(context))
+                              .round(),
+                    ),
+                  ),
                 ),
               ),
               SizedBox(width: compact ? 14 : 22),
@@ -1027,7 +1105,12 @@ class _RelationSection extends StatelessWidget {
                       borderRadius: BorderRadius.circular(5),
                       child: Hero(
                         tag: heroTag,
-                        child: PosterArt(subject: item.subject),
+                        child: PosterArt(
+                          subject: item.subject,
+                          cacheWidth:
+                              (66 * MediaQuery.devicePixelRatioOf(context))
+                                  .round(),
+                        ),
                       ),
                     ),
                   ),
@@ -1366,10 +1449,18 @@ class _Avatar extends StatelessWidget {
     );
     return onTap == null
         ? avatar
-        : InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: avatar,
+        : Semantics(
+          label: '查看 $name 的个人资料',
+          button: true,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Center(child: avatar),
+            ),
+          ),
         );
   }
 }
@@ -1398,33 +1489,46 @@ class _NetworkArtwork extends StatelessWidget {
       child: Center(child: Icon(fallbackIcon)),
     );
     if (imageUrl.isEmpty) return fallback;
-    final alternate =
-        fallbackImageUrl.isEmpty || fallbackImageUrl == imageUrl
-            ? fallback
-            : CachedNetworkImage(
-              imageUrl: fallbackImageUrl,
-              cacheManager: AppImageCache.manager,
-              fit: fit,
-              alignment: alignment,
-              httpHeaders: httpHeaders,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              placeholderFadeInDuration: Duration.zero,
-              placeholder: (_, __) => fallback,
-              errorWidget: (_, __, ___) => fallback,
-            );
-    return CachedNetworkImage(
-      imageUrl: imageUrl,
-      cacheManager: AppImageCache.manager,
-      fit: fit,
-      alignment: alignment,
-      httpHeaders: httpHeaders,
-      fadeInDuration: Duration.zero,
-      fadeOutDuration: Duration.zero,
-      placeholderFadeInDuration: Duration.zero,
-      useOldImageOnUrlChange: true,
-      placeholder: (_, __) => fallback,
-      errorWidget: (_, __, ___) => alternate,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width =
+            constraints.maxWidth.isFinite
+                ? (constraints.maxWidth *
+                        MediaQuery.devicePixelRatioOf(context))
+                    .round()
+                    .clamp(1, 1600)
+                : 600;
+        final alternate =
+            fallbackImageUrl.isEmpty || fallbackImageUrl == imageUrl
+                ? fallback
+                : CachedNetworkImage(
+                  memCacheWidth: width,
+                  imageUrl: fallbackImageUrl,
+                  cacheManager: AppImageCache.manager,
+                  fit: fit,
+                  alignment: alignment,
+                  httpHeaders: httpHeaders,
+                  fadeInDuration: Duration.zero,
+                  fadeOutDuration: Duration.zero,
+                  placeholderFadeInDuration: Duration.zero,
+                  placeholder: (_, __) => fallback,
+                  errorWidget: (_, __, ___) => fallback,
+                );
+        return CachedNetworkImage(
+          memCacheWidth: width,
+          imageUrl: imageUrl,
+          cacheManager: AppImageCache.manager,
+          fit: fit,
+          alignment: alignment,
+          httpHeaders: httpHeaders,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          placeholderFadeInDuration: Duration.zero,
+          useOldImageOnUrlChange: true,
+          placeholder: (_, __) => fallback,
+          errorWidget: (_, __, ___) => alternate,
+        );
+      },
     );
   }
 }
@@ -1448,6 +1552,4 @@ class _CountLabel extends StatelessWidget {
   }
 }
 
-String _dateText(DateTime value) =>
-    '${value.year}-${value.month.toString().padLeft(2, '0')}-'
-    '${value.day.toString().padLeft(2, '0')}';
+String _dateText(DateTime? value) => dateText(value);

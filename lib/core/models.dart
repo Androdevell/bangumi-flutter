@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'json_utils.dart' as dates;
+import 'collection_labels.dart';
 
 @immutable
 class Subject {
@@ -181,7 +183,7 @@ class TimelineEntry {
   final String avatarUrl;
   final String action;
   final String subject;
-  final DateTime createdAt;
+  final DateTime? createdAt;
   final int category;
   final String username;
   final int reactionCount;
@@ -213,14 +215,8 @@ class TimelineEntry {
     return colors[id.abs() % colors.length];
   }
 
-  String relativeTime([DateTime? now]) {
-    final difference = (now ?? DateTime.now()).difference(createdAt);
-    if (difference.inMinutes < 1) return '刚刚';
-    if (difference.inMinutes < 60) return '${difference.inMinutes} 分钟前';
-    if (difference.inHours < 24) return '${difference.inHours} 小时前';
-    if (difference.inDays < 30) return '${difference.inDays} 天前';
-    return '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}';
-  }
+  String relativeTime([DateTime? now]) =>
+      dates.relativeTime(createdAt, now: now);
 }
 
 @immutable
@@ -293,7 +289,7 @@ class Topic {
   final String title;
   final String group;
   final int replies;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
   final String creatorName;
   final String creatorUsername;
   final String avatarUrl;
@@ -313,13 +309,8 @@ class Topic {
     _ => '讨论',
   };
 
-  String relativeTime([DateTime? now]) {
-    final difference = (now ?? DateTime.now()).difference(updatedAt);
-    if (difference.inMinutes < 1) return '刚刚';
-    if (difference.inMinutes < 60) return '${difference.inMinutes} 分钟前';
-    if (difference.inHours < 24) return '${difference.inHours} 小时前';
-    return '${difference.inDays} 天前';
-  }
+  String relativeTime([DateTime? now]) =>
+      dates.relativeTime(updatedAt, now: now);
 }
 
 Map<String, dynamic> _map(dynamic value) {
@@ -352,17 +343,7 @@ String _compact(String value) {
   return line.length > 42 ? '${line.substring(0, 42)}…' : line;
 }
 
-DateTime _dateTime(dynamic value) {
-  if (value is num) {
-    final milliseconds =
-        value.abs() < 100000000000 ? value.toInt() * 1000 : value.toInt();
-    return DateTime.fromMillisecondsSinceEpoch(
-      milliseconds,
-      isUtc: true,
-    ).toLocal();
-  }
-  return DateTime.tryParse(_string(value))?.toLocal() ?? DateTime.now();
-}
+DateTime? _dateTime(dynamic value) => dates.parseDate(value);
 
 String _imageFromJson(dynamic value) {
   final images = _map(value);
@@ -377,23 +358,17 @@ String _imageFromJson(dynamic value) {
 
 String _timelineAction(int category, int type) {
   if (category == 3) {
-    const actions = {
-      1: '想读',
-      2: '想看',
-      3: '想听',
-      4: '想玩',
-      5: '读过',
-      6: '看过',
-      7: '听过',
-      8: '玩过',
-      9: '在读',
-      10: '在看',
-      11: '在听',
-      12: '在玩',
-      13: '搁置了',
-      14: '抛弃了',
+    if (type >= 1 && type <= 12) {
+      return collectionLabel(
+        subjectType: ((type - 1) % 4) + 1,
+        status: ((type - 1) ~/ 4) + 1,
+      );
+    }
+    return switch (type) {
+      13 => '搁置了',
+      14 => '抛弃了',
+      _ => '收藏了',
     };
-    return actions[type] ?? '收藏了';
   }
   return switch (category) {
     1 => '更新了日常',

@@ -67,15 +67,15 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 42,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 42),
       child: Row(
         children: [
           Expanded(
             child: Text(title, style: Theme.of(context).textTheme.titleLarge),
           ),
-          if (actionLabel != null)
-            TextButton(onPressed: onAction ?? () {}, child: Text(actionLabel!)),
+          if (actionLabel != null && onAction != null)
+            TextButton(onPressed: onAction, child: Text(actionLabel!)),
         ],
       ),
     );

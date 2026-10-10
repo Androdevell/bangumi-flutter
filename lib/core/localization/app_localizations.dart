@@ -19,6 +19,7 @@ class AppLocalizations {
 
   static const _values = <String, Map<String, String>>{
     'zh': {
+      'cacheUsage': '缓存占用',
       'discover': '发现',
       'timeline': '时间线',
       'browse': '浏览',
@@ -93,6 +94,7 @@ class AppLocalizations {
       'dataSource': '数据来源',
     },
     'en': {
+      'cacheUsage': 'Cache size',
       'discover': 'Discover',
       'timeline': 'Timeline',
       'browse': 'Browse',
@@ -167,6 +169,7 @@ class AppLocalizations {
       'dataSource': 'Data source',
     },
     'ja': {
+      'cacheUsage': 'キャッシュ容量',
       'discover': 'ホーム',
       'timeline': 'タイムライン',
       'browse': '探す',

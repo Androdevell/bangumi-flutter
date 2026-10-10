@@ -6,6 +6,7 @@ import '../../core/models.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/section_failure_notice.dart';
 import '../../widgets/bangumi_rich_text.dart';
 import '../character/character_detail_page.dart';
 import '../community/community_widgets.dart';
@@ -46,7 +47,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _onCollectionChanged() {
     if (mounted && widget.repository.currentUsername == widget.username) {
-      setState(() {});
+      invalidateRepositoryCache(widget.repository);
+      setState(() {
+        _profile = _load();
+      });
     }
   }
 
@@ -135,7 +139,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
             appBar: AppBar(title: Text('@${widget.username}')),
             body: NetworkErrorView(
               error: snapshot.error!,
-              onRetry: () => setState(() => _profile = _load()),
+              onRetry:
+                  () => setState(() {
+                    invalidateRepositoryCache(widget.repository);
+                    _profile = _load();
+                  }),
             ),
           );
         }
@@ -178,6 +186,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 child: Column(
                   children: [
                     _UserHeader(user: user),
+                    SectionFailureNotice(
+                      errors: data.sectionErrors,
+                      onRetry:
+                          () => setState(() {
+                            invalidateRepositoryCache(widget.repository);
+                            _profile = _load();
+                          }),
+                    ),
                     Material(
                       color: Theme.of(context).colorScheme.surface,
                       child: TabBar(
@@ -304,10 +320,10 @@ class _TimeMachine extends StatelessWidget {
                   ),
                 ],
               ),
-              if (user.joinedAt.millisecondsSinceEpoch > 0) ...[
+              if (user.joinedAt != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  '${user.joinedAt.year}-${user.joinedAt.month.toString().padLeft(2, '0')}-${user.joinedAt.day.toString().padLeft(2, '0')} 加入 Bangumi',
+                  '${user.joinedAt!.year}-${user.joinedAt!.month.toString().padLeft(2, '0')}-${user.joinedAt!.day.toString().padLeft(2, '0')} 加入 Bangumi',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

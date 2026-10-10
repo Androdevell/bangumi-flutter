@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/models.dart';
+import '../core/paged.dart';
 import '../core/community_models.dart';
 import '../core/network/api_client.dart';
 import '../core/subject_detail_models.dart';
@@ -59,13 +60,86 @@ abstract interface class BangumiRepository {
   void close();
 }
 
-class RemoteBangumiRepository implements BangumiRepository {
+abstract interface class SubjectPagingRepository {
+  Future<Paged<Subject>> fetchSubjectPage({
+    required int type,
+    required String sort,
+    int page = 1,
+  });
+  Future<Paged<Subject>> searchSubjectPage(
+    String keyword, {
+    int? type,
+    int offset = 0,
+  });
+}
+
+abstract interface class RefreshableRepository {
+  void invalidateCache();
+}
+
+void invalidateRepositoryCache(BangumiRepository repository) {
+  if (repository is RefreshableRepository) {
+    (repository as RefreshableRepository).invalidateCache();
+  }
+}
+
+Future<Paged<Subject>> subjectPage(
+  BangumiRepository repository, {
+  required int type,
+  required String sort,
+  int page = 1,
+}) async {
+  if (repository is SubjectPagingRepository) {
+    return (repository as SubjectPagingRepository).fetchSubjectPage(
+      type: type,
+      sort: sort,
+      page: page,
+    );
+  }
+  return Paged(
+    items: await repository.fetchSubjects(type: type, sort: sort, page: page),
+    offset: (page - 1) * 20,
+    limit: 20,
+  );
+}
+
+Future<Paged<Subject>> searchPage(
+  BangumiRepository repository,
+  String keyword, {
+  int? type,
+  int offset = 0,
+}) async {
+  if (repository is SubjectPagingRepository) {
+    return (repository as SubjectPagingRepository).searchSubjectPage(
+      keyword,
+      type: type,
+      offset: offset,
+    );
+  }
+  if (offset > 0) return Paged(items: const [], offset: offset, limit: 30);
+  final items = await repository.searchSubjects(keyword, type: type);
+  return Paged(items: items, offset: 0, limit: 30, total: items.length);
+}
+
+class RemoteBangumiRepository
+    implements
+        BangumiRepository,
+        SubjectPagingRepository,
+        RefreshableRepository {
   RemoteBangumiRepository({ApiClient? apiClient})
     : _api = apiClient ?? ApiClient();
 
   final ApiClient _api;
   final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
-  final Map<String, int> _subjectCollectionCountFloor = {};
+  final Map<String, _CollectionCount> _subjectCollectionCounts = {};
+  final Map<String, ({DateTime at, Future<Paged<Subject>> request})>
+  _searchCache = {};
+
+  @override
+  void invalidateCache() {
+    _api.clearCache();
+    _searchCache.clear();
+  }
 
   @override
   bool get isLoggedIn => _api.isLoggedIn;
@@ -78,8 +152,11 @@ class RemoteBangumiRepository implements BangumiRepository {
 
   @override
   int effectiveSubjectCollectionCount(String username, int serverCount) {
-    final optimistic = _subjectCollectionCountFloor[username] ?? 0;
-    return optimistic > serverCount ? optimistic : serverCount;
+    final count = _subjectCollectionCounts.putIfAbsent(
+      username,
+      () => _CollectionCount(serverCount),
+    );
+    return count.value(serverCount);
   }
 
   @override
@@ -110,23 +187,69 @@ class RemoteBangumiRepository implements BangumiRepository {
     required String sort,
     int page = 1,
   }) async {
+    return (await fetchSubjectPage(type: type, sort: sort, page: page)).items;
+  }
+
+  @override
+  Future<Paged<Subject>> fetchSubjectPage({
+    required int type,
+    required String sort,
+    int page = 1,
+  }) async {
     final json = await _api.get(
       'p1/subjects',
       query: {'type': '$type', 'sort': sort, 'page': '$page'},
     );
-    return _subjectPage(json);
+    return _pagedSubjects(
+      json,
+      fallbackOffset: (page - 1) * 20,
+      fallbackLimit: 20,
+    );
   }
 
   @override
   Future<List<Subject>> searchSubjects(String keyword, {int? type}) async {
+    return (await searchSubjectPage(keyword, type: type)).items;
+  }
+
+  @override
+  Future<Paged<Subject>> searchSubjectPage(
+    String keyword, {
+    int? type,
+    int offset = 0,
+  }) async {
+    final key = '$currentUsername:$type:${keyword.trim()}:$offset';
+    final hit = _searchCache[key];
+    if (hit != null &&
+        DateTime.now().difference(hit.at) < const Duration(minutes: 2)) {
+      return hit.request;
+    }
+    final request = _searchSubjectPage(keyword.trim(), type, offset);
+    if (_searchCache.length >= 40) _searchCache.remove(_searchCache.keys.first);
+    _searchCache[key] = (at: DateTime.now(), request: request);
+    try {
+      return await request;
+    } on Object {
+      if (identical(_searchCache[key]?.request, request)) {
+        _searchCache.remove(key);
+      }
+      rethrow;
+    }
+  }
+
+  Future<Paged<Subject>> _searchSubjectPage(
+    String keyword,
+    int? type,
+    int offset,
+  ) async {
     final filter = <String, dynamic>{'nsfw': true};
     if (type != null && type > 0) filter['type'] = [type];
     final json = await _api.post(
       'p1/search/subjects',
-      query: {'offset': '0', 'limit': '30'},
+      query: {'offset': '$offset', 'limit': '30'},
       body: {'keyword': keyword, 'filter': filter, 'sort': 'match'},
     );
-    return _subjectPage(json);
+    return _pagedSubjects(json, fallbackOffset: offset, fallbackLimit: 30);
   }
 
   @override
@@ -137,44 +260,73 @@ class RemoteBangumiRepository implements BangumiRepository {
   @override
   Future<SubjectDetailData> fetchSubjectDetails(int id) async {
     final subjectJson = await _fetchSubjectJson(id);
-    final results = await Future.wait<List<Object>>([
-      _safeItems(
-        _fetchItems('p1/subjects/$id/episodes', SubjectEpisode.fromJson, 100),
+    final errors = <String, String>{};
+    final sections = <(String, Future<List<Object>> Function())>[
+      (
+        'episodes',
+        () => _fetchItems(
+          'p1/subjects/$id/episodes',
+          SubjectEpisode.fromJson,
+          100,
+        ),
       ),
-      Future.value(const <Object>[]),
-      _safeItems(
-        _fetchItems('p1/subjects/$id/comments', SubjectComment.fromJson, 40),
+      ('previews', () async => const []),
+      (
+        'comments',
+        () => _fetchItems(
+          'p1/subjects/$id/comments',
+          SubjectComment.fromJson,
+          40,
+        ),
       ),
-      _safeItems(
-        _fetchItems(
+      (
+        'characters',
+        () => _fetchItems(
           'p1/subjects/$id/characters',
           SubjectCharacter.fromJson,
           100,
         ),
       ),
-      _safeItems(
-        _fetchItems(
+      (
+        'staffs',
+        () => _fetchItems(
           'p1/subjects/$id/staffs/persons',
           SubjectStaff.fromJson,
           100,
         ),
       ),
-      _safeItems(
-        _fetchItems('p1/subjects/$id/relations', SubjectRelation.fromJson, 100),
+      (
+        'relations',
+        () => _fetchItems(
+          'p1/subjects/$id/relations',
+          SubjectRelation.fromJson,
+          100,
+        ),
       ),
-      _safeItems(
-        _fetchItems('p1/subjects/$id/indexes', SubjectIndex.fromJson, 40),
+      (
+        'indexes',
+        () => _fetchItems('p1/subjects/$id/indexes', SubjectIndex.fromJson, 40),
       ),
-      _safeItems(
-        _fetchItems('p1/subjects/$id/reviews', SubjectReview.fromJson, 20),
+      (
+        'reviews',
+        () =>
+            _fetchItems('p1/subjects/$id/reviews', SubjectReview.fromJson, 20),
       ),
-      _safeItems(
-        _fetchItems('p1/subjects/$id/topics', SubjectTopic.fromJson, 40),
+      (
+        'topics',
+        () => _fetchItems('p1/subjects/$id/topics', SubjectTopic.fromJson, 40),
       ),
-    ]);
+    ];
+    final results = await Future.wait(
+      sections.map(
+        (section) =>
+            _safeItems(section.$2(), errors: errors, section: section.$1),
+      ),
+    );
 
     return SubjectDetailData.fromSubjectJson(
       json: subjectJson,
+      sectionErrors: Map.unmodifiable(errors),
       episodes: results[0].cast<SubjectEpisode>(),
       previews: results[1].cast<SubjectPreview>(),
       comments: results[2].cast<SubjectComment>(),
@@ -258,12 +410,15 @@ class RemoteBangumiRepository implements BangumiRepository {
 
   @override
   Future<UserProfileData> fetchUserProfile(String username) async {
+    final errors = <String, String>{};
     final encoded = Uri.encodeComponent(username);
     final results = await Future.wait<dynamic>([
       _api.get('p1/users/$encoded'),
       _safeJson(
         _api.get('p1/users/$encoded/timeline', query: {'limit': '20'}),
         const [],
+        errors: errors,
+        section: 'timeline',
       ),
       _safeJson(
         _api.get(
@@ -271,6 +426,8 @@ class RemoteBangumiRepository implements BangumiRepository {
           query: {'limit': '100'},
         ),
         const {},
+        errors: errors,
+        section: 'collections',
       ),
       _safeJson(
         _api.get(
@@ -278,6 +435,8 @@ class RemoteBangumiRepository implements BangumiRepository {
           query: {'limit': '40'},
         ),
         const {},
+        errors: errors,
+        section: 'characters',
       ),
       _safeJson(
         _api.get(
@@ -285,30 +444,37 @@ class RemoteBangumiRepository implements BangumiRepository {
           query: {'limit': '40'},
         ),
         const {},
+        errors: errors,
+        section: 'persons',
       ),
       _safeJson(
         _api.get('p1/users/$encoded/blogs', query: {'limit': '30'}),
         const {},
+        errors: errors,
+        section: 'blogs',
       ),
       _safeJson(
         _api.get('p1/users/$encoded/indexes', query: {'limit': '30'}),
         const {},
+        errors: errors,
+        section: 'indexes',
       ),
       _safeJson(
         _api.get('p1/users/$encoded/friends', query: {'limit': '50'}),
         const {},
+        errors: errors,
+        section: 'friends',
       ),
     ]);
     if (results.first is! Map) throw const ApiException('用户资料格式不正确');
     final user = CommunityUser.fromJson(
       Map<String, dynamic>.from(results[0] as Map),
     );
-    _subjectCollectionCountFloor.update(
-      user.username,
-      (value) => value > user.stats.subjects ? value : user.stats.subjects,
-      ifAbsent: () => user.stats.subjects,
-    );
+    _subjectCollectionCounts
+        .putIfAbsent(user.username, () => _CollectionCount(user.stats.subjects))
+        .reconcile(user.stats.subjects);
     return UserProfileData(
+      sectionErrors: Map.unmodifiable(errors),
       user: user,
       timeline:
           _items(results[1])
@@ -330,24 +496,37 @@ class RemoteBangumiRepository implements BangumiRepository {
 
   @override
   Future<CharacterDetailData> fetchCharacterDetails(int id) async {
+    final errors = <String, String>{};
     final results = await Future.wait<dynamic>([
       _api.get('p1/characters/$id'),
       _safeJson(
         _api.get('p1/characters/$id/casts', query: {'limit': '100'}),
         const {},
+        errors: errors,
+        section: 'works',
       ),
       _safeJson(
         _api.get('p1/characters/$id/collects', query: {'limit': '50'}),
         const {},
+        errors: errors,
+        section: 'collectors',
       ),
-      _safeJson(_api.get('p1/characters/$id/comments'), const []),
+      _safeJson(
+        _api.get('p1/characters/$id/comments'),
+        const [],
+        errors: errors,
+        section: 'comments',
+      ),
       _safeJson(
         _api.get('p1/characters/$id/indexes', query: {'limit': '40'}),
         const {},
+        errors: errors,
+        section: 'indexes',
       ),
     ]);
     if (results.first is! Map) throw const ApiException('角色资料格式不正确');
     return CharacterDetailData(
+      sectionErrors: Map.unmodifiable(errors),
       character: CharacterEntry.fromJson(
         Map<String, dynamic>.from(results[0] as Map),
       ),
@@ -409,6 +588,7 @@ class RemoteBangumiRepository implements BangumiRepository {
     required bool isPrivate,
     bool wasCollected = true,
   }) async {
+    final username = currentUsername;
     await _api.put(
       'p1/collections/subjects/$subjectId',
       body: {
@@ -419,13 +599,12 @@ class RemoteBangumiRepository implements BangumiRepository {
         'tags': <String>[],
       },
     );
-    if (!wasCollected && type > 0 && currentUsername.isNotEmpty) {
-      _subjectCollectionCountFloor.update(
-        currentUsername,
-        (value) => value + 1,
-        ifAbsent: () => 1,
-      );
+    if (wasCollected != (type > 0) && username.isNotEmpty) {
+      _subjectCollectionCounts
+          .putIfAbsent(username, () => _CollectionCount(null))
+          .change(type > 0 ? 1 : -1);
     }
+    invalidateCache();
     _collectionChanges.value++;
   }
 
@@ -457,12 +636,19 @@ class RemoteBangumiRepository implements BangumiRepository {
 
   @override
   Future<PersonDetailData> fetchPersonDetails(int id) async {
+    final errors = <String, String>{};
     final results = await Future.wait<dynamic>([
       _api.get('p1/persons/$id'),
-      _safeJson(_api.get('p1/persons/$id/comments'), const []),
+      _safeJson(
+        _api.get('p1/persons/$id/comments'),
+        const [],
+        errors: errors,
+        section: 'comments',
+      ),
     ]);
     if (results.first is! Map) throw const ApiException('制作人员资料格式不正确');
     return PersonDetailData(
+      sectionErrors: Map.unmodifiable(errors),
       person: PersonEntry.fromJson(
         Map<String, dynamic>.from(results.first as Map),
       ),
@@ -527,6 +713,20 @@ class RemoteBangumiRepository implements BangumiRepository {
     return data.map(_subjectFromWrapper).where((item) => item.id > 0).toList();
   }
 
+  Paged<Subject> _pagedSubjects(
+    dynamic json, {
+    required int fallbackOffset,
+    required int fallbackLimit,
+  }) {
+    final map = json is Map ? json : const {};
+    return Paged(
+      items: _subjectPage(json),
+      offset: (map['offset'] as num?)?.toInt() ?? fallbackOffset,
+      limit: (map['limit'] as num?)?.toInt() ?? fallbackLimit,
+      total: (map['total'] as num?)?.toInt(),
+    );
+  }
+
   Subject _subjectFromWrapper(dynamic value) {
     if (value is! Map) return const Subject(id: 0, title: '');
     final map = Map<String, dynamic>.from(value);
@@ -550,17 +750,28 @@ class RemoteBangumiRepository implements BangumiRepository {
   ) async {
     final json = await _api.get(path, query: {'limit': '$limit'});
     final data = json is Map ? json['data'] ?? json['result'] : json;
-    if (data is! List) return const [];
+    if (data is! List) throw const ApiException('区块列表数据格式不正确');
     return data
         .whereType<Map>()
         .map((item) => parser(Map<String, dynamic>.from(item)))
         .toList();
   }
 
-  Future<List<Object>> _safeItems<T>(Future<List<T>> request) async {
+  Future<List<Object>> _safeItems<T>(
+    Future<List<T>> request, {
+    Map<String, String>? errors,
+    String? section,
+  }) async {
     try {
       return (await request).cast<Object>();
-    } on Object {
+    } on ApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 429) rethrow;
+      debugPrint('可选区块加载失败：${error.message}');
+      if (errors != null && section != null) errors[section] = '$error';
+      return const [];
+    } on Object catch (error) {
+      debugPrint('可选区块解析失败：${error.runtimeType}');
+      if (errors != null && section != null) errors[section] = '数据解析失败，请稍后重试';
       return const [];
     }
   }
@@ -575,10 +786,25 @@ class RemoteBangumiRepository implements BangumiRepository {
     }
   }
 
-  Future<dynamic> _safeJson(Future<dynamic> request, dynamic fallback) async {
+  Future<dynamic> _safeJson(
+    Future<dynamic> request,
+    dynamic fallback, {
+    Map<String, String>? errors,
+    String? section,
+  }) async {
     try {
-      return await request;
-    } on Object {
+      final result = await request;
+      final items = result is Map ? result['data'] ?? result['result'] : result;
+      if (items is! List) throw const ApiException('区块列表数据格式不正确');
+      return result;
+    } on ApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 429) rethrow;
+      debugPrint('可选区块加载失败：${error.message}');
+      if (errors != null && section != null) errors[section] = '$error';
+      return fallback;
+    } on Object catch (error) {
+      debugPrint('可选区块解析失败：${error.runtimeType}');
+      if (errors != null && section != null) errors[section] = '数据解析失败，请稍后重试';
       return fallback;
     }
   }
@@ -599,5 +825,38 @@ class RemoteBangumiRepository implements BangumiRepository {
   void close() {
     _collectionChanges.dispose();
     _api.close();
+  }
+}
+
+class _CollectionCount {
+  _CollectionCount(this._server);
+  int? _server;
+  int _delta = 0;
+  DateTime? _changedAt;
+  int value(int server) {
+    if (_server == null) {
+      // 未读取总数时，新增只提供下界；取消仍需在已有总数上扣减。
+      _server = server;
+      if (_delta > 0 && server > 0) _delta = 0;
+    }
+    return ((_server ?? 0) + _delta).clamp(0, 1 << 30);
+  }
+
+  void change(int delta) {
+    _delta += delta;
+    _changedAt = DateTime.now();
+  }
+
+  void reconcile(int server) {
+    final expected = (_server ?? server) + _delta;
+    if (_server == null ||
+        _delta == 0 ||
+        (_delta > 0 ? server >= expected : server <= expected) ||
+        (_changedAt != null &&
+            DateTime.now().difference(_changedAt!) >
+                const Duration(seconds: 30))) {
+      _server = server;
+      _delta = 0;
+    }
   }
 }

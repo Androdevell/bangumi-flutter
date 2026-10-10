@@ -50,7 +50,11 @@ class _PersonCommentsPageState extends State<PersonCommentsPage> {
         if (snapshot.hasError) {
           return NetworkErrorView(
             error: snapshot.error!,
-            onRetry: () => setState(() => _comments = _load()),
+            onRetry:
+                () => setState(() {
+                  invalidateRepositoryCache(widget.repository);
+                  _comments = _load();
+                }),
           );
         }
         if (!snapshot.hasData) {
