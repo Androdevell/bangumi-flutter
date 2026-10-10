@@ -27,4 +27,6 @@ jobs:
           java-version: '17'
       - name: Android DNS regression tests
         working-directory: android
-        run: bash ./gradlew :app:testDebugUnitTest -Ptarget-platform=android-arm64 --console=plain
+        run: |
+          flutter build apk --debug --target-platform android-arm64
+          bash ./gradlew :app:testDebugUnitTest -Ptarget-platform=android-arm64 --console=plain
