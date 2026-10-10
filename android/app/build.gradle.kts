@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.Base64
 
 plugins {
     id("com.android.application")
@@ -26,6 +27,17 @@ gradle.taskGraph.whenReady {
         }
         if (!file(keystoreProperties.getProperty("storeFile")).isFile) {
             throw GradleException("Release 签名文件不存在，请检查 key.properties 的 storeFile")
+        }
+        if (flutter.versionCode <= 2006) {
+            throw GradleException("Release versionCode 必须高于已发布的 1.1.4（2006），避免降级安装")
+        }
+        val defines = providers.gradleProperty("dart-defines").orNull.orEmpty()
+            .split(',').mapNotNull { encoded ->
+                runCatching { String(Base64.getDecoder().decode(encoded), Charsets.UTF_8) }.getOrNull()
+            }.associate { decoded -> decoded.substringBefore('=') to decoded.substringAfter('=', "") }
+        if (defines["BGM_OAUTH_APP_ID"].isNullOrBlank() ||
+            defines["BGM_OAUTH_APP_SECRET"].isNullOrBlank()) {
+            throw GradleException("Release 必须包含完整 OAuth 构建配置，拒绝生成不可登录的正式包")
         }
     }
 }

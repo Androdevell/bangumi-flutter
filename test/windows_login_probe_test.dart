@@ -24,7 +24,7 @@ void main() {
       expect(challenge.hiddenFields, isNotEmpty);
       expect(captcha, isNotEmpty);
     },
-    skip: 'Live network probe',
+    skip: const bool.fromEnvironment('RUN_LIVE_LOGIN') ? false : 'Live network probe',
     timeout: const Timeout(Duration(seconds: 60)),
   );
 }

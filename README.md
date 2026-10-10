@@ -30,6 +30,10 @@ flutter test
 
 每次发布前先更新 `pubspec.yaml` 中的 `version`。格式为 `主版本.次版本.修订号+构建号`，例如 `1.1.0+2`；随后使用相同版本创建 `v1.1.0` Git 标签和 GitHub Release。应用内“检查更新”以 GitHub 最新 Release 为准。
 
+注意：实际已发布的 1.1.4 APK 构建号为 **2006**（以前命令行覆盖了源码中的构建号）。
+从 `1.1.7+2009` 起在 `pubspec.yaml` 中统一保存真实构建号，后续每次发布继续递增，
+不使用较小的 `+8/+9`，也不通过命令行另行覆盖版本。
+
 ## 网络
 
 默认使用 `https://next.bgm.tv/p1/` API。Android 使用原生 OkHttp 网络桥，Windows 使用 WinHTTP 并读取系统代理、PAC/WPAD。
@@ -65,6 +69,18 @@ Android Release 必须提供 `android/key.properties` 的 `storeFile`、`storePa
 `keyAlias`、`keyPassword`，且签名文件必须存在；缺失时拒绝构建，不回退 debug 签名。
 继续使用原正式密钥，以确保旧用户可覆盖安装。
 
+正式发行推荐使用带预检的双平台脚本：
+
+```powershell
+./tool/release.ps1 -OAuthConfig ./oauth-config.json -PreviousApk ./downloaded-last-release.apk
+```
+
+亦可在本地进程或 CI Secrets 中设置 `BGM_OAUTH_APP_ID`、`BGM_OAUTH_APP_SECRET` 后省略 `-OAuthConfig`。
+脚本不输出凭据，校验构建号严格高于基准 APK，校验签名相同、最终 Android/Windows 版本、
+arm64-v8a 架构并打包完整 Windows 目录。仅预检时加 `-ValidateOnly`。
+Android 正式构建还会强制检查完整 OAuth 参数及已发布构建号下界；不能把未配置登录的包当作正式发行。
+本次 1.1.7 依用户要求使用既有配置生成可登录的正式发行包；公开客户端中的 Secret 不构成保密边界，仍建议尽快轮换。
+
 ```powershell
 flutter build apk --release --target-platform android-arm64 --dart-define-from-file=oauth-config.json
 flutter build windows --release --dart-define-from-file=oauth-config.json
@@ -88,8 +104,8 @@ GET 使用五分钟缓存和相同请求合并，并发不超过三；手动刷�
 图片内存缓存上限 64 MiB，磁盘缓存保留十四天、最多六百个缓存对象；
 Android 图片传输采用临时文件流，不再整张图片通过 MethodChannel 复制。
 
-未提供重置后的 OAuth 配置时，仅生成明确标注的验证包（可浏览，不能用于完整登录验收），
-不将此类验证包发布为正式 GitHub Release。源码推送不会自动改变应用内的最新 Release。
+之前的 1.1.5/1.1.6 未配置 OAuth 构建仅用于浏览验证，没有上传正式 Release。
+现在正式 Release 强制配置 OAuth；源码推送仍不自动改变应用内的最新 Release，需上传带版本标签的正式产物。
 
 ## 安全与隐私修复
 
