@@ -10,7 +10,8 @@ class AppLocalizations {
   final Locale locale;
 
   static AppLocalizations of(BuildContext context) =>
-      Localizations.of<AppLocalizations>(context, AppLocalizations)!;
+      Localizations.of<AppLocalizations>(context, AppLocalizations) ??
+      const AppLocalizations(Locale('zh'));
 
   String t(String key) =>
       (_values[locale.languageCode] ?? _values['zh']!)[key] ??
@@ -56,6 +57,25 @@ class AppLocalizations {
 
   static const _values = <String, Map<String, String>>{
     'zh': {
+      'initializationFailed': '启动恢复失败，请重试。已保存的账户不会被主动清除。',
+      'revealSpoiler': '点击显示隐藏内容',
+      'externalImage': '在浏览器查看外部图片',
+      'openExternalLink': '打开外部链接？',
+      'open': '打开',
+      'richTextLimited': '内容过长，已限制显示；请在原网页查看全文。',
+      'expand': '展开全文',
+      'collapse': '收起',
+      'originalColors': '原始颜色',
+      'todayBroadcast': '今日放送',
+      'today': '今天',
+      'refresh': '刷新',
+      'listView': '列表',
+      'gridView': '网格',
+      'calendarEmpty': '这一天暂无放送条目',
+      'searchHint': '搜索条目、人物或标签',
+      'lastUpdated': '上次更新',
+      'usingCachedCalendar': '正在显示缓存放送信息',
+      'posterFailed': '封面加载失败，点击重试',
       'timelineLocalFilterHint': '仅筛选当前已加载的动态，不代表完整历史。',
       'refreshCollections': '刷新收藏',
       'collectionWithdrawalUnsupported': '当前 API 不支持可靠的取消收藏，请暂时在 Bangumi 网页操作。',
@@ -170,6 +190,27 @@ class AppLocalizations {
       'dataSource': '数据来源',
     },
     'en': {
+      'initializationFailed':
+          'Could not restore the app. Retry without clearing your saved account.',
+      'revealSpoiler': 'Reveal hidden text',
+      'externalImage': 'View external image in browser',
+      'openExternalLink': 'Open external link?',
+      'open': 'Open',
+      'richTextLimited':
+          'Display limit reached. Read the full text on the original website.',
+      'expand': 'Read more',
+      'collapse': 'Show less',
+      'originalColors': 'Original colors',
+      'todayBroadcast': 'Daily broadcast',
+      'today': 'Today',
+      'refresh': 'Refresh',
+      'listView': 'List',
+      'gridView': 'Grid',
+      'calendarEmpty': 'No broadcasts for this day',
+      'searchHint': 'Search titles, people or tags',
+      'lastUpdated': 'Last updated',
+      'usingCachedCalendar': 'Showing cached broadcast information',
+      'posterFailed': 'Cover failed. Tap to retry.',
       'timelineLocalFilterHint':
           'This filter applies only to loaded posts, not the complete history.',
       'refreshCollections': 'Refresh collections',
@@ -293,6 +334,25 @@ class AppLocalizations {
       'dataSource': 'Data source',
     },
     'ja': {
+      'initializationFailed': '起動時の復元に失敗しました。保存済みアカウントは削除せずに再試行できます。',
+      'revealSpoiler': '隠された内容を表示',
+      'externalImage': '外部画像をブラウザで表示',
+      'openExternalLink': '外部リンクを開きますか？',
+      'open': '開く',
+      'richTextLimited': '表示上限に達しました。原文はウェブサイトでご確認ください。',
+      'expand': '全文を表示',
+      'collapse': '折りたたむ',
+      'originalColors': '元の色',
+      'todayBroadcast': '今日の放送',
+      'today': '今日',
+      'refresh': '更新',
+      'listView': 'リスト',
+      'gridView': 'グリッド',
+      'calendarEmpty': 'この日の放送はありません',
+      'searchHint': '作品・人物・タグを検索',
+      'lastUpdated': '最終更新',
+      'usingCachedCalendar': 'キャッシュした放送情報を表示中',
+      'posterFailed': '画像取得に失敗。タップして再試行。',
       'timelineLocalFilterHint': '読み込み済みの投稿のみを絞り込みます。全履歴ではありません。',
       'refreshCollections': 'コレクションを更新',
       'collectionWithdrawalUnsupported':

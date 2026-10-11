@@ -9,6 +9,14 @@ import java.net.Proxy
 import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
+import okhttp3.Dispatcher
+import java.io.IOException
 
 /**
  * 为本站域名使用限时加密解析；解析服务不可达时使用备用地址，避免受污染的系统解析。
@@ -79,6 +87,7 @@ private class SecureBangumiDns {
         "https://cloudflare-dns.com/dns-query" to listOf("1.1.1.1", "1.0.0.1"),
     )
     private val client = OkHttpClient.Builder()
+        .dispatcher(Dispatcher().apply { maxRequests = 2; maxRequestsPerHost = 1 })
         .proxy(Proxy.NO_PROXY)
         .dns(object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
@@ -98,23 +107,47 @@ private class SecureBangumiDns {
         .build()
 
     fun lookup(host: String): DnsAnswer? {
-        for ((endpoint, _) in endpoints) {
-            val answer = runCatching {
-                val request = Request.Builder().url("$endpoint?name=$host&type=A")
-                    .header("Accept", "application/dns-json").build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use null
-                    val body = response.body ?: return@use null
-                    val source = body.source()
-                    if (source.request(8193)) return@use null
-                    val bytes = source.readByteArray()
-                    parseDnsAnswer(host, bytes.toString(Charsets.UTF_8))
-                }
-            }.getOrNull()
-            if (answer != null && answer.addresses.isNotEmpty()) return answer
+        val calls = endpoints.map { (endpoint, _) ->
+            client.newCall(Request.Builder().url("$endpoint?name=$host&type=A")
+                .header("Accept", "application/dns-json").build())
         }
-        return null
+        return raceDnsAnswers(host, calls)
     }
+}
+
+/**
+ * 主备解析并行竞争，首个有效结果或总预算到期后取消所有请求。
+ *
+ * @param host 验证响应 Question 的原始域名
+ * @param calls 有界解析请求集合
+ * @param budgetMillis 包含调度等待的总预算
+ */
+internal fun raceDnsAnswers(host: String, calls: List<Call>, budgetMillis: Long = 2100): DnsAnswer? {
+        if (calls.isEmpty()) return null
+        val done = CountDownLatch(1)
+        val remaining = AtomicInteger(calls.size)
+        val winner = AtomicReference<DnsAnswer?>()
+        fun finish(answer: DnsAnswer?) {
+            if (answer != null && answer.addresses.isNotEmpty() && winner.compareAndSet(null, answer)) done.countDown()
+            if (remaining.decrementAndGet() == 0) done.countDown()
+        }
+        try {
+            calls.forEach { call -> call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) = finish(null)
+                override fun onResponse(call: Call, response: Response) {
+                    val answer = runCatching { response.use {
+                        if (!it.isSuccessful) return@use null
+                        val source = it.body?.source() ?: return@use null
+                        if (source.request(8193)) return@use null
+                        parseDnsAnswer(host, source.readByteArray().toString(Charsets.UTF_8))
+                    } }.getOrNull()
+                    finish(answer)
+                }
+            }) }
+            // 保留原有 2 秒解析器预算，但主备竞争，避免两次串行超时。
+            done.await(budgetMillis, TimeUnit.MILLISECONDS)
+            return winner.get()
+        } finally { calls.forEach(Call::cancel) }
 }
 
 /**

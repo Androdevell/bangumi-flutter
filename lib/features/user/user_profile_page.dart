@@ -12,6 +12,7 @@ import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../../widgets/section_failure_notice.dart';
 import '../../widgets/bangumi_rich_text.dart';
+import '../../widgets/lazy_tab_view.dart';
 import '../character/character_detail_page.dart';
 import '../community/community_widgets.dart';
 import '../subject/subject_detail_page.dart';
@@ -77,7 +78,28 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<UserProfileData> _load() =>
-      widget.repository.fetchUserProfile(widget.username);
+      widget.repository is DetailSectionsRepository
+          ? (widget.repository as DetailSectionsRepository).fetchUserBase(
+            widget.username,
+          )
+          : widget.repository.fetchUserProfile(widget.username);
+
+  Widget _tab(
+    UserProfileData base,
+    String section,
+    Widget Function(UserProfileData) builder,
+  ) =>
+      widget.repository is DetailSectionsRepository
+          ? SectionLoader<UserProfileData>(
+            key: ValueKey(
+              '${widget.username}-$section-${identityHashCode(_profile)}',
+            ),
+            load:
+                () => (widget.repository as DetailSectionsRepository)
+                    .fetchUserSection(widget.username, section),
+            builder: builder,
+          )
+          : builder(base);
 
   Future<void> _toggleFriend(CommunityUser user) async {
     if (!widget.repository.isLoggedIn) {
@@ -241,29 +263,64 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                     ),
                     Expanded(
-                      child: TabBarView(
-                        children: [
-                          _TimeMachine(
+                      child: LazyTabView(
+                        key: ValueKey(identityHashCode(_profile)),
+                        builders: [
+                          () => _TimeMachine(
+                            repository: widget.repository,
                             user: user,
                             data: data,
                             subjectCount: subjectCount,
                             onSubjectTap: _openTimelineSubject,
                           ),
-                          _CollectionBrowser(
+                          () => _CollectionBrowser(
                             items: data.collections,
                             repository: widget.repository,
                             username: widget.username,
                             onTap: _openSubject,
                           ),
-                          _MonoList(data: data, repository: widget.repository),
-                          _ContentList(items: data.blogs, empty: '暂无日志'),
-                          _ContentList(items: data.indexes, empty: '暂无目录'),
-                          _FriendList(items: data.friends, onTap: _openUser),
-                          _TimelineList(
-                            items: data.timeline,
-                            onSubjectTap: _openTimelineSubject,
+                          () => _tab(
+                            data,
+                            'people',
+                            (value) => _MonoList(
+                              data: value,
+                              repository: widget.repository,
+                            ),
                           ),
-                          _StatsView(user: user, subjectCount: subjectCount),
+                          () => _tab(
+                            data,
+                            'blogs',
+                            (value) =>
+                                _ContentList(items: value.blogs, empty: '暂无日志'),
+                          ),
+                          () => _tab(
+                            data,
+                            'indexes',
+                            (value) => _ContentList(
+                              items: value.indexes,
+                              empty: '暂无目录',
+                            ),
+                          ),
+                          () => _tab(
+                            data,
+                            'friends',
+                            (value) => _FriendList(
+                              items: value.friends,
+                              onTap: _openUser,
+                            ),
+                          ),
+                          () => _tab(
+                            data,
+                            'timeline',
+                            (value) => _TimelineList(
+                              items: value.timeline,
+                              onSubjectTap: _openTimelineSubject,
+                            ),
+                          ),
+                          () => _StatsView(
+                            user: user,
+                            subjectCount: subjectCount,
+                          ),
                         ],
                       ),
                     ),
@@ -317,11 +374,13 @@ class _UserHeader extends StatelessWidget {
 
 class _TimeMachine extends StatelessWidget {
   const _TimeMachine({
+    required this.repository,
     required this.user,
     required this.data,
     required this.subjectCount,
     required this.onSubjectTap,
   });
+  final BangumiRepository repository;
   final CommunityUser user;
   final UserProfileData data;
   final int subjectCount;
@@ -384,14 +443,87 @@ class _TimeMachine extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      SelectableText(user.bio),
+                      _ProfileBio(user.bio, key: ValueKey(user.bio)),
                     ],
                   ),
                 ),
               ],
               const SizedBox(height: 24),
-              if (constraints.maxWidth >= 840)
-                Row(
+              if (repository is DetailSectionsRepository)
+                SectionLoader<UserProfileData>(
+                  key: ValueKey(
+                    '${user.username}-${identityHashCode(data)}-recent',
+                  ),
+                  load:
+                      () => (repository as DetailSectionsRepository)
+                          .fetchUserSection(user.username, 'recent'),
+                  builder:
+                      (value) => _RecentActivity(
+                        data: value,
+                        onSubjectTap: onSubjectTap,
+                      ),
+                )
+              else
+                _RecentActivity(data: data, onSubjectTap: onSubjectTap),
+            ],
+          ),
+    );
+  }
+}
+
+class _ProfileBio extends StatefulWidget {
+  const _ProfileBio(this.text, {super.key});
+  final String text;
+  @override
+  State<_ProfileBio> createState() => _ProfileBioState();
+}
+
+class _ProfileBioState extends State<_ProfileBio> {
+  bool _expanded = false;
+  bool _originalColors = false;
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        BangumiRichText(
+          widget.text,
+          originalColors: _originalColors,
+          maxLines: _expanded || widget.text.length < 350 ? null : 8,
+          overflow: TextOverflow.clip,
+        ),
+        Wrap(
+          spacing: 8,
+          children: [
+            if (widget.text.length >= 350)
+              TextButton.icon(
+                icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+                onPressed: () => setState(() => _expanded = !_expanded),
+                label: Text(strings.t(_expanded ? 'collapse' : 'expand')),
+              ),
+            FilterChip(
+              label: Text(strings.t('originalColors')),
+              selected: _originalColors,
+              onSelected: (value) => setState(() => _originalColors = value),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RecentActivity extends StatelessWidget {
+  const _RecentActivity({required this.data, required this.onSubjectTap});
+  final UserProfileData data;
+  final ValueChanged<TimelineEntry> onSubjectTap;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder:
+        (context, constraints) =>
+            constraints.maxWidth >= 840
+                ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(flex: 3, child: _CollectionOverview(data: data)),
@@ -405,15 +537,15 @@ class _TimeMachine extends StatelessWidget {
                     ),
                   ],
                 )
-              else ...[
-                _CollectionOverview(data: data),
-                const SizedBox(height: 26),
-                _TimelineOverview(data: data, onSubjectTap: onSubjectTap),
-              ],
-            ],
-          ),
-    );
-  }
+                : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _CollectionOverview(data: data),
+                    const SizedBox(height: 26),
+                    _TimelineOverview(data: data, onSubjectTap: onSubjectTap),
+                  ],
+                ),
+  );
 }
 
 class _CollectionOverview extends StatelessWidget {

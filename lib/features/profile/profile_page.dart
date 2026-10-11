@@ -24,6 +24,8 @@ class ProfilePage extends StatefulWidget {
     required this.onLocaleChanged,
     required this.appIconStyle,
     required this.onAppIconStyleChanged,
+    this.reduceMotion = false,
+    this.onReduceMotionChanged,
   });
 
   final AuthService? authService;
@@ -34,6 +36,8 @@ class ProfilePage extends StatefulWidget {
   final ValueChanged<Locale> onLocaleChanged;
   final AppIconStyle appIconStyle;
   final ValueChanged<AppIconStyle> onAppIconStyleChanged;
+  final bool reduceMotion;
+  final ValueChanged<bool>? onReduceMotionChanged;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -42,7 +46,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   bool _notifications = true;
   bool _autoPlay = false;
-  bool _reduceMotion = false;
   String _profileUsername = '';
   Future<CommunityUser>? _profile;
   late final AppUpdateService _updateService = AppUpdateService();
@@ -601,8 +604,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     secondary: const Icon(Icons.animation_outlined),
                     title: Text(strings.t('reduceMotion')),
                     subtitle: Text(strings.t('reduceMotionSubtitle')),
-                    value: _reduceMotion,
-                    onChanged: (value) => setState(() => _reduceMotion = value),
+                    value: widget.reduceMotion,
+                    onChanged: widget.onReduceMotionChanged,
                   ),
                 ],
               ),

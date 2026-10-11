@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/app_motion.dart';
 import '../../core/models.dart';
 import '../../data/bangumi_repository.dart';
 import 'subject_detail_page.dart';
@@ -19,6 +20,7 @@ Future<void> openSubjectDetails(
     transitionsBuilder:
         (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
-    transitionDuration: const Duration(milliseconds: 300),
+    transitionDuration: AppMotionPolicy.duration(context, 200),
+    reverseTransitionDuration: AppMotionPolicy.duration(context, 160),
   ),
 );

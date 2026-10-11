@@ -10,6 +10,8 @@ import '../auth/auth_service.dart';
 import '../../app/state/session_scope.dart';
 import '../cache/query_key.dart';
 import 'platform_http_client.dart';
+import 'cookie_session_client.dart';
+import '../diagnostics/network_timing.dart';
 
 class ApiClient {
   ApiClient({
@@ -20,11 +22,13 @@ class ApiClient {
     Future<void> Function(Duration)? delay,
     DateTime Function()? clock,
     bool closeClient = true,
+    Duration readBudget = const Duration(seconds: 12),
   }) : _client = client ?? createPlatformHttpClient(),
        _closeClient = closeClient,
        _cacheTtl = cacheTtl,
        _delay = delay ?? Future<void>.delayed,
        _clock = clock ?? DateTime.now,
+       _readBudget = readBudget,
        _authService = authService,
        _baseUri =
            baseUri ??
@@ -43,6 +47,11 @@ class ApiClient {
   final AuthService? _authService;
   final Uri _baseUri;
   final Duration _cacheTtl;
+  final Duration _readBudget;
+  final Set<Completer<void>> _activeAborts = {};
+  Future<dynamic>? _publicCalendar;
+  DateTime? _publicCalendarAt;
+  int _publicCalendarGeneration = 0;
   final Future<void> Function(Duration) _delay;
   final DateTime Function() _clock;
   final Map<QueryKey, ({DateTime at, dynamic value})> _cache = {};
@@ -62,6 +71,7 @@ class ApiClient {
   Listenable get sessionChanges => _sessionChanges;
 
   void _onAuthChanged() {
+    if (_sessionChanges.value == sessionScope) return;
     _permissionRevision++;
     clearCache();
     _sessionChanges.value = sessionScope;
@@ -74,6 +84,7 @@ class ApiClient {
   }
 
   void invalidateResources(Set<String> paths) {
+    if (paths.contains('p1/calendar')) _invalidatePublicCalendar();
     _cacheGeneration++;
     bool matches(QueryKey key) =>
         paths.any((path) => key.path.startsWith(path));
@@ -85,6 +96,53 @@ class ApiClient {
     _cacheGeneration++;
     _cache.clear();
     _inFlight.clear();
+    _invalidatePublicCalendar();
+  }
+
+  void _invalidatePublicCalendar() {
+    _publicCalendarGeneration++;
+    _publicCalendar = null;
+    _publicCalendarAt = null;
+  }
+
+  /// 只允许已验证的公开日历读取，绕过登录 Cookie 和令牌刷新。
+  Future<dynamic> publicCalendar() {
+    if (_closed) return Future.error(const ApiException('客户端已关闭'));
+    if (_publicCalendarAt != null &&
+        _clock().difference(_publicCalendarAt!) >= _cacheTtl) {
+      _invalidatePublicCalendar();
+    }
+    return _publicCalendar ??= _loadPublicCalendar(_publicCalendarGeneration);
+  }
+
+  Future<dynamic> _loadPublicCalendar(int generation) async {
+    final budget = _ReadBudget(_readBudget);
+    final transport =
+        _client is CookieSessionClient ? (_client).anonymousTransport : _client;
+    try {
+      final response = await _sendOnce(
+        'GET',
+        _baseUri.resolve('p1/calendar'),
+        null,
+        null,
+        budget,
+        transport: transport,
+        anonymous: true,
+      );
+      if (response.statusCode != 200) {
+        throw ApiException(
+          '服务器返回 ${response.statusCode}',
+          statusCode: response.statusCode,
+        );
+      }
+      if (_closed) throw const ApiException('客户端已关闭');
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (generation == _publicCalendarGeneration) _publicCalendarAt = _clock();
+      return data;
+    } on Object {
+      if (generation == _publicCalendarGeneration) _invalidatePublicCalendar();
+      rethrow;
+    }
   }
 
   Future<dynamic> _cachedGet(
@@ -230,24 +288,32 @@ class ApiClient {
   }) async {
     final scope = expectedScope ?? sessionScope;
     final uri = _baseUri.resolve(path).replace(queryParameters: query);
+    final budget = method == 'GET' ? _ReadBudget(_readBudget) : null;
 
     try {
-      var accessToken = await _authService?.validAccessToken();
+      final authFuture =
+          _authService?.validAccessToken() ?? Future<String?>.value();
+      final authWatch = Stopwatch()..start();
+      var accessToken = await (budget?.wait(authFuture) ?? authFuture);
+      NetworkTiming.record('auth', authWatch);
       _requireScope(scope);
       if (requiresAuth && _authService != null && accessToken == null) {
         throw const ApiException('登录已失效，请重新登录后再操作');
       }
-      var response = await _send(method, uri, body, accessToken, scope);
+      var response = await _send(method, uri, body, accessToken, scope, budget);
       _requireScope(scope);
       if (response.statusCode == HttpStatus.unauthorized &&
           accessToken != null &&
-          await (_authService?.refreshAccessToken() ?? Future.value(false))) {
+          await (budget?.wait(
+                _authService?.refreshAccessToken() ?? Future.value(false),
+              ) ??
+              (_authService?.refreshAccessToken() ?? Future.value(false)))) {
         accessToken = await _authService?.validAccessToken();
         _requireScope(scope);
         if (requiresAuth && accessToken == null) {
           throw const ApiException('登录已失效，请重新登录后再操作');
         }
-        response = await _send(method, uri, body, accessToken, scope);
+        response = await _send(method, uri, body, accessToken, scope, budget);
         _requireScope(scope);
       }
       final text = utf8.decode(response.bodyBytes, allowMalformed: true);
@@ -290,6 +356,7 @@ class ApiClient {
     Object? body,
     String? accessToken,
     SessionScope scope,
+    _ReadBudget? budget,
   ) async {
     for (var attempt = 0; ; attempt++) {
       try {
@@ -299,6 +366,7 @@ class ApiClient {
           body,
           accessToken,
           scope,
+          budget,
         );
         if (method != 'GET' ||
             attempt >= 2 ||
@@ -307,8 +375,11 @@ class ApiClient {
         }
         final wait = _retryDelay(response, attempt);
         // 长时间限流交给 UI 提示，不提前重试违反服务端的 Retry-After。
-        if (wait > const Duration(seconds: 10)) return response;
-        await _delay(wait);
+        if (wait > const Duration(seconds: 10) ||
+            (budget != null && wait >= budget.remaining)) {
+          return response;
+        }
+        await (budget?.wait(_delay(wait)) ?? _delay(wait));
       } on Object catch (error) {
         if (method != 'GET' ||
             attempt >= 2 ||
@@ -317,7 +388,8 @@ class ApiClient {
                 error is http.ClientException)) {
           rethrow;
         }
-        await _delay(Duration(milliseconds: 500 * (1 << attempt)));
+        final delay = _delay(Duration(milliseconds: 500 * (1 << attempt)));
+        await (budget?.wait(delay) ?? delay);
       }
     }
   }
@@ -343,23 +415,35 @@ class ApiClient {
     Object? body,
     String? accessToken,
     SessionScope scope,
+    _ReadBudget? budget,
   ) async {
     if (_activeRequests >= 3) {
       final waiter = Completer<void>();
       _waiters.add(waiter);
-      await waiter.future;
+      final watch = Stopwatch()..start();
+      try {
+        await (budget?.wait(waiter.future) ?? waiter.future);
+      } on Object {
+        if (!_waiters.remove(waiter)) _releaseSlot();
+        rethrow;
+      }
+      NetworkTiming.record('queue', watch);
     } else {
       _activeRequests++;
     }
     try {
       _requireScope(scope);
-      return await _sendOnce(method, uri, body, accessToken);
+      return await _sendOnce(method, uri, body, accessToken, budget);
     } finally {
-      if (_waiters.isEmpty) {
-        _activeRequests--;
-      } else {
-        _waiters.removeFirst().complete();
-      }
+      _releaseSlot();
+    }
+  }
+
+  void _releaseSlot() {
+    if (_waiters.isEmpty) {
+      _activeRequests--;
+    } else {
+      _waiters.removeFirst().complete();
     }
   }
 
@@ -368,35 +452,76 @@ class ApiClient {
     Uri uri,
     Object? body,
     String? accessToken,
-  ) async {
-    final request = http.Request(method, uri)
+    _ReadBudget? budget, {
+    http.Client? transport,
+    bool anonymous = false,
+  }) async {
+    final timeout = budget?.remaining ?? const Duration(seconds: 20);
+    final abort = Completer<void>();
+    _activeAborts.add(abort);
+    final timer = Timer(timeout, () {
+      if (!abort.isCompleted) abort.complete();
+    });
+    final request = http.AbortableRequest(
+        method,
+        uri,
+        abortTrigger: abort.future,
+      )
       ..headers.addAll({
         HttpHeaders.acceptHeader: 'application/json',
         if (body != null)
           HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
         HttpHeaders.acceptLanguageHeader:
             'zh-CN,zh;q=0.8,zh-TW;q=0.6,zh-HK;q=0.4,en;q=0.2',
-        HttpHeaders.cookieHeader: 'kira=4',
+        if (!anonymous) HttpHeaders.cookieHeader: 'kira=4',
         if (accessToken != null)
           HttpHeaders.authorizationHeader: 'Bearer $accessToken',
       });
     if (body != null) request.body = jsonEncode(body);
-    final streamed = await _client
-        .send(request)
-        .timeout(const Duration(seconds: 20));
-    return http.Response.fromStream(
-      streamed,
-    ).timeout(const Duration(seconds: 20));
+    final watch = Stopwatch()..start();
+    try {
+      final streamed = await (transport ?? _client)
+          .send(request)
+          .timeout(timeout);
+      NetworkTiming.record('headers', watch);
+      final response = await http.Response.fromStream(
+        streamed,
+      ).timeout(budget?.remaining ?? const Duration(seconds: 20));
+      NetworkTiming.record('response', watch);
+      return response;
+    } finally {
+      timer.cancel();
+      if (!abort.isCompleted) abort.complete();
+      _activeAborts.remove(abort);
+    }
   }
 
   void close() {
     if (_closed) return;
     _closed = true;
+    for (final abort in _activeAborts) {
+      if (!abort.isCompleted) abort.complete();
+    }
     _authService?.removeListener(_onAuthChanged);
     clearCache();
     _sessionChanges.dispose();
     if (_closeClient) _client.close();
   }
+}
+
+class _ReadBudget {
+  _ReadBudget(this.duration);
+  final Duration duration;
+  final Stopwatch watch = Stopwatch()..start();
+  Duration get remaining {
+    final value = duration - watch.elapsed;
+    if (value <= Duration.zero) {
+      throw TimeoutException('Read deadline exceeded');
+    }
+    return value;
+  }
+
+  Future<T> wait<T>(Future<T> future) => future.timeout(remaining);
 }
 
 class ApiException implements Exception {

@@ -137,6 +137,7 @@ class CookieSessionClient extends http.BaseClient {
 
   final http.Client _inner;
   final PersistentCookieStore _cookies;
+  http.Client get anonymousTransport => _inner;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {

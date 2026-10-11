@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../app/app_motion.dart';
 
 class ContentFrame extends StatelessWidget {
   const ContentFrame({super.key, required this.child, this.maxWidth = 1320});
@@ -100,15 +101,18 @@ class _HoverLiftState extends State<HoverLift> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedSlide(
-        offset: _hovered ? const Offset(0, -0.018) : Offset.zero,
-        duration: const Duration(milliseconds: 170),
+        offset:
+            _hovered && !AppMotionPolicy.reduce(context)
+                ? const Offset(0, -0.012)
+                : Offset.zero,
+        duration: AppMotionPolicy.duration(context, 150),
         curve: Curves.easeOutCubic,
         child: AnimatedScale(
-          scale: _hovered ? 1.012 : 1,
-          duration: const Duration(milliseconds: 170),
+          scale: 1,
+          duration: AppMotionPolicy.duration(context, 150),
           curve: Curves.easeOutCubic,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 170),
+            duration: AppMotionPolicy.duration(context, 150),
             decoration: BoxDecoration(
               boxShadow:
                   _hovered

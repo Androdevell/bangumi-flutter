@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/app_strings.dart';
+import '../../core/localization/app_localizations.dart';
+import 'discover_controller.dart';
 import '../../core/models.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
@@ -21,38 +22,44 @@ class DiscoverPage extends StatefulWidget {
 class _DiscoverPageState extends State<DiscoverPage> {
   bool _grid = true;
   int _selectedDay = DateTime.now().weekday - 1;
-  late Future<Map<String, List<Subject>>> _calendar =
-      widget.repository.fetchCalendar();
+  late final DiscoverController _controller = DiscoverController(
+    widget.repository,
+  );
+  @override
+  void initState() {
+    super.initState();
+    _controller.dispatch(LoadDiscover());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   static const _apiDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _dayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
   Future<void> _refresh() async {
-    invalidateRepositoryCache(widget.repository);
-    final future = widget.repository.fetchCalendar();
-    setState(() {
-      _calendar = future;
-    });
-    try {
-      await future;
-    } on Object catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
+    await _controller.refresh();
   }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
+    final strings = AppLocalizations.of(context);
+    final days = switch (strings.locale.languageCode) {
+      'en' => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      'ja' => const ['月曜', '火曜', '水曜', '木曜', '金曜', '土曜', '日曜'],
+      _ => _dayLabels,
+    };
     return SafeArea(
       child: ContentFrame(
-        child: FutureBuilder<Map<String, List<Subject>>>(
-          future: _calendar,
-          builder: (context, snapshot) {
-            final calendar = snapshot.data;
+        child: ListenableBuilder(
+          listenable: _controller,
+          builder: (context, _) {
+            final state = _controller.state;
+            final calendar = state.calendar;
             final subjects =
                 calendar == null
                     ? const <Subject>[]
@@ -67,12 +74,13 @@ class _DiscoverPageState extends State<DiscoverPage> {
                     padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
                     sliver: SliverToBoxAdapter(
                       child: PageHeader(
-                        title: AppStrings.discover,
-                        subtitle:
-                            '${now.year} 年 ${now.month} 月 ${now.day} 日 · ${_dayLabels[now.weekday - 1]}',
+                        title: strings.t('discover'),
+                        subtitle: MaterialLocalizations.of(
+                          context,
+                        ).formatFullDate(now),
                         actions: [
                           IconButton.filledTonal(
-                            tooltip: '刷新',
+                            tooltip: strings.t('refresh'),
                             onPressed: _refresh,
                             icon: const Icon(Icons.refresh_rounded),
                           ),
@@ -92,8 +100,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
                                 repository: widget.repository,
                               ),
                             ),
-                        decoration: const InputDecoration(
-                          hintText: AppStrings.searchHint,
+                        decoration: InputDecoration(
+                          hintText: strings.t('searchHint'),
                           prefixIcon: Icon(Icons.search_rounded),
                         ),
                       ),
@@ -103,8 +111,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
                     padding: const EdgeInsets.fromLTRB(24, 18, 16, 4),
                     sliver: SliverToBoxAdapter(
                       child: SectionHeader(
-                        title: AppStrings.today,
-                        actionLabel: _grid ? '列表' : '网格',
+                        title: strings.t('todayBroadcast'),
+                        actionLabel: strings.t(_grid ? 'listView' : 'gridView'),
                         onAction: () => setState(() => _grid = !_grid),
                       ),
                     ),
@@ -126,8 +134,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
                                 child: ChoiceChip(
                                   label: Text(
                                     index == now.weekday - 1
-                                        ? '今天'
-                                        : _dayLabels[index],
+                                        ? strings.t('today')
+                                        : days[index],
                                   ),
                                   selected: _selectedDay == index,
                                   onSelected:
@@ -140,19 +148,54 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       ),
                     ),
                   ),
-                  if (snapshot.connectionState != ConnectionState.done &&
-                      calendar == null)
-                    const SliverFillRemaining(child: LoadingView())
-                  else if (snapshot.hasError && calendar == null)
+                  if (state.cached)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 8,
+                      ),
+                      sliver: SliverToBoxAdapter(
+                        child: Text(
+                          '${strings.t('usingCachedCalendar')} · ${strings.t('lastUpdated')} ${state.updatedAt?.toLocal().toString().substring(0, 16) ?? ''}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ),
+                  if (state.loading && calendar != null)
+                    const SliverToBoxAdapter(child: LinearProgressIndicator()),
+                  if (state.error != null && calendar != null)
+                    SliverToBoxAdapter(
+                      child: TextButton.icon(
+                        onPressed: _refresh,
+                        icon: const Icon(Icons.refresh),
+                        label: Text('${strings.t('retry')} · ${state.error}'),
+                      ),
+                    ),
+                  if (state.loading && calendar == null)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      sliver: SliverGrid.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 220,
+                              mainAxisSpacing: 14,
+                              crossAxisSpacing: 14,
+                              childAspectRatio: .60,
+                            ),
+                        itemCount: 8,
+                        itemBuilder: (_, __) => const _CalendarSkeleton(),
+                      ),
+                    )
+                  else if (state.error != null && calendar == null)
                     SliverFillRemaining(
                       child: NetworkErrorView(
-                        error: snapshot.error!,
+                        error: state.error!,
                         onRetry: _refresh,
                       ),
                     )
                   else if (subjects.isEmpty)
-                    const SliverFillRemaining(
-                      child: EmptyView(message: '这一天暂无放送条目'),
+                    SliverFillRemaining(
+                      child: EmptyView(message: strings.t('calendarEmpty')),
                     )
                   else if (_grid)
                     SliverPadding(
@@ -163,7 +206,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                               maxCrossAxisExtent: 220,
                               mainAxisSpacing: 14,
                               crossAxisSpacing: 14,
-                              childAspectRatio: 0.67,
+                              childAspectRatio: 0.60,
                             ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) => SubjectCard(
@@ -212,6 +255,50 @@ class _DiscoverPageState extends State<DiscoverPage> {
     final values = calendar.values.toList();
     return _selectedDay < values.length ? values[_selectedDay] : const [];
   }
+}
+
+class _CalendarSkeleton extends StatelessWidget {
+  const _CalendarSkeleton();
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ColoredBox(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 12,
+                  width: 60,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _SubjectLine extends StatelessWidget {

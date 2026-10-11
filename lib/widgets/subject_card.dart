@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../core/network/app_image_cache.dart';
 import 'common.dart';
+import '../app/app_motion.dart';
+import '../core/localization/app_localizations.dart';
 
 class SubjectCard extends StatelessWidget {
   const SubjectCard({
@@ -47,11 +49,18 @@ class SubjectCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      subject.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
+                    Tooltip(
+                      message: subject.title,
+                      child: SizedBox(
+                        height:
+                            MediaQuery.textScalerOf(context).scale(16) * 2.7,
+                        child: Text(
+                          subject.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 5),
                     Row(
@@ -62,17 +71,30 @@ class SubjectCard extends StatelessWidget {
                           color: Colors.amber.shade700,
                         ),
                         const SizedBox(width: 3),
-                        Text(subject.score.toStringAsFixed(1)),
+                        Text(
+                          subject.score > 0
+                              ? subject.score.toStringAsFixed(1)
+                              : '—',
+                        ),
                         const Spacer(),
                         Flexible(
                           child: Text(
-                            subject.subtitle,
+                            subject.episodes > 0
+                                ? '${subject.episodes} EP'
+                                : '',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subject.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
@@ -85,30 +107,63 @@ class SubjectCard extends StatelessWidget {
   }
 }
 
-class PosterArt extends StatelessWidget {
+class PosterArt extends StatefulWidget {
   const PosterArt({super.key, required this.subject, this.cacheWidth});
 
   final Subject subject;
   final int? cacheWidth;
 
   @override
+  State<PosterArt> createState() => _PosterArtState();
+}
+
+class _PosterArtState extends State<PosterArt> {
+  int _revision = 0;
+
+  @override
   Widget build(BuildContext context) {
+    final subject = widget.subject;
+    final cacheWidth = widget.cacheWidth;
     if (subject.imageUrl.isNotEmpty) {
       return Stack(
         fit: StackFit.expand,
         children: [
           CachedNetworkImage(
+            key: ValueKey(_revision),
             imageUrl: subject.imageUrl,
             cacheManager: AppImageCache.manager,
             fit: BoxFit.cover,
             memCacheWidth: cacheWidth,
-            maxWidthDiskCache: cacheWidth == null ? null : cacheWidth! * 2,
-            fadeInDuration: Duration.zero,
+            maxWidthDiskCache: cacheWidth == null ? null : cacheWidth * 2,
+            fadeInDuration: AppMotionPolicy.duration(context, 100),
             fadeOutDuration: Duration.zero,
             placeholderFadeInDuration: Duration.zero,
             useOldImageOnUrlChange: true,
             placeholder: (_, __) => _PosterFallback(subject: subject),
-            errorWidget: (_, __, ___) => _PosterFallback(subject: subject),
+            errorWidget:
+                (_, __, ___) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _PosterFallback(subject: subject),
+                    Center(
+                      child: IconButton.filledTonal(
+                        tooltip:
+                            Localizations.of<AppLocalizations>(
+                              context,
+                              AppLocalizations,
+                            )?.t('posterFailed') ??
+                            'Retry cover',
+                        onPressed: () async {
+                          await AppImageCache.manager.removeFile(
+                            subject.imageUrl,
+                          );
+                          if (mounted) setState(() => _revision++);
+                        },
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ),
+                  ],
+                ),
           ),
           if (subject.hasProgress) _ProgressBadge(subject: subject),
         ],

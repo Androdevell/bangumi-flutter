@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/lazy_tab_view.dart';
 import '../../domain/models/collection_models.dart';
 import '../../core/localization/app_localizations.dart';
 
@@ -90,7 +91,11 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
   }
 
   Future<SubjectDetailData> _load() =>
-      widget.repository.fetchSubjectDetails(widget.subject.id);
+      widget.repository is DetailSectionsRepository
+          ? (widget.repository as DetailSectionsRepository).fetchSubjectBase(
+            widget.subject.id,
+          )
+          : widget.repository.fetchSubjectDetails(widget.subject.id);
 
   void _retry() {
     invalidateRepositoryCache(widget.repository);
@@ -99,9 +104,21 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     });
   }
 
-  Widget _section(SubjectDetailData details, String key, Widget child) =>
-      details.sectionErrors[key] == null
-          ? child
+  Widget _section(
+    SubjectDetailData details,
+    String key,
+    Widget Function(SubjectDetailData) builder,
+  ) =>
+      widget.repository is DetailSectionsRepository
+          ? SectionLoader<SubjectDetailData>(
+            key: ValueKey('$key-${identityHashCode(_details)}'),
+            load:
+                () => (widget.repository as DetailSectionsRepository)
+                    .fetchSubjectSection(widget.subject.id, key),
+            builder: builder,
+          )
+          : details.sectionErrors[key] == null
+          ? builder(details)
           : NetworkErrorView(
             error: details.sectionErrors[key]!,
             onRetry: _retry,
@@ -415,82 +432,83 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                               )
                               : details == null
                               ? const LoadingView(label: '正在加载条目资料…')
-                              : TabBarView(
-                                children: [
-                                  _SummarySection(details: details),
-                                  _section(
+                              : LazyTabView(
+                                key: ValueKey(identityHashCode(_details)),
+                                builders: [
+                                  () => _SummarySection(details: details),
+                                  () => _section(
                                     details,
                                     'episodes',
-                                    _EpisodeSection(
-                                      items: details.episodes,
+                                    (value) => _EpisodeSection(
+                                      items: value.episodes,
                                       repository: widget.repository,
                                     ),
                                   ),
-                                  SubjectPreviewPanel(
+                                  () => SubjectPreviewPanel(
                                     subject: subject,
                                     service: previewServiceFor(
                                       widget.repository,
                                     ),
                                   ),
-                                  _section(
+                                  () => _section(
                                     details,
                                     'comments',
-                                    _CommentSection(
-                                      items: details.comments,
+                                    (value) => _CommentSection(
+                                      items: value.comments,
                                       repository: widget.repository,
                                       onUserTap: _openUser,
                                     ),
                                   ),
-                                  _section(
+                                  () => _section(
                                     details,
                                     'characters',
-                                    _CharacterSection(
-                                      items: details.characters,
+                                    (value) => _CharacterSection(
+                                      items: value.characters,
                                       repository: widget.repository,
                                     ),
                                   ),
-                                  _section(
+                                  () => _section(
                                     details,
                                     'staffs',
-                                    _StaffSection(
-                                      items: details.staffs,
+                                    (value) => _StaffSection(
+                                      items: value.staffs,
                                       repository: widget.repository,
                                     ),
                                   ),
-                                  _section(
+                                  () => _section(
                                     details,
                                     'relations',
-                                    _RelationSection(
-                                      items: details.relations,
+                                    (value) => _RelationSection(
+                                      items: value.relations,
                                       repository: widget.repository,
                                       parentSubjectId: subject.id,
                                     ),
                                   ),
-                                  _section(
+                                  () => _section(
                                     details,
                                     'indexes',
-                                    _IndexSection(
-                                      items: details.indexes,
+                                    (value) => _IndexSection(
+                                      items: value.indexes,
                                       onUserTap: _openUser,
                                     ),
                                   ),
-                                  _section(
+                                  () => _section(
                                     details,
                                     'reviews',
-                                    _ReviewSection(
-                                      items: details.reviews,
+                                    (value) => _ReviewSection(
+                                      items: value.reviews,
                                       onUserTap: _openUser,
                                     ),
                                   ),
-                                  _section(
+                                  () => _section(
                                     details,
                                     'topics',
-                                    _TopicSection(
-                                      items: details.topics,
+                                    (value) => _TopicSection(
+                                      items: value.topics,
                                       onUserTap: _openUser,
                                     ),
                                   ),
-                                  _InsightSection(details: details),
+                                  () => _InsightSection(details: details),
                                 ],
                               ),
                     ),

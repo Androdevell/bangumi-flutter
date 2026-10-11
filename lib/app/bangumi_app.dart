@@ -10,6 +10,7 @@ import '../core/settings/app_preferences.dart';
 import '../data/bangumi_repository.dart';
 import '../features/shell/app_shell.dart';
 import 'app_theme.dart';
+import 'app_motion.dart';
 import 'bootstrap/app_dependencies.dart';
 
 class BangumiApp extends StatefulWidget {
@@ -21,6 +22,7 @@ class BangumiApp extends StatefulWidget {
     this.preferences,
     this.initialLocale = const Locale('zh'),
     this.initialAppIconStyle = AppIconStyle.classic,
+    this.initialReduceMotion = false,
   });
 
   final BangumiRepository? repository;
@@ -29,6 +31,7 @@ class BangumiApp extends StatefulWidget {
   final AppPreferences? preferences;
   final Locale initialLocale;
   final AppIconStyle initialAppIconStyle;
+  final bool initialReduceMotion;
 
   @override
   State<BangumiApp> createState() => _BangumiAppState();
@@ -38,6 +41,7 @@ class _BangumiAppState extends State<BangumiApp> {
   ThemeMode _themeMode = ThemeMode.system;
   late Locale _locale = widget.initialLocale;
   late AppIconStyle _appIconStyle = widget.initialAppIconStyle;
+  late bool _reduceMotion = widget.initialReduceMotion;
   late final BangumiRepository _repository =
       widget.repository ?? RemoteBangumiRepository();
 
@@ -81,6 +85,11 @@ class _BangumiAppState extends State<BangumiApp> {
     await AppIconService.apply(style);
   }
 
+  Future<void> _setReduceMotion(bool value) async {
+    setState(() => _reduceMotion = value);
+    await widget.preferences?.setReduceMotion(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -97,15 +106,28 @@ class _BangumiAppState extends State<BangumiApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      themeAnimationDuration: const Duration(milliseconds: 350),
+      themeAnimationDuration:
+          _reduceMotion || MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 200),
       themeAnimationCurve: Curves.easeOutCubic,
       builder: (context, child) {
-        if (!RefreshRateProbe.enabled) return child ?? const SizedBox.shrink();
-        return Stack(
-          children: [
-            child ?? const SizedBox.shrink(),
-            const RefreshRateProbe(),
-          ],
+        final content =
+            RefreshRateProbe.enabled
+                ? Stack(
+                  children: [
+                    child ?? const SizedBox.shrink(),
+                    const RefreshRateProbe(),
+                  ],
+                )
+                : child ?? const SizedBox.shrink();
+        return AppMotionPolicy(
+          reduced: _reduceMotion,
+          child: HeroMode(
+            enabled:
+                !_reduceMotion && !MediaQuery.of(context).disableAnimations,
+            child: content,
+          ),
         );
       },
       home: AppShell(
@@ -117,6 +139,8 @@ class _BangumiAppState extends State<BangumiApp> {
         onLocaleChanged: _setLocale,
         appIconStyle: _appIconStyle,
         onAppIconStyleChanged: _setAppIconStyle,
+        reduceMotion: _reduceMotion,
+        onReduceMotionChanged: _setReduceMotion,
       ),
     );
   }

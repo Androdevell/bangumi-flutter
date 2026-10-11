@@ -209,7 +209,7 @@ class _BrowsePageState extends State<BrowsePage> {
                                 maxCrossAxisExtent: 220,
                                 mainAxisSpacing: 14,
                                 crossAxisSpacing: 14,
-                                childAspectRatio: 0.67,
+                                childAspectRatio: 0.60,
                               ),
                           delegate: SliverChildBuilderDelegate(
                             (context, index) => SubjectCard(

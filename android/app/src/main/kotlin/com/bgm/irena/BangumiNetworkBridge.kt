@@ -26,6 +26,8 @@ import java.net.SocketAddress
 import java.nio.ByteBuffer
 import java.security.KeyStore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
+import okhttp3.EventListener
 import javax.net.SocketFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
@@ -36,6 +38,7 @@ class BangumiNetworkBridge(
     private val activity: Activity,
 ) : MethodChannel.MethodCallHandler {
     private val client = createBangumiNetworkClient()
+    private val requests = ConcurrentHashMap<String, Call>()
     private val imageClient = client.newBuilder()
         .dispatcher(Dispatcher().apply { maxRequests = 3; maxRequestsPerHost = 3 })
         .callTimeout(40, TimeUnit.SECONDS)
@@ -43,6 +46,12 @@ class BangumiNetworkBridge(
         .build()
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (call.method == "cancelRequest") {
+            val id = (call.arguments as? Map<*, *>)?.get("requestId") as? String
+            if (id != null) requests.remove(id)?.cancel()
+            result.success(null)
+            return
+        }
         if (call.method != "request" && call.method != "downloadImage") {
             result.notImplemented()
             return
@@ -93,8 +102,12 @@ class BangumiNetworkBridge(
                 .build()
         }
 
-        requestClient.newCall(request).enqueue(object : Callback {
+        val requestId = arguments["requestId"] as? String
+        val networkCall = requestClient.newCall(request)
+        if (requestId != null) requests[requestId] = networkCall
+        networkCall.enqueue(object : Callback {
             override fun onFailure(call: Call, error: IOException) {
+                if (requestId != null) requests.remove(requestId, call)
                 Log.w("BangumiNetwork", "Request failed: host=${request.url.host}, type=${error.javaClass.simpleName}")
                 activity.runOnUiThread {
                     result.error("network_error", error.message ?: "Network request failed", null)
@@ -134,6 +147,8 @@ class BangumiNetworkBridge(
                 }
                 } catch (error: Exception) {
                     activity.runOnUiThread { result.error("network_error", "读取网络响应失败：${error.javaClass.simpleName}", null) }
+                } finally {
+                    if (requestId != null) requests.remove(requestId, call)
                 }
             }
         })
@@ -198,6 +213,7 @@ internal fun createBangumiNetworkClient(): OkHttpClient {
     )
     val fragmentationPolicy = DomainTlsFragmentationPolicy(hosts)
     return OkHttpClient.Builder()
+        .eventListenerFactory { NativeNetworkTiming() }
         .dns(BangumiDns())
         .retryOnConnectionFailure(true)
         .socketFactory(AntiSniSocketFactory(fragmentationPolicy))
@@ -207,6 +223,23 @@ internal fun createBangumiNetworkClient(): OkHttpClient {
         .writeTimeout(20, TimeUnit.SECONDS)
         .callTimeout(20, TimeUnit.SECONDS)
         .build()
+}
+
+/**
+ * 显式启用 BangumiPerf 日志后的分阶段计时；不记录域名、URL、正文或账号数据。
+ */
+private class NativeNetworkTiming : EventListener() {
+    private val start = System.nanoTime()
+    private fun record(phase: String) {
+        if (Log.isLoggable("BangumiPerf", Log.DEBUG)) Log.d("BangumiPerf", "phase=$phase elapsedMs=${(System.nanoTime() - start) / 1_000_000}")
+    }
+    override fun dnsStart(call: Call, domainName: String) = record("dns-start")
+    override fun dnsEnd(call: Call, domainName: String, inetAddressList: List<InetAddress>) = record("dns-end")
+    override fun secureConnectStart(call: Call) = record("tls-start")
+    override fun secureConnectEnd(call: Call, handshake: okhttp3.Handshake?) = record("tls-end")
+    override fun responseHeadersEnd(call: Call, response: Response) = record("headers")
+    override fun callEnd(call: Call) = record("complete")
+    override fun callFailed(call: Call, ioe: IOException) = record("failed")
 }
 
 private fun interface TlsFragmentationPolicy {

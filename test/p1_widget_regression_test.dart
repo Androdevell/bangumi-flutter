@@ -92,13 +92,21 @@ void main() {
         );
         await tester.pumpWidget(BangumiApp(repository: repo));
         await tester.pumpAndSettle();
-        final before = tester.state(
-          find.byType(BrowsePage, skipOffstage: false),
-        );
+        expect(find.byType(BrowsePage, skipOffstage: false), findsNothing);
+        expect(browseRequests, 0);
         final nav =
             width < 760
                 ? find.byType(NavigationBar)
                 : find.byType(NavigationRail);
+        await tester.tap(
+          find.descendant(of: nav, matching: find.text('浏览')).last,
+        );
+        await tester.pumpAndSettle();
+        final before = tester.state(
+          find.byType(BrowsePage, skipOffstage: false),
+        );
+        await Navigator.of(tester.element(find.byType(AppShell))).maybePop();
+        await tester.pumpAndSettle();
         for (final label in ['浏览', '超展开', '我的']) {
           await tester.tap(
             find.descendant(of: nav, matching: find.text(label)).last,
@@ -148,6 +156,13 @@ void main() {
     final repo = RemoteBangumiRepository(apiClient: api);
     await tester.pumpWidget(BangumiApp(repository: repo, authService: auth));
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationRail),
+        matching: find.byIcon(Icons.view_timeline_outlined),
+      ),
+    );
+    await tester.pumpAndSettle();
     Finder filter() => find.descendant(
       of: find.byType(TimelinePage, skipOffstage: false),
       matching: find.byWidgetPredicate(
@@ -166,13 +181,6 @@ void main() {
       tester.widget<SegmentedButton<int>>(filter()).segments[1].enabled,
       true,
     );
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationRail),
-        matching: find.byIcon(Icons.view_timeline_outlined),
-      ),
-    );
-    await tester.pumpAndSettle();
     await tester.tap(find.text('好友'));
     await tester.pumpAndSettle();
     expect(tester.widget<SegmentedButton<int>>(filter()).selected, {1});

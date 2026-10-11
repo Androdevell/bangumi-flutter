@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_motion.dart';
 
 abstract final class AppTheme {
   static const _brand = Color(0xFFE85D87);
@@ -145,13 +146,34 @@ abstract final class AppTheme {
       ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.android: _MotionPageTransition(),
+          TargetPlatform.windows: _MotionPageTransition(),
+          TargetPlatform.linux: _MotionPageTransition(),
           TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         },
       ),
     );
   }
+}
+
+class _MotionPageTransition extends PageTransitionsBuilder {
+  const _MotionPageTransition();
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) =>
+      AppMotionPolicy.reduce(context)
+          ? child
+          : const FadeUpwardsPageTransitionsBuilder().buildTransitions(
+            route,
+            context,
+            animation,
+            secondaryAnimation,
+            child,
+          );
 }

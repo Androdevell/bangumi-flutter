@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/models.dart';
+import '../core/cache/calendar_snapshot.dart';
 import '../core/paged.dart';
 import '../core/community_models.dart';
 import '../core/network/api_client.dart';
@@ -96,6 +97,18 @@ abstract interface class CollectionFeatureRepository {
   CollectionSaveUseCase get saveCollection;
 }
 
+abstract interface class DetailSectionsRepository {
+  Future<SubjectDetailData> fetchSubjectBase(int id);
+  Future<SubjectDetailData> fetchSubjectSection(int id, String section);
+  Future<UserProfileData> fetchUserBase(String username);
+  Future<UserProfileData> fetchUserSection(String username, String section);
+}
+
+abstract interface class CalendarSnapshotRepository {
+  Future<ComposeCalendarSnapshot?> readCalendarSnapshot();
+  Future<Map<String, List<Subject>>> refreshCalendar();
+}
+
 Future<CommunityUser> fetchUserSummary(
   BangumiRepository repository,
   String username, {
@@ -168,11 +181,14 @@ class RemoteBangumiRepository
         BangumiRepository,
         SubjectPagingRepository,
         CollectionFeatureRepository,
+        DetailSectionsRepository,
+        CalendarSnapshotRepository,
         SubjectPreviewRepository,
         RefreshableRepository {
   RemoteBangumiRepository({
     ApiClient? apiClient,
     ThirdPartyPreviewService? previewService,
+    this.calendarStore,
   }) : _api = apiClient ?? ApiClient(),
        previewService = previewService ?? ThirdPartyPreviewService() {
     collections = RemoteCollectionRepository(_api);
@@ -188,6 +204,7 @@ class RemoteBangumiRepository
   final ThirdPartyPreviewService previewService;
 
   final ApiClient _api;
+  final CalendarSnapshotStore? calendarStore;
   final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
   @override
   late final RemoteCollectionRepository collections;
@@ -223,7 +240,15 @@ class RemoteBangumiRepository
 
   @override
   Future<Map<String, List<Subject>>> fetchCalendar() async {
-    final json = await _api.get('p1/calendar');
+    final json = await _api.publicCalendar();
+    final result = _parseCalendar(json);
+    if (calendarStore != null) {
+      unawaited(calendarStore!.write(json as Map).catchError((Object _) {}));
+    }
+    return result;
+  }
+
+  Map<String, List<Subject>> _parseCalendar(dynamic json) {
     if (json is! Map) throw const ApiException('每日放送数据格式不正确');
     return json.map((key, value) {
       final items = value is List ? value : const [];
@@ -232,6 +257,204 @@ class RemoteBangumiRepository
         items.map(_subjectFromWrapper).where((item) => item.id > 0).toList(),
       );
     });
+  }
+
+  @override
+  Future<ComposeCalendarSnapshot?> readCalendarSnapshot() async {
+    final stored = await calendarStore?.read();
+    if (stored == null) return null;
+    try {
+      return ComposeCalendarSnapshot(_parseCalendar(stored.data), stored.at);
+    } on Object {
+      return null;
+    }
+  }
+
+  @override
+  Future<Map<String, List<Subject>>> refreshCalendar() async {
+    _api.invalidateResources({'p1/calendar'});
+    return fetchCalendar();
+  }
+
+  @override
+  Future<SubjectDetailData> fetchSubjectBase(int id) async =>
+      SubjectDetailData.fromSubjectJson(
+        json: await _fetchSubjectJson(id),
+        episodes: const [],
+        previews: const [],
+        comments: const [],
+        characters: const [],
+        staffs: const [],
+        relations: const [],
+        indexes: const [],
+        reviews: const [],
+        topics: const [],
+      );
+
+  @override
+  Future<SubjectDetailData> fetchSubjectSection(int id, String section) async {
+    final json = await _fetchSubjectJson(id);
+    return SubjectDetailData.fromSubjectJson(
+      json: json,
+      episodes:
+          section == 'episodes'
+              ? await _fetchItems(
+                'p1/subjects/$id/episodes',
+                SubjectEpisode.fromJson,
+                100,
+              )
+              : const [],
+      previews: const [],
+      comments:
+          section == 'comments'
+              ? await _fetchItems(
+                'p1/subjects/$id/comments',
+                SubjectComment.fromJson,
+                40,
+              )
+              : const [],
+      characters:
+          section == 'characters'
+              ? await _fetchItems(
+                'p1/subjects/$id/characters',
+                SubjectCharacter.fromJson,
+                100,
+              )
+              : const [],
+      staffs:
+          section == 'staffs'
+              ? await _fetchItems(
+                'p1/subjects/$id/staffs/persons',
+                SubjectStaff.fromJson,
+                100,
+              )
+              : const [],
+      relations:
+          section == 'relations'
+              ? await _fetchItems(
+                'p1/subjects/$id/relations',
+                SubjectRelation.fromJson,
+                100,
+              )
+              : const [],
+      indexes:
+          section == 'indexes'
+              ? await _fetchItems(
+                'p1/subjects/$id/indexes',
+                SubjectIndex.fromJson,
+                40,
+              )
+              : const [],
+      reviews:
+          section == 'reviews'
+              ? await _fetchItems(
+                'p1/subjects/$id/reviews',
+                SubjectReview.fromJson,
+                20,
+              )
+              : const [],
+      topics:
+          section == 'topics'
+              ? await _fetchItems(
+                'p1/subjects/$id/topics',
+                SubjectTopic.fromJson,
+                40,
+              )
+              : const [],
+    );
+  }
+
+  @override
+  Future<UserProfileData> fetchUserBase(String username) async =>
+      UserProfileData(
+        user: await users.fetchUser(username),
+        timeline: const [],
+        collections: const [],
+        characters: const [],
+        persons: const [],
+        blogs: const [],
+        indexes: const [],
+        friends: const [],
+      );
+
+  @override
+  Future<UserProfileData> fetchUserSection(
+    String username,
+    String section,
+  ) async {
+    final base = await fetchUserBase(username);
+    final path = 'p1/users/${Uri.encodeComponent(username)}';
+    final recent = section == 'recent';
+    return UserProfileData(
+      user: base.user,
+      timeline:
+          section == 'timeline' || recent
+              ? _items(
+                    await _api.get(
+                      '$path/timeline',
+                      query: {'limit': recent ? '6' : '20'},
+                    ),
+                  )
+                  .map(
+                    (item) => TimelineEntry.fromJson({
+                      ...item,
+                      if (item['user'] == null)
+                        'user': {
+                          'id': base.user.id,
+                          'username': username,
+                          'nickname': base.user.nickname,
+                          'avatar': base.user.avatarUrl,
+                        },
+                    }),
+                  )
+                  .toList()
+              : const [],
+      collections:
+          recent
+              ? _items(
+                await _api.get(
+                  '$path/collections/subjects',
+                  query: {'limit': '12'},
+                ),
+              ).map(UserContentItem.fromSubject).toList()
+              : const [],
+      characters:
+          section == 'people'
+              ? _items(
+                await _api.get(
+                  '$path/collections/characters',
+                  query: {'limit': '40'},
+                ),
+              ).map(UserContentItem.fromMono).toList()
+              : const [],
+      persons:
+          section == 'people'
+              ? _items(
+                await _api.get(
+                  '$path/collections/persons',
+                  query: {'limit': '40'},
+                ),
+              ).map(UserContentItem.fromMono).toList()
+              : const [],
+      blogs:
+          section == 'blogs'
+              ? _items(
+                await _api.get('$path/blogs', query: {'limit': '30'}),
+              ).map(UserContentItem.fromBlog).toList()
+              : const [],
+      indexes:
+          section == 'indexes'
+              ? _items(
+                await _api.get('$path/indexes', query: {'limit': '30'}),
+              ).map(UserContentItem.fromIndex).toList()
+              : const [],
+      friends:
+          section == 'friends'
+              ? _items(
+                await _api.get('$path/friends', query: {'limit': '50'}),
+              ).map(CommunityUser.fromJson).toList()
+              : const [],
+    );
   }
 
   @override

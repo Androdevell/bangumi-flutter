@@ -22,6 +22,8 @@ class AppShell extends StatefulWidget {
     required this.onLocaleChanged,
     required this.appIconStyle,
     required this.onAppIconStyleChanged,
+    this.reduceMotion = false,
+    this.onReduceMotionChanged,
   });
 
   final BangumiRepository repository;
@@ -32,6 +34,8 @@ class AppShell extends StatefulWidget {
   final ValueChanged<Locale> onLocaleChanged;
   final AppIconStyle appIconStyle;
   final ValueChanged<AppIconStyle> onAppIconStyleChanged;
+  final bool reduceMotion;
+  final ValueChanged<bool>? onReduceMotionChanged;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -40,11 +44,15 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
   int _sessionRevision = 0;
-  late List<Widget> _pages = _createPages();
+  final Set<int> _visited = {0};
+  String _authIdentity = '';
+  String get _identity =>
+      '${widget.authService?.sessionEpoch}:${widget.authService?.user?.id}:${widget.authService?.user?.username}';
 
   @override
   void initState() {
     super.initState();
+    _authIdentity = _identity;
     widget.authService?.addListener(_authChanged);
   }
 
@@ -54,15 +62,16 @@ class _AppShellState extends State<AppShell> {
     if (oldWidget.authService != widget.authService) {
       oldWidget.authService?.removeListener(_authChanged);
       widget.authService?.addListener(_authChanged);
+      _authChanged();
     }
-    _pages = _createPages();
   }
 
   void _authChanged() {
+    if (_identity == _authIdentity) return;
+    _authIdentity = _identity;
     invalidateRepositoryCache(widget.repository);
     setState(() {
       _sessionRevision++;
-      _pages = _createPages();
     });
   }
 
@@ -92,6 +101,8 @@ class _AppShellState extends State<AppShell> {
       onLocaleChanged: widget.onLocaleChanged,
       appIconStyle: widget.appIconStyle,
       onAppIconStyleChanged: widget.onAppIconStyleChanged,
+      reduceMotion: widget.reduceMotion,
+      onReduceMotionChanged: widget.onReduceMotionChanged,
     ),
   ];
 
@@ -128,7 +139,10 @@ class _AppShellState extends State<AppShell> {
 
   void _select(int index) {
     if (index == _selectedIndex) return;
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      _visited.add(index);
+    });
   }
 
   @override
@@ -144,7 +158,20 @@ class _AppShellState extends State<AppShell> {
         builder: (context, constraints) {
           final showRail = constraints.maxWidth >= 760;
           final extendRail = constraints.maxWidth >= 1180;
-          final content = IndexedStack(index: _selectedIndex, children: _pages);
+          final pages = _createPages();
+          final content = IndexedStack(
+            index: _selectedIndex,
+            children: [
+              for (var index = 0; index < pages.length; index++)
+                TickerMode(
+                  enabled: index == _selectedIndex,
+                  child:
+                      _visited.contains(index)
+                          ? pages[index]
+                          : const SizedBox.shrink(),
+                ),
+            ],
+          );
 
           if (!showRail) {
             return Scaffold(

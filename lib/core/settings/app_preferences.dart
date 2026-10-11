@@ -10,11 +10,13 @@ class AppPreferenceSnapshot {
     required this.locale,
     required this.iconStyle,
     this.thirdPartyPreviews = false,
+    this.reduceMotion = false,
   });
 
   final Locale locale;
   final AppIconStyle iconStyle;
   final bool thirdPartyPreviews;
+  final bool reduceMotion;
 }
 
 class AppPreferences {
@@ -23,6 +25,7 @@ class AppPreferences {
   static const _localeKey = 'app.preference.locale';
   static const _iconKey = 'app.preference.icon';
   static const _previewsKey = 'app.preference.thirdPartyPreviews.v1';
+  static const _motionKey = 'app.preference.reduceMotion';
 
   final SecureVault _vault;
 
@@ -31,6 +34,7 @@ class AppPreferences {
       _vault.read(_localeKey),
       _vault.read(_iconKey),
       _vault.read(_previewsKey),
+      _vault.read(_motionKey),
     ]);
     final localeCode = switch (values[0]) {
       'en' => 'en',
@@ -45,6 +49,7 @@ class AppPreferences {
       locale: Locale(localeCode),
       iconStyle: iconStyle,
       thirdPartyPreviews: values[2] == 'true',
+      reduceMotion: values[3] == 'true',
     );
   }
 
@@ -56,4 +61,6 @@ class AppPreferences {
 
   Future<void> setThirdPartyPreviews(bool enabled) =>
       _vault.write(_previewsKey, '$enabled');
+  Future<void> setReduceMotion(bool enabled) =>
+      _vault.write(_motionKey, '$enabled');
 }

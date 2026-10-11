@@ -1,18 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:html/parser.dart' as html;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/network/app_image_cache.dart';
-
-final _richTokenPattern = RegExp(
-  r'(\((?:bgm(?:\d+|124_tv)|(?:musume|blake)_\d{2,3})\)|\[img(?:=\d+\s*,\s*\d+)?\]\s*((?:https?:)?//[^\[]+?)\s*\[/img\])',
-  caseSensitive: false,
-);
-
-final _bbCodePattern = RegExp(
-  r'\[/?(?:b|i|u|s|mask|size(?:=\d+)?|color(?:=[^\]]+)?|quote(?:=[^\]]+)?|url(?:=[^\]]+)?)\]',
-  caseSensitive: false,
-);
+import '../core/text/bbcode_document.dart';
+import '../core/localization/app_localizations.dart';
 
 String? bangumiEmojiUrl(String smileId) {
   final normalized = smileId.toLowerCase().replaceAll(
@@ -97,6 +89,8 @@ class BangumiRichText extends StatelessWidget {
     this.maxLines,
     this.overflow = TextOverflow.clip,
     this.selectable = true,
+    this.originalColors = false,
+    this.nodes,
   });
 
   final String text;
@@ -104,78 +98,171 @@ class BangumiRichText extends StatelessWidget {
   final int? maxLines;
   final TextOverflow overflow;
   final bool selectable;
+  final bool originalColors;
+  final List<ComposeRichTextNode>? nodes;
 
   @override
   Widget build(BuildContext context) {
     final effectiveStyle = style ?? Theme.of(context).textTheme.bodyMedium;
-    final spans = <InlineSpan>[];
-    var cursor = 0;
-    for (final match in _richTokenPattern.allMatches(text)) {
-      if (match.start > cursor) {
-        spans.add(
-          TextSpan(text: _plainText(text.substring(cursor, match.start))),
-        );
-      }
-      final token = match.group(0)!;
-      if (token.startsWith('(')) {
-        final url = bangumiEmojiUrl(token.substring(1, token.length - 1));
-        if (url == null) {
-          spans.add(TextSpan(text: token));
-        } else {
-          spans.add(
-            WidgetSpan(
+    final document =
+        nodes == null
+            ? BangumiBbCode.parse(text)
+            : ComposeRichTextDocument(nodes!, false);
+    var images = 0;
+    List<InlineSpan> render(
+      List<ComposeRichTextNode> nodes,
+      TextStyle inherited,
+    ) =>
+        nodes.map<InlineSpan>((node) {
+          if (node.tag == 'text') {
+            return TextSpan(text: node.value, style: inherited);
+          }
+          if (node.tag == 'mask') {
+            return WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _Spoiler(
+                key: ValueKey(node),
+                children: node.children,
+                style: inherited,
+                originalColors: originalColors,
+              ),
+            );
+          }
+          if (node.tag == 'emoji') {
+            final url = bangumiEmojiUrl(
+              node.value.substring(1, node.value.length - 1),
+            );
+            if (url == null) return TextSpan(text: node.value);
+            final size =
+                node.value.toLowerCase().startsWith('(bgm') ? 24.0 : 55.0;
+            return WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: CachedNetworkImage(
+                imageUrl: url,
+                cacheManager: AppImageCache.manager,
+                width: size,
+                height: size,
+                memCacheWidth: (size * 3).round(),
+                fit: BoxFit.contain,
+                errorWidget: (_, __, ___) => Text(node.value),
+              ),
+            );
+          }
+          if (node.tag == 'img') {
+            final uri = BangumiBbCode.safeUrl(
+              BangumiBbCode.plain(node.children),
+            );
+            if (uri == null) return const TextSpan(text: '[img]');
+            if (++images > 20 ||
+                !{
+                  'lain.bgm.tv',
+                  'bgm.tv',
+                  'bangumi.tv',
+                  'chii.in',
+                }.contains(uri.host)) {
+              return WidgetSpan(
+                child: TextButton.icon(
+                  onPressed: () => _openLink(context, uri),
+                  icon: const Icon(Icons.image_outlined),
+                  label: Text(_label(context, 'externalImage')),
+                ),
+              );
+            }
+            return WidgetSpan(
               alignment: PlaceholderAlignment.middle,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: CachedNetworkImage(
-                  imageUrl: url,
-                  cacheManager: AppImageCache.manager,
-                  width: token.toLowerCase().startsWith('(bgm') ? 24 : 55,
-                  height: token.toLowerCase().startsWith('(bgm') ? 24 : 55,
-                  memCacheWidth:
-                      token.toLowerCase().startsWith('(bgm') ? 72 : 165,
-                  fit: BoxFit.contain,
-                  errorWidget: (_, __, ___) => Text(token),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 320,
+                    maxHeight: 240,
+                  ),
+                  child: _RichImage(uri: uri.replace(scheme: 'https')),
                 ),
               ),
-            ),
-          );
-        }
-      } else {
-        final imageUrl = _normalizeImageUrl(match.group(2)!);
-        spans.add(
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: 320,
-                  maxHeight: 240,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    cacheManager: AppImageCache.manager,
-                    fit: BoxFit.contain,
-                    errorWidget:
-                        (_, __, ___) => const Icon(Icons.broken_image_outlined),
+            );
+          }
+          if (node.tag == 'url') {
+            final uri = BangumiBbCode.safeUrl(
+              node.value.isEmpty
+                  ? BangumiBbCode.plain(node.children)
+                  : node.value,
+            );
+            if (uri != null) {
+              return WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: TextButton(
+                  onPressed: () => _openLink(context, uri),
+                  child: Text(
+                    BangumiBbCode.plain(node.children),
+                    style: inherited.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ),
-        );
-      }
-      cursor = match.end;
-    }
-    if (cursor < text.length) {
-      spans.add(TextSpan(text: _plainText(text.substring(cursor))));
-    }
-
+              );
+            }
+          }
+          var next = inherited;
+          if (node.tag == 'b') {
+            next = next.copyWith(fontWeight: FontWeight.bold);
+          }
+          if (node.tag == 'i') {
+            next = next.copyWith(fontStyle: FontStyle.italic);
+          }
+          if (node.tag == 'u' || node.tag == 's') {
+            next = next.copyWith(
+              decoration: TextDecoration.combine([
+                if (next.decoration != null) next.decoration!,
+                node.tag == 'u'
+                    ? TextDecoration.underline
+                    : TextDecoration.lineThrough,
+              ]),
+            );
+          }
+          if (node.tag == 'size') {
+            final size = double.tryParse(node.value);
+            if (size != null && size.isFinite) {
+              next = next.copyWith(fontSize: size.clamp(10, 28), height: 1.5);
+            }
+          }
+          if (node.tag == 'color') {
+            final color = _color(node.value);
+            if (color != null) {
+              final a = color.computeLuminance();
+              final b =
+                  Theme.of(context).colorScheme.surface.computeLuminance();
+              final ratio =
+                  (a > b ? a + .05 : b + .05) / (a > b ? b + .05 : a + .05);
+              if (originalColors || ratio >= 4.5) {
+                next = next.copyWith(color: color);
+              }
+            }
+          }
+          if (node.tag == 'quote') {
+            return TextSpan(
+              children: [
+                const TextSpan(text: '\n❝ '),
+                ...render(
+                  node.children,
+                  next.copyWith(fontStyle: FontStyle.italic),
+                ),
+                const TextSpan(text: '\n'),
+              ],
+            );
+          }
+          return TextSpan(children: render(node.children, next));
+        }).toList();
     final richText = Text.rich(
-      TextSpan(style: effectiveStyle, children: spans),
+      TextSpan(
+        style: effectiveStyle,
+        children: [
+          ...render(document.nodes, effectiveStyle ?? const TextStyle()),
+          if (document.truncated)
+            TextSpan(text: '\n${_label(context, 'richTextLimited')}'),
+        ],
+      ),
       maxLines: maxLines,
       overflow: overflow,
     );
@@ -183,24 +270,121 @@ class BangumiRichText extends StatelessWidget {
   }
 }
 
-String _normalizeImageUrl(String input) {
-  final decoded = html.parseFragment(input).text?.trim() ?? input.trim();
-  final unescaped = decoded.replaceAll(r'\_', '_').replaceAll(r'\/', '/');
-  return unescaped.startsWith('//') ? 'https:$unescaped' : unescaped;
+String _label(BuildContext context, String key) =>
+    AppLocalizations.of(context).t(key);
+
+Color? _color(String value) {
+  const named = {
+    'red': Colors.red,
+    'green': Colors.green,
+    'blue': Colors.blue,
+    'orange': Colors.orange,
+    'purple': Colors.purple,
+    'pink': Colors.pink,
+    'yellow': Colors.yellow,
+    'cyan': Colors.cyan,
+    'violet': Color(0xffee82ee),
+    'khaki': Color(0xfff0e68c),
+    'black': Colors.black,
+    'white': Colors.white,
+  };
+  final name = value.trim().toLowerCase();
+  if (named.containsKey(name)) return named[name];
+  if (!RegExp(r'^#[0-9a-f]{6}$').hasMatch(name)) return null;
+  return Color(0xff000000 | int.parse(name.substring(1), radix: 16));
 }
 
-String _plainText(String input) {
-  final normalized = input
-      .replaceAll(RegExp(r'\[br\s*/?\]', caseSensitive: false), '\n')
-      .replaceAllMapped(
-        RegExp(
-          r'\[url(?:=[^\]]+)?\](.*?)\[/url\]',
-          caseSensitive: false,
-          dotAll: true,
+Future<void> _openLink(BuildContext context, Uri uri) async {
+  final allowed = await showDialog<bool>(
+    context: context,
+    builder:
+        (context) => AlertDialog(
+          title: Text(_label(context, 'openExternalLink')),
+          content: SelectableText(uri.toString()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_label(context, 'cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(_label(context, 'open')),
+            ),
+          ],
         ),
-        (match) => match.group(1) ?? '',
-      )
-      .replaceAll(_bbCodePattern, '')
-      .replaceAll(RegExp(r'\[/url\]', caseSensitive: false), '');
-  return html.parseFragment(normalized).text ?? '';
+  );
+  if (allowed == true) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+class _Spoiler extends StatefulWidget {
+  const _Spoiler({
+    super.key,
+    required this.children,
+    required this.style,
+    required this.originalColors,
+  });
+  final List<ComposeRichTextNode> children;
+  final TextStyle style;
+  final bool originalColors;
+  @override
+  State<_Spoiler> createState() => _SpoilerState();
+}
+
+class _SpoilerState extends State<_Spoiler> {
+  bool _revealed = false;
+  @override
+  Widget build(BuildContext context) {
+    if (_revealed) {
+      return BangumiRichText(
+        '',
+        nodes: widget.children,
+        style: widget.style,
+        originalColors: widget.originalColors,
+      );
+    }
+    return SelectionContainer.disabled(
+      child: Semantics(
+        button: true,
+        label: _label(context, 'revealSpoiler'),
+        child: TextButton(
+          onPressed: () => setState(() => _revealed = true),
+          style: TextButton.styleFrom(
+            backgroundColor:
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          child: const Text('•••'),
+        ),
+      ),
+    );
+  }
+}
+
+class _RichImage extends StatefulWidget {
+  const _RichImage({required this.uri});
+  final Uri uri;
+  @override
+  State<_RichImage> createState() => _RichImageState();
+}
+
+class _RichImageState extends State<_RichImage> {
+  int _revision = 0;
+  @override
+  Widget build(BuildContext context) => CachedNetworkImage(
+    key: ValueKey(_revision),
+    imageUrl: widget.uri.toString(),
+    cacheManager: AppImageCache.manager,
+    memCacheWidth: 960,
+    fit: BoxFit.contain,
+    errorWidget:
+        (_, __, ___) => TextButton.icon(
+          icon: const Icon(Icons.refresh),
+          label: Text(_label(context, 'retry')),
+          onPressed: () async {
+            await AppImageCache.manager.removeFile(widget.uri.toString());
+            if (mounted) setState(() => _revision++);
+          },
+        ),
+  );
 }
