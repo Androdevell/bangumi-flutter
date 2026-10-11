@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -9,11 +10,13 @@ import '../core/settings/app_preferences.dart';
 import '../data/bangumi_repository.dart';
 import '../features/shell/app_shell.dart';
 import 'app_theme.dart';
+import 'bootstrap/app_dependencies.dart';
 
 class BangumiApp extends StatefulWidget {
   const BangumiApp({
     super.key,
     this.repository,
+    this.dependencies,
     this.authService,
     this.preferences,
     this.initialLocale = const Locale('zh'),
@@ -21,6 +24,7 @@ class BangumiApp extends StatefulWidget {
   });
 
   final BangumiRepository? repository;
+  final AppDependencies? dependencies;
   final AuthService? authService;
   final AppPreferences? preferences;
   final Locale initialLocale;
@@ -47,7 +51,11 @@ class _BangumiAppState extends State<BangumiApp> {
 
   @override
   void dispose() {
-    if (widget.repository == null) _repository.close();
+    if (widget.dependencies != null) {
+      unawaited(widget.dependencies!.close());
+    } else if (widget.repository == null) {
+      _repository.close();
+    }
     super.dispose();
   }
 

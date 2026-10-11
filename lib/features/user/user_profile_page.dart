@@ -1,8 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/community_models.dart';
 import '../../core/models.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/paged.dart';
+import '../../domain/models/collection_models.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
@@ -11,6 +15,7 @@ import '../../widgets/bangumi_rich_text.dart';
 import '../character/character_detail_page.dart';
 import '../community/community_widgets.dart';
 import '../subject/subject_detail_page.dart';
+import '../collection/collection_controller.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({
@@ -37,17 +42,34 @@ class _UserProfilePageState extends State<UserProfilePage> {
   void initState() {
     super.initState();
     widget.repository.collectionChanges.addListener(_onCollectionChanged);
+    final repository = widget.repository;
+    if (repository is CollectionFeatureRepository) {
+      (repository as CollectionFeatureRepository).collections.sessionChanges
+          .addListener(_sessionChanged);
+    }
+  }
+
+  void _sessionChanged() {
+    if (!mounted) return;
+    setState(() {
+      _isFriend = null;
+      _profile = _load();
+    });
   }
 
   @override
   void dispose() {
     widget.repository.collectionChanges.removeListener(_onCollectionChanged);
+    final repository = widget.repository;
+    if (repository is CollectionFeatureRepository) {
+      (repository as CollectionFeatureRepository).collections.sessionChanges
+          .removeListener(_sessionChanged);
+    }
     super.dispose();
   }
 
   void _onCollectionChanged() {
     if (mounted && widget.repository.currentUsername == widget.username) {
-      invalidateRepositoryCache(widget.repository);
       setState(() {
         _profile = _load();
       });
@@ -132,6 +154,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserProfileData>(
+      key: ValueKey(
+        widget.repository is CollectionFeatureRepository
+            ? (widget.repository as CollectionFeatureRepository)
+                .collections
+                .sessionScope
+            : null,
+      ),
       future: _profile,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -186,6 +215,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 child: Column(
                   children: [
                     _UserHeader(user: user),
+                    if (isSelf &&
+                        collectionCountIsSyncing(
+                          widget.repository,
+                          user.username,
+                        ))
+                      Text(
+                        AppLocalizations.of(context).t('collectionSyncing'),
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
                     SectionFailureNotice(
                       errors: data.sectionErrors,
                       onRetry:
@@ -213,6 +251,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           ),
                           _CollectionBrowser(
                             items: data.collections,
+                            repository: widget.repository,
+                            username: widget.username,
                             onTap: _openSubject,
                           ),
                           _MonoList(data: data, repository: widget.repository),
@@ -579,10 +619,17 @@ class _TimeMachineStat extends StatelessWidget {
 }
 
 class _CollectionBrowser extends StatefulWidget {
-  const _CollectionBrowser({required this.items, required this.onTap});
+  const _CollectionBrowser({
+    required this.items,
+    required this.onTap,
+    required this.repository,
+    required this.username,
+  });
 
   final List<UserContentItem> items;
   final ValueChanged<UserContentItem> onTap;
+  final BangumiRepository repository;
+  final String username;
 
   @override
   State<_CollectionBrowser> createState() => _CollectionBrowserState();
@@ -590,36 +637,114 @@ class _CollectionBrowser extends StatefulWidget {
 
 class _CollectionBrowserState extends State<_CollectionBrowser> {
   static const _subjectTypes = <(int, String, IconData)>[
-    (0, '全部', Icons.apps_rounded),
-    (2, '动画', Icons.live_tv_rounded),
-    (1, '书籍', Icons.menu_book_rounded),
-    (3, '音乐', Icons.album_rounded),
-    (4, '游戏', Icons.sports_esports_rounded),
-    (6, '三次元', Icons.movie_rounded),
+    (0, 'allMedia', Icons.apps_rounded),
+    (SubjectType.anime, 'mediaAnime', Icons.live_tv_rounded),
+    (SubjectType.book, 'mediaBook', Icons.menu_book_rounded),
+    (SubjectType.music, 'mediaMusic', Icons.album_rounded),
+    (SubjectType.game, 'mediaGame', Icons.sports_esports_rounded),
+    (SubjectType.real, 'mediaReal', Icons.movie_rounded),
   ];
   static const _collectionTypes = <(int, String)>[
-    (0, '全部状态'),
-    (1, '想看'),
-    (2, '看过'),
-    (3, '在看'),
-    (4, '搁置'),
-    (5, '抛弃'),
+    (0, 'allStatuses'),
+    (CollectionStatus.wish, 'collectionWish'),
+    (CollectionStatus.done, 'collectionDone'),
+    (CollectionStatus.doing, 'collectionDoing'),
+    (CollectionStatus.onHold, 'collectionHold'),
+    (CollectionStatus.dropped, 'collectionDropped'),
   ];
 
-  int _subjectType = 0;
-  int _collectionType = 0;
+  late final CollectionController _controller = CollectionController(
+    query: CollectionQuery(username: widget.username),
+    load: _loadPage,
+  );
+  int get _subjectType => _controller.state.query.subjectType ?? 0;
+  int get _collectionType => _controller.state.query.status ?? 0;
 
   @override
-  Widget build(BuildContext context) {
-    final filtered =
+  void initState() {
+    super.initState();
+    widget.repository.collectionChanges.addListener(_refresh);
+    final repository = widget.repository;
+    if (repository is CollectionFeatureRepository) {
+      (repository as CollectionFeatureRepository).collections.sessionChanges
+          .addListener(_controller.clearSession);
+    }
+    unawaited(_controller.dispatch(const LoadCollections()));
+  }
+
+  Future<Paged<UserContentItem>> _loadPage(
+    CollectionQuery query,
+    int offset,
+    bool fresh,
+  ) async {
+    final repository = widget.repository;
+    if (repository is CollectionFeatureRepository) {
+      return (repository as CollectionFeatureRepository).collections.query(
+        query,
+        offset: offset,
+        fresh: fresh,
+      );
+    }
+    // 仅保留旧 Repository / Widget 测试的兼容入口；正式客户端走服务端分页。
+    final items =
         widget.items
             .where(
               (item) =>
-                  (_subjectType == 0 || item.subjectType == _subjectType) &&
-                  (_collectionType == 0 ||
-                      item.collectionType == _collectionType),
+                  (query.subjectType == null ||
+                      item.subjectType == query.subjectType) &&
+                  (query.status == null || item.collectionType == query.status),
             )
             .toList();
+    return Paged(
+      items: offset == 0 ? items : const [],
+      offset: offset,
+      limit: 40,
+      total: items.length,
+    );
+  }
+
+  void _changeFilter(int subjectType, int status) => unawaited(
+    _controller.dispatch(
+      ChangeCollectionFilter(
+        CollectionQuery(
+          username: widget.username,
+          subjectType: subjectType == 0 ? null : subjectType,
+          status: status == 0 ? null : status,
+        ),
+      ),
+    ),
+  );
+
+  void _refresh() {
+    if (widget.repository.currentUsername == widget.username) {
+      unawaited(_controller.dispatch(const LoadCollections(refresh: true)));
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.repository.collectionChanges.removeListener(_refresh);
+    final repository = widget.repository;
+    if (repository is CollectionFeatureRepository) {
+      (repository as CollectionFeatureRepository).collections.sessionChanges
+          .removeListener(_controller.clearSession);
+    }
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => _buildCollections(context),
+    );
+  }
+
+  Widget _buildCollections(BuildContext context) {
+    final state = _controller.state;
+    final filtered = state.items;
+    final strings = AppLocalizations.of(context);
     return Column(
       children: [
         Padding(
@@ -638,10 +763,10 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
                           padding: const EdgeInsets.only(right: 8),
                           child: ChoiceChip(
                             avatar: Icon(type.$3, size: 17),
-                            label: Text(type.$2),
+                            label: Text(strings.t(type.$2)),
                             selected: _subjectType == type.$1,
                             onSelected:
-                                (_) => setState(() => _subjectType = type.$1),
+                                (_) => _changeFilter(type.$1, _collectionType),
                           ),
                         ),
                     ],
@@ -656,16 +781,26 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: FilterChip(
-                            label: Text(status.$2),
+                            label: Text(strings.t(status.$2)),
                             selected: _collectionType == status.$1,
                             onSelected:
-                                (_) =>
-                                    setState(() => _collectionType = status.$1),
+                                (_) => _changeFilter(_subjectType, status.$1),
                           ),
                         ),
                       Text(
-                        '${filtered.length} 项',
+                        '${strings.t('matchingCollections')}: ${state.total ?? '—'}',
                         style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      IconButton(
+                        key: const ValueKey('collection-refresh'),
+                        tooltip: strings.t('refreshCollections'),
+                        icon: const Icon(Icons.refresh_rounded),
+                        onPressed:
+                            state.loading
+                                ? null
+                                : () => _controller.dispatch(
+                                  const LoadCollections(refresh: true),
+                                ),
                       ),
                     ],
                   ),
@@ -674,16 +809,28 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
             ),
           ),
         ),
+        if (state.loading && filtered.isNotEmpty)
+          const LinearProgressIndicator(),
         Expanded(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 260),
             switchInCurve: Curves.easeOutCubic,
             switchOutCurve: Curves.easeInCubic,
             child:
-                filtered.isEmpty
-                    ? const EmptyView(
+                filtered.isEmpty && state.loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : filtered.isEmpty && state.error != null
+                    ? NetworkErrorView(
+                      error: state.error!,
+                      onRetry:
+                          () => _controller.dispatch(
+                            const LoadCollections(refresh: true),
+                          ),
+                    )
+                    : filtered.isEmpty
+                    ? EmptyView(
                       key: ValueKey('empty-collection-filter'),
-                      message: '当前筛选下暂无公开收藏',
+                      message: strings.t('noMatchingCollections'),
                     )
                     : GridView.builder(
                       key: ValueKey('$_subjectType-$_collectionType'),
@@ -706,6 +853,26 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
                     ),
           ),
         ),
+        if (filtered.isNotEmpty && (state.hasMore || state.error != null))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              children: [
+                if (state.error != null)
+                  Text(strings.t('collectionPageFailed')),
+                TextButton.icon(
+                  onPressed:
+                      state.loading
+                          ? null
+                          : () => _controller.dispatch(const LoadCollections()),
+                  icon: const Icon(Icons.expand_more_rounded),
+                  label: Text(
+                    strings.t(state.error == null ? 'loadMore' : 'retry'),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -717,18 +884,19 @@ class _CollectionCard extends StatelessWidget {
   final UserContentItem item;
   final VoidCallback onTap;
 
-  String get _typeLabel => switch (item.subjectType) {
-    1 => '书籍',
-    2 => '动画',
-    3 => '音乐',
-    4 => '游戏',
-    6 => '三次元',
-    _ => '条目',
+  String get _typeKey => switch (item.subjectType) {
+    SubjectType.book => 'mediaBook',
+    SubjectType.anime => 'mediaAnime',
+    SubjectType.music => 'mediaMusic',
+    SubjectType.game => 'mediaGame',
+    SubjectType.real => 'mediaReal',
+    _ => 'collections',
   };
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context);
     return HoverLift(
       child: Card(
         clipBehavior: Clip.antiAlias,
@@ -766,12 +934,14 @@ class _CollectionCard extends StatelessWidget {
                         runSpacing: 5,
                         children: [
                           _CollectionBadge(
-                            label: _typeLabel,
+                            label: strings.t(_typeKey),
                             color: scheme.secondary,
                           ),
                           _CollectionBadge(
-                            label:
-                                item.subtitle.isEmpty ? '已收藏' : item.subtitle,
+                            label: strings.collectionStatusLabel(
+                              item.subjectType,
+                              item.collectionType,
+                            ),
                             color: scheme.primary,
                           ),
                         ],

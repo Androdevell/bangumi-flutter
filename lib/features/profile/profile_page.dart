@@ -44,7 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _autoPlay = false;
   bool _reduceMotion = false;
   String _profileUsername = '';
-  Future<UserProfileData>? _profile;
+  Future<CommunityUser>? _profile;
   late final AppUpdateService _updateService = AppUpdateService();
   late final Future<String> _appVersion = _updateService.currentVersion();
   bool _checkingUpdate = false;
@@ -75,7 +75,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _refreshProfile() {
-    invalidateRepositoryCache(widget.repository);
     if (mounted) {
       setState(() {
         _profile = null;
@@ -91,11 +90,11 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  Future<UserProfileData>? _ensureProfile(String username) {
+  Future<CommunityUser>? _ensureProfile(String username) {
     if (username.isEmpty) return null;
     if (_profile == null || _profileUsername != username) {
       _profileUsername = username;
-      _profile = widget.repository.fetchUserProfile(username);
+      _profile = fetchUserSummary(widget.repository, username, fresh: true);
     }
     return _profile;
   }
@@ -387,12 +386,19 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                     ],
                   );
-                  final stats = FutureBuilder<UserProfileData>(
+                  final stats = FutureBuilder<CommunityUser>(
                     key: ValueKey(user?.username ?? 'guest'),
                     future: _ensureProfile(user?.username ?? ''),
                     builder: (context, snapshot) {
-                      final values =
-                          user == null ? null : snapshot.data?.user.stats;
+                      if (user != null && snapshot.hasError) {
+                        return TextButton.icon(
+                          key: const ValueKey('profile-stats-retry'),
+                          onPressed: _refreshProfile,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: Text(strings.t('statsRetry')),
+                        );
+                      }
+                      final values = user == null ? null : snapshot.data?.stats;
                       return Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
@@ -402,6 +408,12 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ? '--'
                                     : '${widget.repository.effectiveSubjectCollectionCount(user!.username, values.subjects)}',
                             label: strings.t('collections'),
+                            syncing:
+                                user != null &&
+                                collectionCountIsSyncing(
+                                  widget.repository,
+                                  user.username,
+                                ),
                           ),
                           _Stat(
                             value:
@@ -702,10 +714,11 @@ class _ProfilePageState extends State<ProfilePage> {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.label});
+  const _Stat({required this.value, required this.label, this.syncing = false});
 
   final String value;
   final String label;
+  final bool syncing;
 
   @override
   Widget build(BuildContext context) {
@@ -714,6 +727,11 @@ class _Stat extends StatelessWidget {
         Text(value, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 3),
         Text(label, style: Theme.of(context).textTheme.bodySmall),
+        if (syncing)
+          Text(
+            AppLocalizations.of(context).t('collectionSyncing'),
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
       ],
     );
   }

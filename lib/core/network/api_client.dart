@@ -4,8 +4,11 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 import '../auth/auth_service.dart';
+import '../../app/state/session_scope.dart';
+import '../cache/query_key.dart';
 import 'platform_http_client.dart';
 
 class ApiClient {
@@ -16,7 +19,9 @@ class ApiClient {
     Duration cacheTtl = const Duration(minutes: 5),
     Future<void> Function(Duration)? delay,
     DateTime Function()? clock,
+    bool closeClient = true,
   }) : _client = client ?? createPlatformHttpClient(),
+       _closeClient = closeClient,
        _cacheTtl = cacheTtl,
        _delay = delay ?? Future<void>.delayed,
        _clock = clock ?? DateTime.now,
@@ -29,20 +34,52 @@ class ApiClient {
                defaultValue: 'https://next.bgm.tv/',
              ),
            ) {
-    _authService?.addListener(clearCache);
+    _sessionChanges = ValueNotifier(sessionScope);
+    _authService?.addListener(_onAuthChanged);
   }
 
   final http.Client _client;
+  final bool _closeClient;
   final AuthService? _authService;
   final Uri _baseUri;
   final Duration _cacheTtl;
   final Future<void> Function(Duration) _delay;
   final DateTime Function() _clock;
-  final Map<String, ({DateTime at, dynamic value})> _cache = {};
-  final Map<String, Future<dynamic>> _inFlight = {};
+  final Map<QueryKey, ({DateTime at, dynamic value})> _cache = {};
+  final Map<QueryKey, Future<dynamic>> _inFlight = {};
+  late final ValueNotifier<SessionScope> _sessionChanges;
+  int _permissionRevision = 0;
+  bool _closed = false;
   int _cacheGeneration = 0;
   final Queue<Completer<void>> _waiters = Queue();
   int _activeRequests = 0;
+
+  SessionScope get sessionScope => SessionScope(
+    username: currentUsername,
+    accountId: _authService?.user?.id ?? 0,
+    epoch: _authService?.sessionEpoch ?? 0,
+  );
+  Listenable get sessionChanges => _sessionChanges;
+
+  void _onAuthChanged() {
+    _permissionRevision++;
+    clearCache();
+    _sessionChanges.value = sessionScope;
+  }
+
+  void _requireScope(SessionScope scope) {
+    if (_closed || scope != sessionScope) {
+      throw const ApiException('登录会话已改变，请重新加载后操作');
+    }
+  }
+
+  void invalidateResources(Set<String> paths) {
+    _cacheGeneration++;
+    bool matches(QueryKey key) =>
+        paths.any((path) => key.path.startsWith(path));
+    _cache.removeWhere((key, _) => matches(key));
+    _inFlight.removeWhere((key, _) => matches(key));
+  }
 
   void clearCache() {
     _cacheGeneration++;
@@ -50,11 +87,19 @@ class ApiClient {
     _inFlight.clear();
   }
 
-  Future<dynamic> _cachedGet(String path, Map<String, String>? query) async {
-    final keys = query?.keys.toList() ?? <String>[];
-    keys.sort();
-    final key =
-        '$currentUsername:$path:${jsonEncode({for (final k in keys) k: query![k]})}';
+  Future<dynamic> _cachedGet(
+    String path,
+    Map<String, String>? query, {
+    bool fresh = false,
+  }) async {
+    if (fresh) invalidateResources({path});
+    final key = QueryKey(
+      environment: _baseUri.toString(),
+      session: sessionScope,
+      permissionRevision: _permissionRevision,
+      path: path,
+      query: query,
+    );
     final cached = _cache[key];
     if (cached != null && _clock().difference(cached.at) < _cacheTtl) {
       return cached.value;
@@ -75,20 +120,34 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> get(String path, {Map<String, String>? query}) =>
-      _cachedGet(path, query);
+  Future<dynamic> get(
+    String path, {
+    Map<String, String>? query,
+    bool fresh = false,
+  }) => _cachedGet(path, query, fresh: fresh);
 
   Future<dynamic> post(
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) => _request('POST', path, query: query, body: body);
+    bool readOnly = false,
+  }) => _request('POST', path, query: query, body: body, mutation: !readOnly);
 
   Future<dynamic> put(
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) => _request('PUT', path, query: query, body: body, requiresAuth: true);
+    SessionScope? expectedScope,
+    Set<String>? invalidatePaths,
+  }) => _request(
+    'PUT',
+    path,
+    query: query,
+    body: body,
+    requiresAuth: true,
+    expectedScope: expectedScope,
+    invalidatePaths: invalidatePaths,
+  );
 
   Future<dynamic> patch(
     String path, {
@@ -110,6 +169,7 @@ class ApiClient {
     required Map<String, String> fields,
     String? referer,
   }) async {
+    final scope = sessionScope;
     final uri = Uri.parse('https://bgm.tv/').resolve(path);
     final request =
         http.Request('POST', uri)
@@ -123,9 +183,11 @@ class ApiClient {
           })
           ..bodyFields = fields;
     try {
+      _requireScope(scope);
       final response = await http.Response.fromStream(
         await _client.send(request).timeout(const Duration(seconds: 20)),
       );
+      _requireScope(scope);
       final text = utf8.decode(response.bodyBytes, allowMalformed: true).trim();
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
@@ -162,23 +224,31 @@ class ApiClient {
     Map<String, String>? query,
     Object? body,
     bool requiresAuth = false,
+    bool? mutation,
+    SessionScope? expectedScope,
+    Set<String>? invalidatePaths,
   }) async {
+    final scope = expectedScope ?? sessionScope;
     final uri = _baseUri.resolve(path).replace(queryParameters: query);
 
     try {
       var accessToken = await _authService?.validAccessToken();
+      _requireScope(scope);
       if (requiresAuth && _authService != null && accessToken == null) {
         throw const ApiException('登录已失效，请重新登录后再操作');
       }
-      var response = await _send(method, uri, body, accessToken);
+      var response = await _send(method, uri, body, accessToken, scope);
+      _requireScope(scope);
       if (response.statusCode == HttpStatus.unauthorized &&
           accessToken != null &&
           await (_authService?.refreshAccessToken() ?? Future.value(false))) {
         accessToken = await _authService?.validAccessToken();
+        _requireScope(scope);
         if (requiresAuth && accessToken == null) {
           throw const ApiException('登录已失效，请重新登录后再操作');
         }
-        response = await _send(method, uri, body, accessToken);
+        response = await _send(method, uri, body, accessToken, scope);
+        _requireScope(scope);
       }
       final text = utf8.decode(response.bodyBytes, allowMalformed: true);
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -192,7 +262,13 @@ class ApiClient {
           details: text,
         );
       }
-      if (method != 'GET' && method != 'POST') clearCache();
+      if (mutation ?? method != 'GET') {
+        if (invalidatePaths == null) {
+          clearCache();
+        } else {
+          invalidateResources(invalidatePaths);
+        }
+      }
       if (text.trim().isEmpty) return null;
       try {
         return jsonDecode(text);
@@ -213,10 +289,17 @@ class ApiClient {
     Uri uri,
     Object? body,
     String? accessToken,
+    SessionScope scope,
   ) async {
     for (var attempt = 0; ; attempt++) {
       try {
-        final response = await _sendLimited(method, uri, body, accessToken);
+        final response = await _sendLimited(
+          method,
+          uri,
+          body,
+          accessToken,
+          scope,
+        );
         if (method != 'GET' ||
             attempt >= 2 ||
             !{429, 502, 503, 504}.contains(response.statusCode)) {
@@ -259,6 +342,7 @@ class ApiClient {
     Uri uri,
     Object? body,
     String? accessToken,
+    SessionScope scope,
   ) async {
     if (_activeRequests >= 3) {
       final waiter = Completer<void>();
@@ -268,6 +352,7 @@ class ApiClient {
       _activeRequests++;
     }
     try {
+      _requireScope(scope);
       return await _sendOnce(method, uri, body, accessToken);
     } finally {
       if (_waiters.isEmpty) {
@@ -305,9 +390,12 @@ class ApiClient {
   }
 
   void close() {
-    _authService?.removeListener(clearCache);
+    if (_closed) return;
+    _closed = true;
+    _authService?.removeListener(_onAuthChanged);
     clearCache();
-    _client.close();
+    _sessionChanges.dispose();
+    if (_closeClient) _client.close();
   }
 }
 

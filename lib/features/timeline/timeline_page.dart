@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_strings.dart';
 import '../../core/models.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
@@ -123,6 +124,14 @@ class _TimelinePageState extends State<TimelinePage> {
                   ),
                 ),
                 const SizedBox(height: 18),
+                if (_filter == 2)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      AppLocalizations.of(context).t('timelineLocalFilterHint'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
                 if (snapshot.connectionState != ConnectionState.done &&
                     entries.isEmpty)
                   const LoadingView()

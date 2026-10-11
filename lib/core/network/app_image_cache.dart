@@ -51,4 +51,11 @@ abstract final class AppImageCache {
       ..clear()
       ..clearLiveImages();
   }
+
+  static Future<void> dispose() async {
+    if (!_initialized) return;
+    _initialized = false;
+    await _manager.dispose();
+    _manager = DefaultCacheManager();
+  }
 }

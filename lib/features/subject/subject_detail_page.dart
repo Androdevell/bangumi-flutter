@@ -1,9 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../domain/models/collection_models.dart';
+import '../../core/localization/app_localizations.dart';
 
 import '../../core/models.dart';
 import '../../core/json_utils.dart';
 import '../../core/network/app_image_cache.dart';
+import '../../core/network/api_client.dart';
 import '../../core/subject_detail_models.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
@@ -51,6 +54,40 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
 
   late Future<SubjectDetailData> _details = _load();
   int? _interestType;
+  int? _savedRate;
+  String? _savedComment;
+  bool? _savedPrivate;
+
+  @override
+  void initState() {
+    super.initState();
+    final repository = widget.repository;
+    if (repository is CollectionFeatureRepository) {
+      (repository as CollectionFeatureRepository).collections.sessionChanges
+          .addListener(_sessionChanged);
+    }
+  }
+
+  void _sessionChanged() {
+    if (!mounted) return;
+    setState(() {
+      _interestType = null;
+      _savedRate = null;
+      _savedComment = null;
+      _savedPrivate = null;
+      _details = _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    final repository = widget.repository;
+    if (repository is CollectionFeatureRepository) {
+      (repository as CollectionFeatureRepository).collections.sessionChanges
+          .removeListener(_sessionChanged);
+    }
+    super.dispose();
+  }
 
   Future<SubjectDetailData> _load() =>
       widget.repository.fetchSubjectDetails(widget.subject.id);
@@ -90,11 +127,20 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
       ).showSnackBar(const SnackBar(content: Text('请先登录后再收藏条目')));
       return;
     }
+    final repository = widget.repository;
+    final feature =
+        repository is CollectionFeatureRepository
+            ? repository as CollectionFeatureRepository
+            : null;
+    final formScope = feature?.collections.sessionScope;
+    final previousRate = _savedRate ?? details.interestRate;
+    final previousComment = _savedComment ?? details.interestComment;
+    final previousPrivate = _savedPrivate ?? details.interestPrivate;
     var type = _interestType ?? details.interestType;
     if (type == 0) type = 1;
-    var rate = details.interestRate;
-    var comment = details.interestComment;
-    var isPrivate = details.interestPrivate;
+    var rate = previousRate;
+    var comment = previousComment;
+    var isPrivate = previousPrivate;
     final statuses = [
       (
         1,
@@ -113,7 +159,6 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
       ),
       (4, '搁置', Icons.pause_circle_outline_rounded),
       (5, '抛弃', Icons.block_outlined),
-      (0, '取消收藏', Icons.bookmark_remove_outlined),
     ];
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -170,6 +215,13 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                             ],
                           ),
                           const SizedBox(height: 20),
+                          Text(
+                            AppLocalizations.of(
+                              context,
+                            ).t('collectionWithdrawalUnsupported'),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 8),
                           Row(
                             children: [
                               Text(
@@ -248,17 +300,41 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     );
     if (saved != true || !mounted) return;
     try {
+      if (feature != null && formScope != feature.collections.sessionScope) {
+        throw const ApiException('登录会话已改变，请重新打开后操作');
+      }
       final previousType = _interestType ?? details.interestType;
-      await widget.repository.updateSubjectCollection(
-        details.subject.id,
-        type: type,
-        rate: rate,
-        comment: comment,
-        isPrivate: isPrivate,
-        wasCollected: previousType > 0,
-      );
+      if (repository is CollectionFeatureRepository) {
+        final patch = CollectionPatch(
+          type: previousType == 0 || type != previousType ? type : null,
+          rate: rate != previousRate ? rate : null,
+          comment: comment != previousComment ? comment : null,
+          isPrivate: isPrivate != previousPrivate ? isPrivate : null,
+        );
+        if (patch.toJson().isNotEmpty) {
+          await (repository as CollectionFeatureRepository).saveCollection(
+            details.subject.id,
+            patch,
+            expectedScope: formScope,
+          );
+        }
+      } else {
+        await repository.updateSubjectCollection(
+          details.subject.id,
+          type: type,
+          rate: rate,
+          comment: comment,
+          isPrivate: isPrivate,
+          wasCollected: previousType > 0,
+        );
+      }
       if (!mounted) return;
-      setState(() => _interestType = type);
+      setState(() {
+        _interestType = type;
+        _savedRate = rate;
+        _savedComment = comment;
+        _savedPrivate = isPrivate;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('收藏已更新')));
@@ -274,6 +350,13 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<SubjectDetailData>(
+      key: ValueKey(
+        widget.repository is CollectionFeatureRepository
+            ? (widget.repository as CollectionFeatureRepository)
+                .collections
+                .sessionScope
+            : null,
+      ),
       future: _details,
       builder: (context, snapshot) {
         final details = snapshot.data;

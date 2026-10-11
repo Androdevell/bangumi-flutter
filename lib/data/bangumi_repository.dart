@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/models.dart';
@@ -6,6 +7,13 @@ import '../core/community_models.dart';
 import '../core/network/api_client.dart';
 import '../core/network/third_party_preview_service.dart';
 import '../core/subject_detail_models.dart';
+import '../app/state/app_state_coordinator.dart';
+import '../domain/models/collection_models.dart';
+import '../domain/repositories/collection_repository.dart';
+import '../domain/repositories/user_repository.dart';
+import '../domain/use_cases/collection_save_use_case.dart';
+import 'repositories/remote_collection_repository.dart';
+import 'repositories/remote_user_repository.dart';
 
 abstract interface class BangumiRepository {
   bool get isLoggedIn;
@@ -82,6 +90,30 @@ abstract interface class SubjectPreviewRepository {
   ThirdPartyPreviewService get previewService;
 }
 
+abstract interface class CollectionFeatureRepository {
+  CollectionRepository get collections;
+  UserRepository get users;
+  CollectionSaveUseCase get saveCollection;
+}
+
+Future<CommunityUser> fetchUserSummary(
+  BangumiRepository repository,
+  String username, {
+  bool fresh = false,
+}) =>
+    repository is CollectionFeatureRepository
+        ? (repository as CollectionFeatureRepository).users.fetchUser(
+          username,
+          fresh: fresh,
+        )
+        : repository.fetchUserProfile(username).then((profile) => profile.user);
+
+bool collectionCountIsSyncing(BangumiRepository repository, String username) =>
+    repository is CollectionFeatureRepository &&
+    (repository as CollectionFeatureRepository).users.isCollectionCountSyncing(
+      username,
+    );
+
 ThirdPartyPreviewService? previewServiceFor(BangumiRepository repository) =>
     repository is SubjectPreviewRepository
         ? (repository as SubjectPreviewRepository).previewService
@@ -135,20 +167,37 @@ class RemoteBangumiRepository
     implements
         BangumiRepository,
         SubjectPagingRepository,
+        CollectionFeatureRepository,
         SubjectPreviewRepository,
         RefreshableRepository {
   RemoteBangumiRepository({
     ApiClient? apiClient,
     ThirdPartyPreviewService? previewService,
   }) : _api = apiClient ?? ApiClient(),
-       previewService = previewService ?? ThirdPartyPreviewService();
+       previewService = previewService ?? ThirdPartyPreviewService() {
+    collections = RemoteCollectionRepository(_api);
+    users = RemoteUserRepository(_api);
+    saveCollection = CollectionSaveUseCase(collections, users);
+    _coordinator = AppStateCoordinator(collections, users);
+    _collectionSubscription = collections.changes.listen((_) {
+      _collectionChanges.value++;
+    });
+  }
 
   @override
   final ThirdPartyPreviewService previewService;
 
   final ApiClient _api;
   final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
-  final Map<String, _CollectionCount> _subjectCollectionCounts = {};
+  @override
+  late final RemoteCollectionRepository collections;
+  @override
+  late final RemoteUserRepository users;
+  @override
+  late final CollectionSaveUseCase saveCollection;
+  late final AppStateCoordinator _coordinator;
+  late final StreamSubscription<Object> _collectionSubscription;
+  bool _closed = false;
   final Map<String, ({DateTime at, Future<Paged<Subject>> request})>
   _searchCache = {};
 
@@ -169,11 +218,7 @@ class RemoteBangumiRepository
 
   @override
   int effectiveSubjectCollectionCount(String username, int serverCount) {
-    final count = _subjectCollectionCounts.putIfAbsent(
-      username,
-      () => _CollectionCount(serverCount),
-    );
-    return count.value(serverCount);
+    return users.effectiveCollectionCount(username, serverCount);
   }
 
   @override
@@ -263,6 +308,7 @@ class RemoteBangumiRepository
     if (type != null && type > 0) filter['type'] = [type];
     final json = await _api.post(
       'p1/search/subjects',
+      readOnly: true,
       query: {'offset': '$offset', 'limit': '30'},
       body: {'keyword': keyword, 'filter': filter, 'sort': 'match'},
     );
@@ -362,12 +408,12 @@ class RemoteBangumiRepository
     int? category,
   }) async {
     final query = <String, String>{'mode': mode, 'limit': '20'};
-    if (category != null) query['cat'] = '$category';
     final json = await _api.get('p1/timeline', query: query);
     if (json is! List) throw const ApiException('时间线数据格式不正确');
     return json
         .whereType<Map>()
         .map((item) => TimelineEntry.fromJson(Map<String, dynamic>.from(item)))
+        .where((item) => category == null || item.category == category)
         .toList();
   }
 
@@ -430,7 +476,7 @@ class RemoteBangumiRepository
     final errors = <String, String>{};
     final encoded = Uri.encodeComponent(username);
     final results = await Future.wait<dynamic>([
-      _api.get('p1/users/$encoded'),
+      users.fetchUser(username),
       _safeJson(
         _api.get('p1/users/$encoded/timeline', query: {'limit': '20'}),
         const [],
@@ -483,13 +529,7 @@ class RemoteBangumiRepository
         section: 'friends',
       ),
     ]);
-    if (results.first is! Map) throw const ApiException('用户资料格式不正确');
-    final user = CommunityUser.fromJson(
-      Map<String, dynamic>.from(results[0] as Map),
-    );
-    _subjectCollectionCounts
-        .putIfAbsent(user.username, () => _CollectionCount(user.stats.subjects))
-        .reconcile(user.stats.subjects);
+    final user = results[0] as CommunityUser;
     return UserProfileData(
       sectionErrors: Map.unmodifiable(errors),
       user: user,
@@ -498,7 +538,13 @@ class RemoteBangumiRepository
               .map(
                 (item) => TimelineEntry.fromJson({
                   ...item,
-                  if (item['user'] == null) 'user': results[0],
+                  if (item['user'] == null)
+                    'user': {
+                      'id': user.id,
+                      'username': user.username,
+                      'nickname': user.nickname,
+                      'avatar': user.avatarUrl,
+                    },
                 }),
               )
               .toList(),
@@ -605,24 +651,15 @@ class RemoteBangumiRepository
     required bool isPrivate,
     bool wasCollected = true,
   }) async {
-    final username = currentUsername;
-    await _api.put(
-      'p1/collections/subjects/$subjectId',
-      body: {
-        'type': type,
-        'rate': rate,
-        'comment': comment,
-        'private': isPrivate,
-        'tags': <String>[],
-      },
+    await saveCollection(
+      subjectId,
+      CollectionPatch(
+        type: type,
+        rate: rate,
+        comment: comment,
+        isPrivate: isPrivate,
+      ),
     );
-    if (wasCollected != (type > 0) && username.isNotEmpty) {
-      _subjectCollectionCounts
-          .putIfAbsent(username, () => _CollectionCount(null))
-          .change(type > 0 ? 1 : -1);
-    }
-    invalidateCache();
-    _collectionChanges.value++;
   }
 
   @override
@@ -840,41 +877,14 @@ class RemoteBangumiRepository
 
   @override
   void close() {
+    if (_closed) return;
+    _closed = true;
+    unawaited(_collectionSubscription.cancel());
+    unawaited(_coordinator.close());
+    collections.close();
+    users.close();
     previewService.dispose();
     _collectionChanges.dispose();
     _api.close();
-  }
-}
-
-class _CollectionCount {
-  _CollectionCount(this._server);
-  int? _server;
-  int _delta = 0;
-  DateTime? _changedAt;
-  int value(int server) {
-    if (_server == null) {
-      // 未读取总数时，新增只提供下界；取消仍需在已有总数上扣减。
-      _server = server;
-      if (_delta > 0 && server > 0) _delta = 0;
-    }
-    return ((_server ?? 0) + _delta).clamp(0, 1 << 30);
-  }
-
-  void change(int delta) {
-    _delta += delta;
-    _changedAt = DateTime.now();
-  }
-
-  void reconcile(int server) {
-    final expected = (_server ?? server) + _delta;
-    if (_server == null ||
-        _delta == 0 ||
-        (_delta > 0 ? server >= expected : server <= expected) ||
-        (_changedAt != null &&
-            DateTime.now().difference(_changedAt!) >
-                const Duration(seconds: 30))) {
-      _server = server;
-      _delta = 0;
-    }
   }
 }

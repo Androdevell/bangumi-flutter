@@ -17,8 +17,67 @@ class AppLocalizations {
       _values['zh']![key] ??
       key;
 
+  String collectionStatusLabel(int subjectType, int status) {
+    if (locale.languageCode == 'zh' || locale.languageCode == 'ja') {
+      final verb = switch (subjectType) {
+        1 => locale.languageCode == 'zh' ? '读' : '読む',
+        3 => locale.languageCode == 'zh' ? '听' : '聴く',
+        4 => locale.languageCode == 'zh' ? '玩' : '遊ぶ',
+        _ => locale.languageCode == 'zh' ? '看' : '見る',
+      };
+      if (locale.languageCode == 'zh') {
+        return switch (status) {
+          1 => '想$verb',
+          2 => '$verb过',
+          3 => '在$verb',
+          4 => t('collectionHold'),
+          5 => t('collectionDropped'),
+          _ => t('collections'),
+        };
+      }
+      return switch (status) {
+        1 => '$verb予定',
+        2 => '$verb（完了）',
+        3 => '$verb（進行中）',
+        4 => t('collectionHold'),
+        5 => t('collectionDropped'),
+        _ => t('collections'),
+      };
+    }
+    return t(switch (status) {
+      1 => 'collectionWish',
+      2 => 'collectionDone',
+      3 => 'collectionDoing',
+      4 => 'collectionHold',
+      5 => 'collectionDropped',
+      _ => 'collections',
+    });
+  }
+
   static const _values = <String, Map<String, String>>{
     'zh': {
+      'timelineLocalFilterHint': '仅筛选当前已加载的动态，不代表完整历史。',
+      'refreshCollections': '刷新收藏',
+      'collectionWithdrawalUnsupported': '当前 API 不支持可靠的取消收藏，请暂时在 Bangumi 网页操作。',
+      'statsRetry': '统计加载失败，点击重试',
+      'collectionSyncing': '统计同步中',
+      'allMedia': '全部',
+      'allStatuses': '全部状态',
+      'mediaAnime': '动画',
+      'mediaBook': '书籍',
+      'mediaMusic': '音乐',
+      'mediaGame': '游戏',
+      'mediaReal': '三次元',
+      'collectionWish': '想看',
+      'collectionDone': '看过',
+      'collectionDoing': '在看',
+      'collectionHold': '搁置',
+      'collectionDropped': '抛弃',
+      'matchingCollections': '匹配收藏',
+      'noMatchingCollections': '当前筛选下暂无可见收藏',
+      'collectionPageFailed': '下一页加载失败，已保留当前列表',
+      'loadMore': '加载更多',
+      'retry': '重试',
       'cacheUsage': '缓存占用',
       'discover': '发现',
       'timeline': '时间线',
@@ -111,6 +170,31 @@ class AppLocalizations {
       'dataSource': '数据来源',
     },
     'en': {
+      'timelineLocalFilterHint':
+          'This filter applies only to loaded posts, not the complete history.',
+      'refreshCollections': 'Refresh collections',
+      'collectionWithdrawalUnsupported':
+          'Collection removal is not supported by the verified API. Please use the Bangumi website for now.',
+      'statsRetry': 'Could not load statistics. Retry',
+      'collectionSyncing': 'Syncing statistics',
+      'allMedia': 'All',
+      'allStatuses': 'All statuses',
+      'mediaAnime': 'Anime',
+      'mediaBook': 'Books',
+      'mediaMusic': 'Music',
+      'mediaGame': 'Games',
+      'mediaReal': 'Live action',
+      'collectionWish': 'Wish',
+      'collectionDone': 'Completed',
+      'collectionDoing': 'In progress',
+      'collectionHold': 'On hold',
+      'collectionDropped': 'Dropped',
+      'matchingCollections': 'Matching collections',
+      'noMatchingCollections': 'No visible collections match these filters',
+      'collectionPageFailed':
+          'Could not load the next page. Existing items are preserved.',
+      'loadMore': 'Load more',
+      'retry': 'Retry',
       'cacheUsage': 'Cache size',
       'discover': 'Discover',
       'timeline': 'Timeline',
@@ -209,6 +293,29 @@ class AppLocalizations {
       'dataSource': 'Data source',
     },
     'ja': {
+      'timelineLocalFilterHint': '読み込み済みの投稿のみを絞り込みます。全履歴ではありません。',
+      'refreshCollections': 'コレクションを更新',
+      'collectionWithdrawalUnsupported':
+          '確認済み API ではコレクションの削除に対応していません。当面は Bangumi のウェブサイトをご利用ください。',
+      'statsRetry': '統計の読み込みに失敗しました。再試行',
+      'collectionSyncing': '統計を同期中',
+      'allMedia': 'すべて',
+      'allStatuses': 'すべての状態',
+      'mediaAnime': 'アニメ',
+      'mediaBook': '書籍',
+      'mediaMusic': '音楽',
+      'mediaGame': 'ゲーム',
+      'mediaReal': '実写',
+      'collectionWish': '見たい',
+      'collectionDone': '見終わった',
+      'collectionDoing': '視聴中',
+      'collectionHold': '保留',
+      'collectionDropped': '中止',
+      'matchingCollections': '該当コレクション',
+      'noMatchingCollections': '条件に一致する閲覧可能なコレクションはありません',
+      'collectionPageFailed': '次のページを読み込めませんでした。既存の一覧は保持されています。',
+      'loadMore': 'もっと読み込む',
+      'retry': '再試行',
       'cacheUsage': 'キャッシュ容量',
       'discover': 'ホーム',
       'timeline': 'タイムライン',

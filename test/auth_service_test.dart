@@ -112,6 +112,8 @@ void main() {
             200,
             headers: {'content-type': 'application/json'},
           );
+        case '/p1/subjects/99':
+          return http.Response('{"id":99,"interest":null}', 200);
         case '/p1/collections/subjects/99':
           expect(request.method, 'PUT');
           expect(request.headers['authorization'], 'Bearer access-token');

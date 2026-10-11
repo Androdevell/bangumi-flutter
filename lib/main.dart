@@ -1,49 +1,19 @@
 import 'package:flutter/material.dart';
 
 import 'app/bangumi_app.dart';
-import 'core/auth/auth_service.dart';
-import 'core/auth/secure_vault.dart';
-import 'core/network/api_client.dart';
-import 'core/network/app_image_cache.dart';
-import 'core/network/cookie_session_client.dart';
-import 'core/network/platform_http_client.dart';
-import 'core/network/third_party_preview_service.dart';
-import 'core/settings/app_preferences.dart';
-import 'data/bangumi_repository.dart';
+import 'app/bootstrap/app_dependencies.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final vault = PlatformSecureVault();
-  final preferences = AppPreferences(vault);
-  final appSettings = await preferences.load();
-  final cookieStore = PersistentCookieStore(vault);
-  await cookieStore.initialize();
-
-  final apiTransport = CookieSessionClient(
-    createPlatformHttpClient(),
-    cookieStore,
-  );
-  final imageTransport = createPlatformHttpClient();
-  final authService = AuthService(
-    client: apiTransport,
-    cookies: cookieStore,
-    vault: vault,
-  );
-  await authService.initialize();
-  AppImageCache.initialize(imageTransport);
+  final dependencies = await AppDependencies.initialize();
   runApp(
     BangumiApp(
-      authService: authService,
-      preferences: preferences,
-      initialLocale: appSettings.locale,
-      initialAppIconStyle: appSettings.iconStyle,
-      repository: RemoteBangumiRepository(
-        previewService: ThirdPartyPreviewService(
-          enabled: appSettings.thirdPartyPreviews,
-          persist: preferences.setThirdPartyPreviews,
-        ),
-        apiClient: ApiClient(client: apiTransport, authService: authService),
-      ),
+      dependencies: dependencies,
+      authService: dependencies.auth,
+      preferences: dependencies.preferences,
+      initialLocale: dependencies.settings.locale,
+      initialAppIconStyle: dependencies.settings.iconStyle,
+      repository: dependencies.repository,
     ),
   );
 }

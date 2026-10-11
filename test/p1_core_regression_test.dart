@@ -263,7 +263,10 @@ void main() {
               return jsonResponse({}, 500);
             }
             if (request.url.path == '/p1/users/tester') {
-              return jsonResponse({'username': 'tester'});
+              return jsonResponse({
+                'username': 'tester',
+                'stats': {'subject': {}},
+              });
             }
             if (request.url.path == '/p1/characters/1' ||
                 request.url.path == '/p1/persons/1') {
@@ -326,27 +329,35 @@ void main() {
     },
   );
   test(
-    'collection count handles add, status change, remove and reconciliation',
+    'collection count uses confirmed state and rejects unsupported withdrawal',
     () async {
       var server = 9;
+      var interest = 0;
       final api = _UserApi(
-        MockClient(
-          (request) async =>
-              request.method == 'PUT'
-                  ? jsonResponse({})
-                  : jsonResponse(
-                    request.url.path == '/p1/users/tester'
-                        ? {
-                          'username': 'tester',
-                          'stats': {
-                            'subject': {
-                              '2': {'2': server},
-                            },
-                          },
-                        }
-                        : {'data': []},
-                  ),
-        ),
+        MockClient((request) async {
+          if (request.method == 'PUT') {
+            interest = (jsonDecode(request.body) as Map)['type'] as int;
+            return jsonResponse({});
+          }
+          if (request.url.path == '/p1/subjects/1') {
+            return jsonResponse({
+              'id': 1,
+              'interest': interest == 0 ? null : {'type': interest},
+            });
+          }
+          return jsonResponse(
+            request.url.path == '/p1/users/tester'
+                ? {
+                  'username': 'tester',
+                  'stats': {
+                    'subject': {
+                      '2': {'2': server},
+                    },
+                  },
+                }
+                : {'data': []},
+          );
+        }),
       );
       final repository = RemoteBangumiRepository(apiClient: api);
       addTearDown(repository.close);
@@ -370,14 +381,8 @@ void main() {
       expect(repository.effectiveSubjectCollectionCount('tester', 10), 10);
       await change(2, true);
       expect(repository.effectiveSubjectCollectionCount('tester', 10), 10);
-      await change(0, true);
-      expect(repository.effectiveSubjectCollectionCount('tester', 10), 9);
-      await repository.fetchUserProfile('tester');
-      expect(repository.effectiveSubjectCollectionCount('tester', 10), 9);
-      server = 9;
-      repository.invalidateCache();
-      await repository.fetchUserProfile('tester');
-      expect(repository.effectiveSubjectCollectionCount('tester', 9), 9);
+      await expectLater(change(0, true), throwsA(isA<ApiException>()));
+      expect(repository.effectiveSubjectCollectionCount('tester', 10), 10);
     },
   );
   test('paged controller deduplicates, advances, stops and resets', () async {
