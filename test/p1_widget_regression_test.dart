@@ -324,10 +324,12 @@ void main() {
         await tester.tap(find.text('Open'));
         await tester.pumpAndSettle();
         await tester.enterText(find.byType(TextField), ' reply-$i ');
+        await tester.pump();
         await tester.tap(find.text(i.isEven ? '发布' : '取消'));
         await tester.pump(const Duration(milliseconds: 40));
         expect(tester.takeException(), isNull);
         await tester.pumpAndSettle();
+        expect(results.length, i + 1);
         expect(tester.takeException(), isNull);
         expect(results.last, i.isEven ? 'reply-$i' : null);
       }

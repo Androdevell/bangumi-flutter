@@ -63,6 +63,7 @@ class _PersonCommentsPageState extends State<PersonCommentsPage> {
         return ContentFrame(
           maxWidth: 920,
           child: CommunityReplyList(
+            canReact: false,
             items: snapshot.data!,
             currentUsername: '',
             onUserTap: _openUser,

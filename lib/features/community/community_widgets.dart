@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/community_models.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../widgets/bangumi_rich_text.dart';
 import 'reaction_picker.dart';
@@ -41,7 +42,8 @@ class CommunityAvatar extends StatelessWidget {
     return onTap == null
         ? avatar
         : Semantics(
-          label: '查看 ${user.nickname} 的个人资料',
+          label:
+              '${AppLocalizations.of(context).t('viewProfile')} ${user.nickname}',
           button: true,
           child: InkWell(
             customBorder: const CircleBorder(),
@@ -62,28 +64,58 @@ class CommunityReplyList extends StatelessWidget {
     required this.currentUsername,
     required this.onUserTap,
     required this.onLike,
+    this.header,
+    this.authorUsername = '',
+    this.canReact = true,
   });
 
   final List<CommunityReply> items;
+  final Widget? header;
+  final String authorUsername;
+  final bool canReact;
   final String currentUsername;
   final ValueChanged<String> onUserTap;
   final Future<void> Function(CommunityReply item, String? value) onLike;
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const Center(child: Text('暂无评论'));
     return ListView.separated(
+      key: const PageStorageKey('comments-scroll'),
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: items.length,
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: items.length + 1,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder:
-          (context, index) => _ReplyTile(
-            key: ValueKey('reply:${items[index].id}:$currentUsername'),
-            item: items[index],
-            currentUsername: currentUsername,
-            onUserTap: onUserTap,
-            onLike: onLike,
-          ),
+          (context, slot) =>
+              slot == 0
+                  ? Column(
+                    children: [
+                      if (header != null) header!,
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            items.isEmpty
+                                ? AppLocalizations.of(context).t('noComments')
+                                : '${AppLocalizations.of(context).t('loadedComments')} · ${items.length}',
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                  : _ReplyTile(
+                    key: ValueKey(
+                      'reply:${items[slot - 1].id}:$currentUsername',
+                    ),
+                    item: items[slot - 1],
+                    authorUsername: authorUsername,
+                    canReact: canReact,
+                    currentUsername: currentUsername,
+                    onUserTap: onUserTap,
+                    onLike: onLike,
+                  ),
     );
   }
 }
@@ -95,9 +127,13 @@ class _ReplyTile extends StatefulWidget {
     required this.currentUsername,
     required this.onUserTap,
     required this.onLike,
+    required this.authorUsername,
+    required this.canReact,
   });
 
   final CommunityReply item;
+  final String authorUsername;
+  final bool canReact;
   final String currentUsername;
   final ValueChanged<String> onUserTap;
   final Future<void> Function(CommunityReply item, String? value) onLike;
@@ -179,66 +215,223 @@ class _ReplyTileState extends State<_ReplyTile> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final strings = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CommunityAvatar(
+          CommentHeader(
             user: item.user,
-            onTap:
-                item.user.username.isEmpty
-                    ? null
-                    : () => widget.onUserTap(item.user.username),
+            date: item.createdAt,
+            currentUsername: widget.currentUsername,
+            onUserTap: widget.onUserTap,
+            authorUsername: widget.authorUsername,
           ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.user.nickname,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 4),
-                BangumiRichText(item.content),
-                if (item.replies.isNotEmpty) ...[
-                  const SizedBox(height: 9),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    color: Theme.of(context).colorScheme.surfaceContainerLow,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (final reply in item.replies)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 5),
-                            child: BangumiRichText(
-                              '${reply.user.nickname}：${reply.content}',
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-                if (_reactions.isNotEmpty) ...[
-                  const SizedBox(height: 9),
-                  ReactionSummary(reactions: _reactions),
-                ],
-              ],
+          const SizedBox(height: 12),
+          CommentBody(item.content),
+          if (item.replies.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            NestedReplyPreview(
+              items: item.replies,
+              onUserTap: widget.onUserTap,
             ),
-          ),
-          IconButton(
-            tooltip: _selectedValue == null ? '贴贴' : '更换表情',
-            onPressed: widget.currentUsername.isEmpty || _busy ? null : _toggle,
-            icon:
-                _selectedValue == null
-                    ? const Icon(Icons.add_reaction_outlined)
-                    : BangumiReactionImage(value: _selectedValue!, size: 21),
+          ],
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(child: ReactionSummary(reactions: _reactions)),
+              if (widget.canReact)
+                IconButton(
+                  tooltip: strings.t(
+                    _selectedValue == null ? 'react' : 'changeReaction',
+                  ),
+                  onPressed:
+                      widget.currentUsername.isEmpty || _busy ? null : _toggle,
+                  icon:
+                      _selectedValue == null
+                          ? const Icon(Icons.add_reaction_outlined, size: 20)
+                          : BangumiReactionImage(
+                            value: _selectedValue!,
+                            size: 21,
+                          ),
+                ),
+            ],
           ),
         ],
       ),
     );
   }
+}
+
+class CommentHeader extends StatelessWidget {
+  const CommentHeader({
+    super.key,
+    required this.user,
+    required this.date,
+    required this.currentUsername,
+    required this.onUserTap,
+    this.authorUsername = '',
+  });
+  final CommunityUser user;
+  final DateTime? date;
+  final String currentUsername, authorUsername;
+  final ValueChanged<String> onUserTap;
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final local = date?.toLocal();
+    final material = MaterialLocalizations.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CommunityAvatar(
+          user: user,
+          radius: 18,
+          onTap: user.username.isEmpty ? null : () => onUserTap(user.username),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                onTap:
+                    user.username.isEmpty
+                        ? null
+                        : () => onUserTap(user.username),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    user.nickname,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  if (local != null)
+                    Tooltip(
+                      message: local.toString(),
+                      child: Text(
+                        '${material.formatCompactDate(local)} ${material.formatTimeOfDay(TimeOfDay.fromDateTime(local))}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  if (user.username.isNotEmpty &&
+                      user.username == authorUsername)
+                    Text(
+                      strings.t('author'),
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  if (user.username.isNotEmpty &&
+                      user.username == currentUsername)
+                    Text(
+                      strings.t('you'),
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class CommentBody extends StatefulWidget {
+  const CommentBody(this.content, {super.key});
+  final String content;
+  @override
+  State<CommentBody> createState() => _CommentBodyState();
+}
+
+class _CommentBodyState extends State<CommentBody> {
+  bool _expanded = false;
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      BangumiRichText(
+        widget.content,
+        maxLines: !_expanded && widget.content.length > 700 ? 10 : null,
+        overflow: TextOverflow.clip,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.55),
+      ),
+      if (widget.content.length > 700)
+        TextButton(
+          onPressed: () => setState(() => _expanded = !_expanded),
+          child: Text(
+            AppLocalizations.of(context).t(_expanded ? 'collapse' : 'expand'),
+          ),
+        ),
+    ],
+  );
+}
+
+class NestedReplyPreview extends StatefulWidget {
+  const NestedReplyPreview({
+    super.key,
+    required this.items,
+    required this.onUserTap,
+  });
+  final List<CommunityReply> items;
+  final ValueChanged<String> onUserTap;
+  @override
+  State<NestedReplyPreview> createState() => _NestedReplyPreviewState();
+}
+
+class _NestedReplyPreviewState extends State<NestedReplyPreview> {
+  bool _expanded = false;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final reply in widget.items.take(
+          _expanded ? widget.items.length : 3,
+        ))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: () => widget.onUserTap(reply.user.username),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      reply.user.nickname,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+                CommentBody(reply.content),
+              ],
+            ),
+          ),
+        if (widget.items.length > 3)
+          TextButton(
+            onPressed: () => setState(() => _expanded = !_expanded),
+            child: Text(
+              AppLocalizations.of(
+                context,
+              ).t(_expanded ? 'collapse' : 'showReplies'),
+            ),
+          ),
+      ],
+    ),
+  );
 }

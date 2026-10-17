@@ -17,6 +17,7 @@ import '../../widgets/bangumi_rich_text.dart';
 import '../../widgets/subject_card.dart';
 import '../character/character_detail_page.dart';
 import '../community/reaction_picker.dart';
+import '../community/community_widgets.dart';
 import '../episode/episode_comments_page.dart';
 import '../person/person_detail_page.dart';
 import '../user/user_profile_page.dart';
@@ -550,15 +551,7 @@ class _SubjectHeader extends StatelessWidget {
                 height: posterWidth * 1.4,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(7),
-                  child: Hero(
-                    tag: heroTag,
-                    child: PosterArt(
-                      subject: subject,
-                      cacheWidth:
-                          (posterWidth * MediaQuery.devicePixelRatioOf(context))
-                              .round(),
-                    ),
-                  ),
+                  child: SubjectPosterHero(tag: heroTag, subject: subject),
                 ),
               ),
               SizedBox(width: compact ? 14 : 22),
@@ -948,13 +941,25 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
                 const SizedBox(width: 3),
                 Text('${item.rate}'),
               ],
+            ],
+          ),
+          if (item.comment.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            CommentBody(item.comment),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: ReactionSummary(reactions: _reactions)),
               IconButton(
-                tooltip: _selectedValue == null ? '贴贴' : '更换表情',
+                tooltip: AppLocalizations.of(
+                  context,
+                ).t(_selectedValue == null ? 'react' : 'changeReaction'),
                 onPressed:
                     !widget.repository.isLoggedIn || _busy ? null : _toggleLike,
                 icon:
                     _selectedValue == null
-                        ? const Icon(Icons.add_reaction_outlined)
+                        ? const Icon(Icons.add_reaction_outlined, size: 20)
                         : BangumiReactionImage(
                           value: _selectedValue!,
                           size: 21,
@@ -962,14 +967,6 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
               ),
             ],
           ),
-          if (item.comment.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            BangumiRichText(item.comment),
-          ],
-          if (_reactions.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ReactionSummary(reactions: _reactions),
-          ],
         ],
       ),
     );

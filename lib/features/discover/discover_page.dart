@@ -7,7 +7,6 @@ import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../../widgets/subject_card.dart';
 import '../search/subject_search_delegate.dart';
-import '../subject/subject_detail_page.dart';
 import '../subject/subject_navigation.dart';
 
 class DiscoverPage extends StatefulWidget {
@@ -148,21 +147,19 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       ),
                     ),
                   ),
-                  if (state.cached)
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 8,
-                      ),
-                      sliver: SliverToBoxAdapter(
-                        child: Text(
-                          '${strings.t('usingCachedCalendar')} · ${strings.t('lastUpdated')} ${state.updatedAt?.toLocal().toString().substring(0, 16) ?? ''}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                  SliverToBoxAdapter(
+                    child: Semantics(
+                      label: state.loading ? strings.t('loading') : null,
+                      liveRegion: true,
+                      child: SizedBox(
+                        height: 2,
+                        child:
+                            state.loading && calendar != null
+                                ? const LinearProgressIndicator(minHeight: 2)
+                                : null,
                       ),
                     ),
-                  if (state.loading && calendar != null)
-                    const SliverToBoxAdapter(child: LinearProgressIndicator()),
+                  ),
                   if (state.error != null && calendar != null)
                     SliverToBoxAdapter(
                       child: TextButton.icon(
@@ -210,15 +207,19 @@ class _DiscoverPageState extends State<DiscoverPage> {
                             ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) => SubjectCard(
+                            key: ValueKey(
+                              'calendar:$_selectedDay:${subjects[index].id}',
+                            ),
                             subject: subjects[index],
-                            heroTag: 'discover-$index-${subjects[index].id}',
+                            heroTag:
+                                'discover-$_selectedDay-${subjects[index].id}',
                             onTap:
                                 () => openSubjectDetails(
                                   context,
                                   subject: subjects[index],
                                   repository: widget.repository,
                                   heroTag:
-                                      'discover-$index-${subjects[index].id}',
+                                      'discover-$_selectedDay-${subjects[index].id}',
                                 ),
                           ),
                           childCount: subjects.length,
@@ -314,15 +315,11 @@ class _SubjectLine extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap:
-            () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder:
-                    (_) => SubjectDetailPage(
-                      subject: subject,
-                      heroTag: 'line-${subject.id}',
-                      repository: repository,
-                    ),
-              ),
+            () => openSubjectDetails(
+              context,
+              subject: subject,
+              heroTag: 'line-${subject.id}',
+              repository: repository,
             ),
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -333,7 +330,10 @@ class _SubjectLine extends StatelessWidget {
                 height: 82,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: PosterArt(subject: subject),
+                  child: SubjectPosterHero(
+                    subject: subject,
+                    tag: 'line-${subject.id}',
+                  ),
                 ),
               ),
               const SizedBox(width: 14),

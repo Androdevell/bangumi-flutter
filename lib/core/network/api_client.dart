@@ -244,7 +244,7 @@ class ApiClient {
       _requireScope(scope);
       final response = await http.Response.fromStream(
         await _client.send(request).timeout(const Duration(seconds: 20)),
-      );
+      ).timeout(const Duration(seconds: 20));
       _requireScope(scope);
       final text = utf8.decode(response.bodyBytes, allowMalformed: true).trim();
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -254,23 +254,34 @@ class ApiClient {
               : '服务器返回 ${response.statusCode}',
           statusCode: response.statusCode,
           details: text,
+          outcomeUnknown:
+              response.statusCode >= 500 ||
+              response.statusCode == 408 ||
+              (response.statusCode >= 300 &&
+                  response.statusCode < 400 &&
+                  !(Uri.tryParse(
+                        response.headers['location'] ?? '',
+                      )?.path.contains('login') ??
+                      false)),
         );
       }
       if (text.isEmpty) {
-        throw const ApiException('未收到评论发布确认，请刷新确认后再试');
+        throw const ApiException('未收到评论发布确认，请刷新确认后再试', outcomeUnknown: true);
       }
-      clearCache();
       try {
         return jsonDecode(text);
       } on FormatException {
-        throw const ApiException('评论发布失败，请重新登录后再试');
+        throw const ApiException('评论发布失败，请重新登录后再试', outcomeUnknown: true);
       }
     } on TimeoutException {
-      throw const ApiException('连接 Bangumi 超时，请检查网络后重试');
+      throw const ApiException('连接 Bangumi 超时，请检查网络后重试', outcomeUnknown: true);
     } on SocketException {
-      throw const ApiException('无法连接 Bangumi，请检查网络或 DNS 设置');
+      throw const ApiException(
+        '无法连接 Bangumi，请检查网络或 DNS 设置',
+        outcomeUnknown: true,
+      );
     } on http.ClientException catch (error) {
-      throw ApiException('网络请求失败：${error.message}');
+      throw ApiException('网络请求失败：${error.message}', outcomeUnknown: true);
     }
   }
 
@@ -525,11 +536,17 @@ class _ReadBudget {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode, this.details});
+  const ApiException(
+    this.message, {
+    this.statusCode,
+    this.details,
+    this.outcomeUnknown = false,
+  });
 
   final String message;
   final int? statusCode;
   final String? details;
+  final bool outcomeUnknown;
 
   @override
   String toString() {

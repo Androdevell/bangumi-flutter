@@ -102,172 +102,182 @@ class BangumiRichText extends StatelessWidget {
   final List<ComposeRichTextNode>? nodes;
 
   @override
-  Widget build(BuildContext context) {
-    final effectiveStyle = style ?? Theme.of(context).textTheme.bodyMedium;
-    final document =
-        nodes == null
-            ? BangumiBbCode.parse(text)
-            : ComposeRichTextDocument(nodes!, false);
-    var images = 0;
-    List<InlineSpan> render(
-      List<ComposeRichTextNode> nodes,
-      TextStyle inherited,
-    ) =>
-        nodes.map<InlineSpan>((node) {
-          if (node.tag == 'text') {
-            return TextSpan(text: node.value, style: inherited);
-          }
-          if (node.tag == 'mask') {
-            return WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: _Spoiler(
-                key: ValueKey(node),
-                children: node.children,
-                style: inherited,
-                originalColors: originalColors,
-              ),
-            );
-          }
-          if (node.tag == 'emoji') {
-            final url = bangumiEmojiUrl(
-              node.value.substring(1, node.value.length - 1),
-            );
-            if (url == null) return TextSpan(text: node.value);
-            final size =
-                node.value.toLowerCase().startsWith('(bgm') ? 24.0 : 55.0;
-            return WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: CachedNetworkImage(
-                imageUrl: url,
-                cacheManager: AppImageCache.manager,
-                width: size,
-                height: size,
-                memCacheWidth: (size * 3).round(),
-                fit: BoxFit.contain,
-                errorWidget: (_, __, ___) => Text(node.value),
-              ),
-            );
-          }
-          if (node.tag == 'img') {
-            final uri = BangumiBbCode.safeUrl(
-              BangumiBbCode.plain(node.children),
-            );
-            if (uri == null) return const TextSpan(text: '[img]');
-            if (++images > 20 ||
-                !{
-                  'lain.bgm.tv',
-                  'bgm.tv',
-                  'bangumi.tv',
-                  'chii.in',
-                }.contains(uri.host)) {
-              return WidgetSpan(
-                child: TextButton.icon(
-                  onPressed: () => _openLink(context, uri),
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(_label(context, 'externalImage')),
-                ),
-              );
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final inlineWidth =
+          constraints.hasBoundedWidth ? constraints.maxWidth : 320.0;
+      final effectiveStyle = style ?? Theme.of(context).textTheme.bodyMedium;
+      final document =
+          nodes == null
+              ? BangumiBbCode.parse(text)
+              : ComposeRichTextDocument(nodes!, false);
+      var images = 0;
+      List<InlineSpan> render(
+        List<ComposeRichTextNode> nodes,
+        TextStyle inherited,
+      ) =>
+          nodes.map<InlineSpan>((node) {
+            if (node.tag == 'text') {
+              return TextSpan(text: node.value, style: inherited);
             }
-            return WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: 320,
-                    maxHeight: 240,
-                  ),
-                  child: _RichImage(uri: uri.replace(scheme: 'https')),
-                ),
-              ),
-            );
-          }
-          if (node.tag == 'url') {
-            final uri = BangumiBbCode.safeUrl(
-              node.value.isEmpty
-                  ? BangumiBbCode.plain(node.children)
-                  : node.value,
-            );
-            if (uri != null) {
+            if (node.tag == 'mask') {
               return WidgetSpan(
                 alignment: PlaceholderAlignment.middle,
-                child: TextButton(
-                  onPressed: () => _openLink(context, uri),
-                  child: Text(
-                    BangumiBbCode.plain(node.children),
-                    style: inherited.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      decoration: TextDecoration.underline,
-                    ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: inlineWidth),
+                  child: _Spoiler(
+                    key: ValueKey(node),
+                    children: node.children,
+                    style: inherited,
+                    originalColors: originalColors,
                   ),
                 ),
               );
             }
-          }
-          var next = inherited;
-          if (node.tag == 'b') {
-            next = next.copyWith(fontWeight: FontWeight.bold);
-          }
-          if (node.tag == 'i') {
-            next = next.copyWith(fontStyle: FontStyle.italic);
-          }
-          if (node.tag == 'u' || node.tag == 's') {
-            next = next.copyWith(
-              decoration: TextDecoration.combine([
-                if (next.decoration != null) next.decoration!,
-                node.tag == 'u'
-                    ? TextDecoration.underline
-                    : TextDecoration.lineThrough,
-              ]),
-            );
-          }
-          if (node.tag == 'size') {
-            final size = double.tryParse(node.value);
-            if (size != null && size.isFinite) {
-              next = next.copyWith(fontSize: size.clamp(10, 28), height: 1.5);
+            if (node.tag == 'emoji') {
+              final url = bangumiEmojiUrl(
+                node.value.substring(1, node.value.length - 1),
+              );
+              if (url == null) return TextSpan(text: node.value);
+              final size =
+                  node.value.toLowerCase().startsWith('(bgm') ? 24.0 : 55.0;
+              return WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: CachedNetworkImage(
+                  imageUrl: url,
+                  cacheManager: AppImageCache.manager,
+                  width: size,
+                  height: size,
+                  memCacheWidth: (size * 3).round(),
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => Text(node.value),
+                ),
+              );
             }
-          }
-          if (node.tag == 'color') {
-            final color = _color(node.value);
-            if (color != null) {
-              final a = color.computeLuminance();
-              final b =
-                  Theme.of(context).colorScheme.surface.computeLuminance();
-              final ratio =
-                  (a > b ? a + .05 : b + .05) / (a > b ? b + .05 : a + .05);
-              if (originalColors || ratio >= 4.5) {
-                next = next.copyWith(color: color);
+            if (node.tag == 'img') {
+              final uri = BangumiBbCode.safeUrl(
+                BangumiBbCode.plain(node.children),
+              );
+              if (uri == null) return const TextSpan(text: '[img]');
+              if (++images > 20 ||
+                  !{
+                    'lain.bgm.tv',
+                    'bgm.tv',
+                    'bangumi.tv',
+                    'chii.in',
+                  }.contains(uri.host)) {
+                return WidgetSpan(
+                  child: TextButton.icon(
+                    onPressed: () => _openLink(context, uri),
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(_label(context, 'externalImage')),
+                  ),
+                );
+              }
+              return WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: inlineWidth.clamp(0, 320).toDouble(),
+                      maxHeight: 240,
+                    ),
+                    child: _RichImage(uri: uri.replace(scheme: 'https')),
+                  ),
+                ),
+              );
+            }
+            if (node.tag == 'url') {
+              final uri = BangumiBbCode.safeUrl(
+                node.value.isEmpty
+                    ? BangumiBbCode.plain(node.children)
+                    : node.value,
+              );
+              if (uri != null) {
+                return WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: inlineWidth),
+                    child: TextButton(
+                      onPressed: () => _openLink(context, uri),
+                      child: Text(
+                        BangumiBbCode.plain(node.children),
+                        style: inherited.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
               }
             }
-          }
-          if (node.tag == 'quote') {
-            return TextSpan(
-              children: [
-                const TextSpan(text: '\n❝ '),
-                ...render(
-                  node.children,
-                  next.copyWith(fontStyle: FontStyle.italic),
-                ),
-                const TextSpan(text: '\n'),
-              ],
-            );
-          }
-          return TextSpan(children: render(node.children, next));
-        }).toList();
-    final richText = Text.rich(
-      TextSpan(
-        style: effectiveStyle,
-        children: [
-          ...render(document.nodes, effectiveStyle ?? const TextStyle()),
-          if (document.truncated)
-            TextSpan(text: '\n${_label(context, 'richTextLimited')}'),
-        ],
-      ),
-      maxLines: maxLines,
-      overflow: overflow,
-    );
-    return selectable ? SelectionArea(child: richText) : richText;
-  }
+            var next = inherited;
+            if (node.tag == 'b') {
+              next = next.copyWith(fontWeight: FontWeight.bold);
+            }
+            if (node.tag == 'i') {
+              next = next.copyWith(fontStyle: FontStyle.italic);
+            }
+            if (node.tag == 'u' || node.tag == 's') {
+              next = next.copyWith(
+                decoration: TextDecoration.combine([
+                  if (next.decoration != null) next.decoration!,
+                  node.tag == 'u'
+                      ? TextDecoration.underline
+                      : TextDecoration.lineThrough,
+                ]),
+              );
+            }
+            if (node.tag == 'size') {
+              final size = double.tryParse(node.value);
+              if (size != null && size.isFinite) {
+                next = next.copyWith(fontSize: size.clamp(10, 28), height: 1.5);
+              }
+            }
+            if (node.tag == 'color') {
+              final color = _color(node.value);
+              if (color != null) {
+                final a = color.computeLuminance();
+                final b =
+                    Theme.of(context).colorScheme.surface.computeLuminance();
+                final ratio =
+                    (a > b ? a + .05 : b + .05) / (a > b ? b + .05 : a + .05);
+                if (originalColors || ratio >= 4.5) {
+                  next = next.copyWith(color: color);
+                }
+              }
+            }
+            if (node.tag == 'quote') {
+              return TextSpan(
+                children: [
+                  const TextSpan(text: '\n❝ '),
+                  ...render(
+                    node.children,
+                    next.copyWith(fontStyle: FontStyle.italic),
+                  ),
+                  const TextSpan(text: '\n'),
+                ],
+              );
+            }
+            return TextSpan(children: render(node.children, next));
+          }).toList();
+      final richText = Text.rich(
+        TextSpan(
+          style: effectiveStyle,
+          children: [
+            ...render(document.nodes, effectiveStyle ?? const TextStyle()),
+            if (document.truncated)
+              TextSpan(text: '\n${_label(context, 'richTextLimited')}'),
+          ],
+        ),
+        maxLines: maxLines,
+        overflow: overflow,
+      );
+      return selectable ? SelectionArea(child: richText) : richText;
+    },
+  );
 }
 
 String _label(BuildContext context, String key) =>

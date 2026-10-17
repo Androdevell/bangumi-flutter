@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../core/network/app_image_cache.dart';
 import 'common.dart';
-import '../app/app_motion.dart';
 import '../core/localization/app_localizations.dart';
 
 class SubjectCard extends StatelessWidget {
@@ -30,19 +29,7 @@ class SubjectCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Hero(
-                  tag: heroTag,
-                  child: LayoutBuilder(
-                    builder:
-                        (context, constraints) => PosterArt(
-                          subject: subject,
-                          cacheWidth: (constraints.maxWidth *
-                                  MediaQuery.devicePixelRatioOf(context))
-                              .round()
-                              .clamp(1, 1600),
-                        ),
-                  ),
-                ),
+                child: SubjectPosterHero(tag: heroTag, subject: subject),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
@@ -107,6 +94,31 @@ class SubjectCard extends StatelessWidget {
   }
 }
 
+/// 两端共享解码尺寸和裁剪，飞行期间不重新按动画尺寸生成图片缓存键。
+class SubjectPosterHero extends StatelessWidget {
+  const SubjectPosterHero({
+    super.key,
+    required this.tag,
+    required this.subject,
+  });
+  final String tag;
+  final Subject subject;
+  static const decodeWidth = 640;
+  @override
+  Widget build(BuildContext context) => Hero(
+    tag: tag,
+    flightShuttleBuilder: (context, animation, direction, from, to) {
+      final hero =
+          (direction == HeroFlightDirection.push ? from : to).widget as Hero;
+      return hero.child;
+    },
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(7),
+      child: PosterArt(subject: subject, cacheWidth: decodeWidth),
+    ),
+  );
+}
+
 class PosterArt extends StatefulWidget {
   const PosterArt({super.key, required this.subject, this.cacheWidth});
 
@@ -135,7 +147,7 @@ class _PosterArtState extends State<PosterArt> {
             fit: BoxFit.cover,
             memCacheWidth: cacheWidth,
             maxWidthDiskCache: cacheWidth == null ? null : cacheWidth * 2,
-            fadeInDuration: AppMotionPolicy.duration(context, 100),
+            fadeInDuration: Duration.zero,
             fadeOutDuration: Duration.zero,
             placeholderFadeInDuration: Duration.zero,
             useOldImageOnUrlChange: true,

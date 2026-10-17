@@ -65,10 +65,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        'Bangumi',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
+                      const Icon(Icons.auto_awesome_rounded, size: 40),
                       const SizedBox(height: 24),
                       if (snapshot.hasError) ...[
                         Text(
@@ -82,7 +79,11 @@ class _AppBootstrapState extends State<AppBootstrap> {
                           child: Text(AppLocalizations.of(context).t('retry')),
                         ),
                       ] else
-                        const CircularProgressIndicator(),
+                        CircularProgressIndicator(
+                          semanticsLabel: AppLocalizations.of(
+                            context,
+                          ).t('loading'),
+                        ),
                     ],
                   ),
                 ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app/app_motion.dart';
+import '../core/localization/app_localizations.dart';
 
 class ContentFrame extends StatelessWidget {
   const ContentFrame({super.key, required this.child, this.maxWidth = 1320});
@@ -164,9 +165,9 @@ class SurfaceBlock extends StatelessWidget {
 }
 
 class LoadingView extends StatelessWidget {
-  const LoadingView({super.key, this.label = '正在连接 Bangumi…'});
+  const LoadingView({super.key, this.label});
 
-  final String label;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -176,9 +177,13 @@ class LoadingView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 14),
-            Text(label, style: Theme.of(context).textTheme.bodyMedium),
+            CircularProgressIndicator(
+              semanticsLabel: AppLocalizations.of(context).t('loading'),
+            ),
+            if (label != null) ...[
+              const SizedBox(height: 14),
+              Text(label!, style: Theme.of(context).textTheme.bodyMedium),
+            ],
           ],
         ),
       ),

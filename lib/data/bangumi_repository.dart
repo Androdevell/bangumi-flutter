@@ -109,6 +109,10 @@ abstract interface class CalendarSnapshotRepository {
   Future<Map<String, List<Subject>>> refreshCalendar();
 }
 
+abstract interface class CommentCacheRepository {
+  void invalidateCommentReads({int? episodeId, Topic? topic});
+}
+
 Future<CommunityUser> fetchUserSummary(
   BangumiRepository repository,
   String username, {
@@ -183,6 +187,7 @@ class RemoteBangumiRepository
         CollectionFeatureRepository,
         DetailSectionsRepository,
         CalendarSnapshotRepository,
+        CommentCacheRepository,
         SubjectPreviewRepository,
         RefreshableRepository {
   RemoteBangumiRepository({
@@ -204,6 +209,17 @@ class RemoteBangumiRepository
   final ThirdPartyPreviewService previewService;
 
   final ApiClient _api;
+  @override
+  void invalidateCommentReads({int? episodeId, Topic? topic}) {
+    if (episodeId != null) {
+      _api.invalidateResources({'p1/episodes/$episodeId/comments'});
+    }
+    if (topic != null) {
+      final owner = topic.type == 'group' ? 'groups' : 'subjects';
+      _api.invalidateResources({'p1/$owner/-/topics/${topic.id}'});
+    }
+  }
+
   final CalendarSnapshotStore? calendarStore;
   final ValueNotifier<int> _collectionChanges = ValueNotifier(0);
   @override
@@ -692,6 +708,10 @@ class RemoteBangumiRepository
       },
     );
     _requireReplyConfirmation(json);
+    _api.invalidateResources({
+      'p1/${owner}s/-/topics/${topic.id}',
+      'p1/rakuen/topics',
+    });
   }
 
   @override
@@ -854,6 +874,7 @@ class RemoteBangumiRepository
       },
     );
     _requireReplyConfirmation(json);
+    _api.invalidateResources({'p1/episodes/$episodeId/comments'});
   }
 
   @override
@@ -1059,7 +1080,7 @@ class RemoteBangumiRepository
       throw ApiException('${json['msg'] ?? json['message'] ?? '评论发布失败'}');
     }
     if (json is! Map || !(json['status'] == 'ok' || json['posts'] is Map)) {
-      throw const ApiException('未收到评论发布确认，请刷新确认后再试');
+      throw const ApiException('未收到评论发布确认，请刷新确认后再试', outcomeUnknown: true);
     }
   }
 
