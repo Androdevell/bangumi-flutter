@@ -131,7 +131,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     try {
       final subject = await widget.repository.fetchSubject(item.id);
       if (!mounted) return;
-      Navigator.of(context).push(
+      await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder:
               (_) => SubjectDetailPage(

@@ -16,6 +16,35 @@ class RichCommentImage extends StatefulWidget {
 class _RichCommentImageState extends State<RichCommentImage> {
   bool _once = false;
   int _revision = 0;
+
+  Future<void> _retry(Uri uri) async {
+    try {
+      await AppImageCache.manager.removeFile(uri.toString());
+      if (mounted) setState(() => _revision++);
+    } on Object {
+      _showFailure();
+    }
+  }
+
+  Future<void> _openExternal(Uri uri) async {
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        _showFailure();
+      }
+    } on Object {
+      _showFailure();
+    }
+  }
+
+  void _showFailure() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context).t('operationFailed')),
+      ),
+    );
+  }
+
   @override
   void didUpdateWidget(covariant RichCommentImage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -123,21 +152,12 @@ class _RichCommentImageState extends State<RichCommentImage> {
                           spacing: 8,
                           children: [
                             TextButton.icon(
-                              onPressed: () async {
-                                await AppImageCache.manager.removeFile(
-                                  uri.toString(),
-                                );
-                                if (mounted) setState(() => _revision++);
-                              },
+                              onPressed: () => _retry(uri),
                               icon: const Icon(Icons.refresh),
                               label: Text(strings.t('retry')),
                             ),
                             TextButton(
-                              onPressed:
-                                  () => launchUrl(
-                                    uri,
-                                    mode: LaunchMode.externalApplication,
-                                  ),
+                              onPressed: () => _openExternal(uri),
                               child: Text(strings.t('externalImage')),
                             ),
                           ],

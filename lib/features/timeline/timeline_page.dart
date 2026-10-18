@@ -221,9 +221,8 @@ class _TimelineTileState extends State<_TimelineTile> {
   @override
   void didUpdateWidget(covariant _TimelineTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.entry, widget.entry)) {
+    if (oldWidget.entry != widget.entry) {
       _revision++;
-      _busy = false;
       _selectedValue = widget.entry.reactionBy(
         widget.repository.currentUsername,
       );
@@ -243,14 +242,14 @@ class _TimelineTileState extends State<_TimelineTile> {
     if (_busy) return;
     final revision = _revision;
     final entry = widget.entry;
-    final picked = await showReactionPicker(
-      context,
-      selectedValue: _selectedValue,
-    );
-    if (picked == null || !mounted || revision != _revision) return;
-    final nextValue = picked.isEmpty ? null : picked;
     setState(() => _busy = true);
     try {
+      final picked = await showReactionPicker(
+        context,
+        selectedValue: _selectedValue,
+      );
+      if (picked == null || !mounted || revision != _revision) return;
+      final nextValue = picked.isEmpty ? null : picked;
       await widget.repository.setTimelineReaction(entry.id, nextValue);
       if (!mounted || revision != _revision) return;
       setState(() {
@@ -270,7 +269,7 @@ class _TimelineTileState extends State<_TimelineTile> {
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
-      if (mounted && revision == _revision) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 

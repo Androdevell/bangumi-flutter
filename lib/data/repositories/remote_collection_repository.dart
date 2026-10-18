@@ -146,7 +146,11 @@ class RemoteCollectionRepository implements CollectionRepository {
       return change;
     } finally {
       done.complete();
-      if (identical(_writes[subjectId], done.future)) _writes.remove(subjectId);
+      if (identical(_writes[subjectId], done.future)) {
+        // done 已完成；这里只清理串行写入队列的引用。
+        // ignore: unawaited_futures
+        _writes.remove(subjectId);
+      }
     }
   }
 

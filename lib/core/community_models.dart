@@ -63,6 +63,36 @@ class CommunityUser {
   final DateTime? joinedAt;
   final bool isFriend;
   final UserStats stats;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is CommunityUser &&
+        other.id == id &&
+        other.username == username &&
+        other.nickname == nickname &&
+        other.avatarUrl == avatarUrl &&
+        other.sign == sign &&
+        other.bio == bio &&
+        other.location == location &&
+        other.joinedAt == joinedAt &&
+        other.isFriend == isFriend &&
+        other.stats == stats;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    username,
+    nickname,
+    avatarUrl,
+    sign,
+    bio,
+    location,
+    joinedAt,
+    isFriend,
+    stats,
+  );
 }
 
 @immutable
@@ -86,6 +116,32 @@ class UserStats {
   final int characters;
   final int persons;
   final int indexes;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is UserStats &&
+        other.subjects == subjects &&
+        other.watched == watched &&
+        other.friends == friends &&
+        other.blogs == blogs &&
+        other.groups == groups &&
+        other.characters == characters &&
+        other.persons == persons &&
+        other.indexes == indexes;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    subjects,
+    watched,
+    friends,
+    blogs,
+    groups,
+    characters,
+    persons,
+    indexes,
+  );
 }
 
 @immutable
@@ -131,6 +187,38 @@ class CommunityReply {
   bool likedBy(String username) => reactions.any(
     (reaction) => reaction.users.any((user) => user == username),
   );
+
+  /// 值相等：供回复列表的 `didUpdateWidget` 判断数据是否真的变化。
+  ///
+  /// `replies` 是递归结构，`listEquals` 会逐层使用本类的 `==`，
+  /// 因此嵌套回复的变化同样能被感知。
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is CommunityReply &&
+        other.id == id &&
+        other.content == content &&
+        other.user == user &&
+        other.createdAt == createdAt &&
+        listEquals(other.replies, replies) &&
+        listEquals(other.reactions, reactions) &&
+        other.state == state &&
+        other.relatedId == relatedId &&
+        other.creatorId == creatorId;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    content,
+    user,
+    createdAt,
+    Object.hashAll(replies),
+    Object.hashAll(reactions),
+    state,
+    relatedId,
+    creatorId,
+  );
 }
 
 @immutable
@@ -155,6 +243,18 @@ class CommunityReaction {
   final String value;
   final int count;
   final List<String> users;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is CommunityReaction &&
+        other.value == value &&
+        other.count == count &&
+        listEquals(other.users, users);
+  }
+
+  @override
+  int get hashCode => Object.hash(value, count, Object.hashAll(users));
 }
 
 @immutable

@@ -175,7 +175,11 @@ class ApiClient {
       }
       return result;
     } finally {
-      if (identical(_inFlight[key], request)) _inFlight.remove(key);
+      if (identical(_inFlight[key], request)) {
+        // 请求已在上方等待；这里只移除缓存引用，不再次监听其错误。
+        // ignore: unawaited_futures
+        _inFlight.remove(key);
+      }
     }
   }
 

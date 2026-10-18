@@ -9,6 +9,35 @@ import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'invalid reaction ids fail before transport for every reaction endpoint',
+    () async {
+      var calls = 0;
+      final repository = RemoteBangumiRepository(
+        apiClient: ApiClient(
+          client: MockClient((_) async {
+            calls++;
+            return http.Response('', 204);
+          }),
+        ),
+      );
+      addTearDown(repository.close);
+      final setters = <Future<void> Function(String?)>[
+        (value) => repository.setTimelineReaction(1, value),
+        (value) => repository.setSubjectCommentReaction(1, value),
+        (value) => repository.setEpisodeCommentReaction(1, value),
+        (value) => repository.setTopicPostReaction('group', 1, value),
+      ];
+      for (final set in setters) {
+        for (final invalid in ['', 'abc', '-1', '1.5', ' 54', '0x36', '054']) {
+          await expectLater(set(invalid), throwsA(isA<ApiException>()));
+        }
+      }
+      expect(calls, 0);
+      await repository.setTimelineReaction(1, '0');
+      expect(calls, 1);
+    },
+  );
   test('Bangumi smile and reaction ids resolve to the original assets', () {
     expect(
       bangumiEmojiUrl('bgm68'),

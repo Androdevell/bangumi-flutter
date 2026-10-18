@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/lazy_tab_view.dart';
@@ -111,7 +112,8 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
       _progress = EpisodeProgressController(
         (repo as EpisodeProgressFeature).episodeProgress,
         widget.subject.id,
-      )..refresh();
+      );
+      unawaited(_progress!.refresh());
     }
     return details;
   }
@@ -491,7 +493,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                   () => _section(
                                     details,
                                     'comments',
-                                    (value) => _CommentSection(
+                                    (value) => SubjectCommentSection(
                                       items: value.comments,
                                       repository: widget.repository,
                                       onUserTap: _openUser,
@@ -834,8 +836,9 @@ class _SummarySection extends StatelessWidget {
   }
 }
 
-class _CommentSection extends StatelessWidget {
-  const _CommentSection({
+class SubjectCommentSection extends StatelessWidget {
+  const SubjectCommentSection({
+    super.key,
     required this.items,
     required this.repository,
     required this.onUserTap,
@@ -892,9 +895,8 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
   @override
   void didUpdateWidget(covariant _SubjectCommentTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.item, widget.item)) {
+    if (oldWidget.item != widget.item) {
       _revision++;
-      _busy = false;
       _selectedValue = widget.item.reactionBy(
         widget.repository.currentUsername,
       );
@@ -908,14 +910,14 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
     if (_busy || !widget.repository.isLoggedIn) return;
     final revision = _revision;
     final item = widget.item;
-    final picked = await showReactionPicker(
-      context,
-      selectedValue: _selectedValue,
-    );
-    if (picked == null || !mounted || revision != _revision) return;
-    final nextValue = picked.isEmpty ? null : picked;
     setState(() => _busy = true);
     try {
+      final picked = await showReactionPicker(
+        context,
+        selectedValue: _selectedValue,
+      );
+      if (picked == null || !mounted || revision != _revision) return;
+      final nextValue = picked.isEmpty ? null : picked;
       await widget.repository.setSubjectCommentReaction(item.id, nextValue);
       if (!mounted || revision != _revision) return;
       setState(() {
@@ -935,7 +937,7 @@ class _SubjectCommentTileState extends State<_SubjectCommentTile> {
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
-      if (mounted && revision == _revision) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 

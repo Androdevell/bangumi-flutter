@@ -49,8 +49,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  bool _notifications = true;
-  bool _autoPlay = false;
   String _profileUsername = '';
   Future<CommunityUser>? _profile;
   late final AppUpdateService _updateService = AppUpdateService();
@@ -108,14 +106,21 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _clearImageCache() async {
-    await AppImageCache.clear();
-    if (!mounted) return;
-    setState(() {
-      _cacheUsage = AppImageCache.diskUsageBytes();
-    });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(_strings.t('cacheCleared'))));
+    try {
+      await AppImageCache.clear();
+      if (!mounted) return;
+      setState(() {
+        _cacheUsage = AppImageCache.diskUsageBytes();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_strings.t('cacheCleared'))));
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_strings.t('operationFailed'))));
+    }
   }
 
   Future<void> _testNetwork() async {
@@ -216,7 +221,15 @@ class _ProfilePageState extends State<ProfilePage> {
             ],
           ),
     );
-    if (confirmed == true) await authService.logout();
+    if (confirmed != true) return;
+    try {
+      await authService.logout();
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_strings.t('operationFailed'))));
+    }
   }
 
   void _openMyProfile(int initialIndex) {
@@ -634,13 +647,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const Divider(height: 1),
                   SwitchListTile(
-                    secondary: const Icon(Icons.play_circle_outline_rounded),
-                    title: Text(strings.t('autoPlay')),
-                    value: _autoPlay,
-                    onChanged: (value) => setState(() => _autoPlay = value),
-                  ),
-                  const Divider(height: 1),
-                  SwitchListTile(
                     secondary: const Icon(Icons.animation_outlined),
                     title: Text(strings.t('reduceMotion')),
                     subtitle: Text(strings.t('reduceMotionSubtitle')),
@@ -648,22 +654,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     onChanged: widget.onReduceMotionChanged,
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 22),
-            Text(
-              strings.t('notifications'),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 10),
-            SurfaceBlock(
-              padding: EdgeInsets.zero,
-              child: SwitchListTile(
-                secondary: const Icon(Icons.notifications_outlined),
-                title: Text(strings.t('updateReminder')),
-                subtitle: Text(strings.t('updateReminderSubtitle')),
-                value: _notifications,
-                onChanged: (value) => setState(() => _notifications = value),
               ),
             ),
             const SizedBox(height: 22),

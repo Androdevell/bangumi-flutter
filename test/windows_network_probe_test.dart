@@ -19,6 +19,7 @@ void main() {
         client.close();
       }
     },
-    skip: 'Live network probe',
+    skip:
+        !Platform.isWindows || !const bool.fromEnvironment('RUN_LIVE_NETWORK'),
   );
 }

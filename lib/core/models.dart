@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'json_utils.dart' as dates;
 import 'collection_labels.dart';
+import 'model_equality.dart';
 
 @immutable
 class Subject {
@@ -195,6 +196,51 @@ class TimelineEntry {
   final String sourceName;
   final int replies;
   final int subjectId;
+
+  /// 值相等：供时间线列表的 `didUpdateWidget` 判断数据是否真的变化。
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is TimelineEntry &&
+        other.id == id &&
+        other.user == user &&
+        other.avatarUrl == avatarUrl &&
+        other.action == action &&
+        other.subject == subject &&
+        other.createdAt == createdAt &&
+        other.category == category &&
+        other.username == username &&
+        other.reactionCount == reactionCount &&
+        stringSetEquals(other.reactedBy, reactedBy) &&
+        intMapEquals(other.reactions, reactions) &&
+        mapOfSetEquals(other.reactionUsers, reactionUsers) &&
+        other.imageUrl == imageUrl &&
+        other.detail == detail &&
+        other.sourceName == sourceName &&
+        other.replies == replies &&
+        other.subjectId == subjectId;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    user,
+    avatarUrl,
+    action,
+    subject,
+    createdAt,
+    category,
+    username,
+    reactionCount,
+    stringSetHash(reactedBy),
+    intMapHash(reactions),
+    mapOfSetHash(reactionUsers),
+    imageUrl,
+    detail,
+    sourceName,
+    replies,
+    subjectId,
+  );
 
   String? reactionBy(String username) {
     if (username.isEmpty) return null;

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'json_utils.dart' as dates;
 
+import 'model_equality.dart';
 import 'models.dart';
 import 'episode_types.dart';
 
@@ -256,6 +257,42 @@ class SubjectComment {
   final Set<String> reactedBy;
   final Map<String, int> reactions;
   final Map<String, Set<String>> reactionUsers;
+
+  /// 值相等：用于 [didUpdateWidget] 判断「这条评论的数据是否真的变了」。
+  ///
+  /// 未实现前只能退化为 `identical`，而仓库每次重新解析都会产生新实例，
+  /// 导致列表刷新时无条件重置本地状态并作废在途的贴贴请求。
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is SubjectComment &&
+        other.id == id &&
+        other.userName == userName &&
+        other.username == username &&
+        other.avatarUrl == avatarUrl &&
+        other.rate == rate &&
+        other.comment == comment &&
+        other.updatedAt == updatedAt &&
+        other.reactionCount == reactionCount &&
+        stringSetEquals(other.reactedBy, reactedBy) &&
+        intMapEquals(other.reactions, reactions) &&
+        mapOfSetEquals(other.reactionUsers, reactionUsers);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    userName,
+    username,
+    avatarUrl,
+    rate,
+    comment,
+    updatedAt,
+    reactionCount,
+    stringSetHash(reactedBy),
+    intMapHash(reactions),
+    mapOfSetHash(reactionUsers),
+  );
 
   String? reactionBy(String username) {
     for (final reaction in reactionUsers.entries) {

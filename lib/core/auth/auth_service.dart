@@ -8,6 +8,7 @@ import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
 
 import '../network/cookie_session_client.dart';
+import '../app_identity.dart';
 import 'auth_models.dart';
 import 'secure_vault.dart';
 
@@ -27,10 +28,7 @@ class AuthService extends ChangeNotifier {
   static const _userStorageKey = 'bangumi.auth.user.v1';
   static const _tokenStorageKey = 'bangumi.auth.token.v1';
   static const _callback = 'http://localhost/callback';
-  static const _userAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-      'AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.2.6';
+  static const _userAgent = browserUserAgent;
 
   final http.Client _client;
   final PersistentCookieStore _cookies;

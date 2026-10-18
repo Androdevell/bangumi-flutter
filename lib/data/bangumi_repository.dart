@@ -1053,21 +1053,11 @@ class RemoteBangumiRepository
 
   @override
   Future<void> setEpisodeCommentReaction(int commentId, String? value) =>
-      value == null
-          ? _api.delete('p1/episodes/-/comments/$commentId/like')
-          : _api.put(
-            'p1/episodes/-/comments/$commentId/like',
-            body: {'value': int.parse(value)},
-          );
+      _setReaction('p1/episodes/-/comments/$commentId/like', value);
 
   @override
   Future<void> setSubjectCommentReaction(int commentId, String? value) =>
-      value == null
-          ? _api.delete('p1/subjects/-/collects/$commentId/like')
-          : _api.put(
-            'p1/subjects/-/collects/$commentId/like',
-            body: {'value': int.parse(value)},
-          );
+      _setReaction('p1/subjects/-/collects/$commentId/like', value);
 
   @override
   Future<void> setTopicPostReaction(
@@ -1080,19 +1070,24 @@ class RemoteBangumiRepository
     }
     final owner = topicType == 'group' ? 'groups' : 'subjects';
     final path = 'p1/$owner/-/posts/$postId/like';
-    return value == null
-        ? _api.delete(path)
-        : _api.put(path, body: {'value': int.parse(value)});
+    return _setReaction(path, value);
   }
 
   @override
   Future<void> setTimelineReaction(int timelineId, String? value) =>
-      value == null
-          ? _api.delete('p1/timeline/$timelineId/like')
-          : _api.put(
-            'p1/timeline/$timelineId/like',
-            body: {'value': int.parse(value)},
-          );
+      _setReaction('p1/timeline/$timelineId/like', value);
+
+  Future<void> _setReaction(String path, String? value) async {
+    if (value == null) {
+      await _api.delete(path);
+      return;
+    }
+    final parsed = int.tryParse(value);
+    if (parsed == null || parsed < 0 || parsed.toString() != value) {
+      throw const ApiException('无效的贴贴编号');
+    }
+    await _api.put(path, body: {'value': parsed});
+  }
 
   List<Subject> _subjectPage(dynamic json) {
     final data = json is Map ? json['data'] ?? json['result'] : json;

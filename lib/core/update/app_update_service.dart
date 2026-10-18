@@ -7,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../network/platform_http_client.dart';
+import '../app_identity.dart';
 
 @immutable
 class AppUpdateResult {
@@ -59,7 +60,7 @@ class AppUpdateService {
           _latestReleaseUri,
           headers: const {
             HttpHeaders.acceptHeader: 'application/vnd.github+json',
-            HttpHeaders.userAgentHeader: 'BangumiFlutter/1.2.6',
+            HttpHeaders.userAgentHeader: appUserAgent,
             'X-GitHub-Api-Version': '2022-11-28',
           },
         )

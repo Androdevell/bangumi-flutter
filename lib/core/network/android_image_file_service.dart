@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart' as http;
+import '../app_identity.dart';
 
 /// 原生流式下载后只传临时文件路径，避免整张图片跨 MethodChannel 复制。
 class AndroidImageFileService extends FileService {
@@ -14,17 +15,13 @@ class AndroidImageFileService extends FileService {
     String url, {
     Map<String, String>? headers,
   }) async {
-    final response = await _channel.invokeMapMethod<
-      String,
-      dynamic
-    >('downloadImage', {
-      'url': url,
-      'headers': {
-        HttpHeaders.userAgentHeader:
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.2.6',
-        ...?headers,
+    final response = await _channel.invokeMapMethod<String, dynamic>(
+      'downloadImage',
+      {
+        'url': url,
+        'headers': {HttpHeaders.userAgentHeader: browserUserAgent, ...?headers},
       },
-    });
+    );
     if (response == null) throw const FileSystemException('图片下载未返回结果');
     final path = response['path'] as String?;
     Stream<List<int>> content() async* {

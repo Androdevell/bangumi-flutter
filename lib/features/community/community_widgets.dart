@@ -165,10 +165,9 @@ class _ReplyTileState extends State<_ReplyTile> {
   @override
   void didUpdateWidget(covariant _ReplyTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.item, widget.item) ||
+    if (oldWidget.item != widget.item ||
         oldWidget.currentUsername != widget.currentUsername) {
       _revision++;
-      _busy = false;
       _selectedValue = _findSelectedValue();
       _reactions
         ..clear()
@@ -192,14 +191,14 @@ class _ReplyTileState extends State<_ReplyTile> {
     if (_busy) return;
     final revision = _revision;
     final item = widget.item;
-    final picked = await showReactionPicker(
-      context,
-      selectedValue: _selectedValue,
-    );
-    if (picked == null || !mounted || revision != _revision) return;
-    final nextValue = picked.isEmpty ? null : picked;
     setState(() => _busy = true);
     try {
+      final picked = await showReactionPicker(
+        context,
+        selectedValue: _selectedValue,
+      );
+      if (picked == null || !mounted || revision != _revision) return;
+      final nextValue = picked.isEmpty ? null : picked;
       await widget.onLike(item, nextValue);
       if (!mounted || revision != _revision) return;
       setState(() {
@@ -219,7 +218,7 @@ class _ReplyTileState extends State<_ReplyTile> {
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
-      if (mounted && revision == _revision) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
