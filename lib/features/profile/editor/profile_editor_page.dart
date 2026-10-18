@@ -171,6 +171,18 @@ class _ProfileEditorPageState extends State<ProfileEditorPage> {
     super.dispose();
   }
 
+  String _errorText(AppLocalizations strings, Object error) {
+    if (error is! ApiException) return strings.t('profileLoadFailed');
+    final translated = strings.t(error.message);
+    final message =
+        translated == error.message
+            ? strings.t('profileLoadFailed')
+            : translated;
+    return error.statusCode == null
+        ? message
+        : '$message (HTTP ${error.statusCode})';
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
@@ -193,7 +205,10 @@ class _ProfileEditorPageState extends State<ProfileEditorPage> {
           child:
               _original == null
                   ? state.error != null
-                      ? NetworkErrorView(error: state.error!, onRetry: _reload)
+                      ? NetworkErrorView(
+                        error: _errorText(strings, state.error!),
+                        onRetry: _reload,
+                      )
                       : const LoadingView()
                   : Form(
                     key: _form,
@@ -211,11 +226,7 @@ class _ProfileEditorPageState extends State<ProfileEditorPage> {
                           ),
                         if (state.error != null)
                           Text(
-                            state.error is ApiException
-                                ? strings.t(
-                                  (state.error as ApiException).message,
-                                )
-                                : strings.t('saveFailed'),
+                            _errorText(strings, state.error!),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.error,
                             ),

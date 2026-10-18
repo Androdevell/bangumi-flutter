@@ -350,16 +350,43 @@ class ApiClient {
         await _client.send(request).timeout(const Duration(seconds: 20)),
       ).timeout(const Duration(seconds: 20));
       _requireScope(scope);
+      final location = response.headers['location'];
+      final redirect = location == null ? null : uri.resolve(location);
+      final sameSite =
+          redirect != null &&
+          redirect.scheme == 'https' &&
+          redirect.host == uri.host &&
+          redirect.port == 443 &&
+          redirect.userInfo.isEmpty;
       if (fields != null &&
           (response.statusCode == 302 || response.statusCode == 303) &&
-          uri.resolve(response.headers['location'] ?? '').path == '/settings') {
+          sameSite &&
+          redirect.path == '/settings') {
         return '';
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        final loginRequired =
+            response.statusCode == 401 ||
+            (response.statusCode >= 300 &&
+                response.statusCode < 400 &&
+                sameSite &&
+                redirect.path == '/login');
         throw ApiException(
-          'profileFormInvalid',
+          loginRequired
+              ? 'profileWebLoginRequired'
+              : response.statusCode == 403
+              ? 'profileWebUnavailable'
+              : response.statusCode == 429
+              ? 'profileRateLimited'
+              : fields == null
+              ? 'profileLoadFailed'
+              : 'profileUnconfirmed',
           statusCode: response.statusCode,
-          outcomeUnknown: fields != null && response.statusCode >= 500,
+          outcomeUnknown:
+              fields != null &&
+              !loginRequired &&
+              (response.statusCode >= 500 ||
+                  (response.statusCode >= 300 && response.statusCode < 400)),
         );
       }
       return utf8.decode(response.bodyBytes, allowMalformed: false);
@@ -367,7 +394,7 @@ class ApiClient {
       rethrow;
     } on Object {
       throw ApiException(
-        fields == null ? 'profileFormInvalid' : 'profileUnconfirmed',
+        fields == null ? 'profileLoadFailed' : 'profileUnconfirmed',
         outcomeUnknown: fields != null,
       );
     }

@@ -59,7 +59,7 @@ class AppUpdateService {
           _latestReleaseUri,
           headers: const {
             HttpHeaders.acceptHeader: 'application/vnd.github+json',
-            HttpHeaders.userAgentHeader: 'BangumiFlutter/1.2.4',
+            HttpHeaders.userAgentHeader: 'BangumiFlutter/1.2.5',
             'X-GitHub-Api-Version': '2022-11-28',
           },
         )

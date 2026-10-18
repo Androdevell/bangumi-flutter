@@ -1,5 +1,10 @@
 const communityStrings = <String, Map<String, String>>{
   'zh': {
+    'profileTokenMissing': '无法读取资料校验信息，请重新登录后再试',
+    'profileWebLoginRequired': '网页登录会话已失效，请重新登录后编辑资料',
+    'profileWebUnavailable': '网页访问被拒绝或需要验证，请在官网确认后重试',
+    'profileRateLimited': '访问过于频繁，请稍后重试',
+    'profileLoadFailed': '无法读取个人资料，请检查网络后重试',
     'currentPage': '当前页',
     'progressRefreshFailed': '进度已保存，但刷新失败，请重新读取核对',
     'commentImages': '站外评论图片',
@@ -76,6 +81,15 @@ const communityStrings = <String, Map<String, String>>{
     'cropConfirm': '使用此头像',
   },
   'en': {
+    'profileTokenMissing':
+        'Profile verification data is missing. Sign in again',
+    'profileWebLoginRequired':
+        'Your website session has expired. Sign in again to edit your profile',
+    'profileWebUnavailable':
+        'Website access is blocked or requires verification. Check the official site',
+    'profileRateLimited': 'Too many requests. Please try again later',
+    'profileLoadFailed':
+        'Unable to load your profile. Check your connection and retry',
     'currentPage': 'This page',
     'progressRefreshFailed': 'Progress saved; refresh failed. Reload to verify',
     'commentImages': 'External comment images',
@@ -157,6 +171,11 @@ const communityStrings = <String, Map<String, String>>{
     'cropConfirm': 'Use this avatar',
   },
   'ja': {
+    'profileTokenMissing': 'プロフィールの認証情報を取得できません。再ログインしてください',
+    'profileWebLoginRequired': 'Web のログイン状態が失効しました。再ログインしてプロフィールを編集してください',
+    'profileWebUnavailable': 'Web アクセスが拒否されたか確認が必要です。公式サイトで確認してください',
+    'profileRateLimited': 'アクセスが多すぎます。しばらくしてからお試しください',
+    'profileLoadFailed': 'プロフィールを取得できません。接続を確認して再試行してください',
     'currentPage': '現在のページ',
     'progressRefreshFailed': '進捗は保存されましたが再読み込みに失敗しました。更新して確認してください',
     'commentImages': '外部コメント画像',

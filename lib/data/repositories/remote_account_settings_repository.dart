@@ -21,7 +21,7 @@ class RemoteAccountSettingsRepository implements AccountSettingsRepository {
     final session = scope;
     final text = await api.accountSettings(scope: session);
     if (session != scope) throw const ApiException('commentSessionChanged');
-    return parseAccountSettings(text, session);
+    return parseAccountSettings(text, session, fallbackFormHash: api.formHash);
   }
 
   @override
@@ -116,11 +116,18 @@ class RemoteAccountSettingsRepository implements AccountSettingsRepository {
 }
 
 /// 按表单 name 读取，不依赖网页语言，也不会把其他账号安全表单混入保存。
-ComposeAccountSettings parseAccountSettings(String text, SessionScope session) {
+ComposeAccountSettings parseAccountSettings(
+  String text,
+  SessionScope session, {
+  String fallbackFormHash = '',
+}) {
   final document = html.parse(text);
   final nickname = document.querySelector('input[name="nickname"]');
   final form = _ancestor(nickname, 'form');
-  if (form == null || document.querySelector('#loginForm') != null) {
+  if (document.querySelector('#loginForm') != null) {
+    throw const ApiException('profileWebLoginRequired');
+  }
+  if (form == null) {
     throw const ApiException('profileFormInvalid');
   }
   final fields = <String, String>{};
@@ -176,11 +183,15 @@ ComposeAccountSettings parseAccountSettings(String text, SessionScope session) {
     ))
       option.attributes['value'] ?? option.text: option.text,
   };
-  if (fields['formhash']?.isNotEmpty != true ||
-      !ComposeAccountSettings.editableFields.every(fields.containsKey) ||
+  if (!ComposeAccountSettings.editableFields.every(fields.containsKey) ||
       zones.isEmpty) {
     throw const ApiException('profileFormInvalid');
   }
+  fields['formhash'] = _profileFormHash(
+    document,
+    fields['formhash'] ?? '',
+    fallbackFormHash,
+  );
   var avatar =
       _ancestor(
         form.querySelector('input[name="picfile"]'),
@@ -214,4 +225,33 @@ Element? _ancestor(Element? element, String tag) {
     if (current.localName == tag) return current;
   }
   return null;
+}
+
+/// 空隐藏字段不能代表会话失效；优先使用当前页面同站操作链接的校验值，
+/// 再使用当前账号已保存的值，不执行页面脚本，也不打印或借用外站的校验值。
+String _profileFormHash(Document document, String input, String fallback) {
+  bool valid(String value) => RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(value);
+  if (valid(input.trim())) return input.trim();
+  final candidates = <String>{};
+  for (final link in document.querySelectorAll('a[href]')) {
+    final target = Uri.tryParse(link.attributes['href'] ?? '');
+    if (target == null) continue;
+    final uri = Uri.parse('https://bgm.tv/settings').resolveUri(target);
+    if (uri.scheme != 'https' ||
+        uri.host != 'bgm.tv' ||
+        uri.userInfo.isNotEmpty ||
+        uri.port != 443 ||
+        !const {
+          '/logout',
+          '/logout/',
+          '/erase/notify/all',
+        }.contains(uri.path)) {
+      continue;
+    }
+    final hash = uri.queryParameters['gh'] ?? '';
+    if (valid(hash)) candidates.add(hash);
+  }
+  if (candidates.length == 1) return candidates.single;
+  if (candidates.isEmpty && valid(fallback.trim())) return fallback.trim();
+  throw const ApiException('profileTokenMissing');
 }
