@@ -23,4 +23,6 @@
 
 - 静态检查无问题；Flutter 测试 251 项通过，6 项联网测试按配置跳过。
 - Android 原生单元测试 11 项通过；ARM64 Android debug 与 Windows debug 构建成功。
-- 尚无 Android 真机及真实账号写入验收；本版正式安装包待 OAuth 配置文件和发布校验，不将 debug 构建作为正式包发布。
+- 已按用户确认沿用旧 OAuth 配置，生成 Android ARM64 和 Windows x64 Release；双端 AOT 内置配置检查通过，APK 与 1.2.2 签名一致，versionCode 从 2022 升至 2023。
+- 尚无 Android 真机及真实账号写入验收；内置配置检查不等同于旧 OAuth 密钥仍有效或真实登录成功。旧密钥曾进入 Git 历史，已告知风险并由用户确认沿用。
+- Windows 包需完整解压后运行 `windows-x64/bangumi_flutter.exe`，不要只复制 EXE。
