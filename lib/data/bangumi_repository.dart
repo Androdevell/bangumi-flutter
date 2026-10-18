@@ -15,6 +15,13 @@ import '../domain/repositories/user_repository.dart';
 import '../domain/use_cases/collection_save_use_case.dart';
 import 'repositories/remote_collection_repository.dart';
 import 'repositories/remote_user_repository.dart';
+import '../domain/repositories/episode_progress_repository.dart';
+import 'repositories/remote_episode_progress_repository.dart';
+import '../domain/repositories/nested_comment_repository.dart';
+import '../domain/repositories/group_repository.dart';
+import 'repositories/remote_group_repository.dart';
+import '../domain/repositories/account_settings_repository.dart';
+import 'repositories/remote_account_settings_repository.dart';
 
 abstract interface class BangumiRepository {
   bool get isLoggedIn;
@@ -188,6 +195,10 @@ class RemoteBangumiRepository
         DetailSectionsRepository,
         CalendarSnapshotRepository,
         CommentCacheRepository,
+        EpisodeProgressFeature,
+        NestedCommentRepository,
+        GroupFeature,
+        AccountSettingsFeature,
         SubjectPreviewRepository,
         RefreshableRepository {
   RemoteBangumiRepository({
@@ -209,6 +220,20 @@ class RemoteBangumiRepository
   final ThirdPartyPreviewService previewService;
 
   final ApiClient _api;
+  @override
+  late final AccountSettingsRepository accountSettings =
+      RemoteAccountSettingsRepository(
+        _api,
+        onChanged: () => _collectionChanges.value++,
+      );
+  @override
+  late final GroupRepository groups = RemoteGroupRepository(_api);
+  @override
+  late final EpisodeProgressRepository episodeProgress =
+      RemoteEpisodeProgressRepository(
+        _api,
+        onChanged: () => _collectionChanges.value++,
+      );
   @override
   void invalidateCommentReads({int? episodeId, Topic? topic}) {
     if (episodeId != null) {
@@ -851,7 +876,12 @@ class RemoteBangumiRepository
     final json = await _api.get('p1/episodes/$episodeId/comments');
     return _items(json)
         .map(CommunityReply.fromJson)
-        .where((item) => item.content.isNotEmpty)
+        .where(
+          (item) =>
+              item.content.isNotEmpty ||
+              item.replies.isNotEmpty ||
+              !item.isVisible,
+        )
         .toList();
   }
 
@@ -875,6 +905,60 @@ class RemoteBangumiRepository
     );
     _requireReplyConfirmation(json);
     _api.invalidateResources({'p1/episodes/$episodeId/comments'});
+  }
+
+  @override
+  Future<void> createNestedComment({
+    required int resourceId,
+    Topic? topic,
+    required CommunityReply root,
+    required CommunityReply replyTo,
+    required String content,
+  }) async {
+    final scope = _api.sessionScope;
+    final rootUser = root.user.id > 0 ? root.user.id : root.creatorId;
+    final replyUser = replyTo.user.id > 0 ? replyTo.user.id : replyTo.creatorId;
+    if (!_api.isLoggedIn || _api.formHash.isEmpty) {
+      throw const ApiException('loginRequired');
+    }
+    if (resourceId <= 0 ||
+        root.id <= 0 ||
+        replyUser <= 0 ||
+        rootUser <= 0 ||
+        !root.isVisible ||
+        !replyTo.isVisible ||
+        content.trim().isEmpty) {
+      throw const ApiException('commentInvalid');
+    }
+    if (topic != null && topic.type != 'group' && topic.type != 'subject') {
+      throw const ApiException('commentInvalid');
+    }
+    final owner = topic == null ? 'subject/ep' : '${topic.type}/topic';
+    final json = await _api.postWebForm(
+      '$owner/$resourceId/new_reply?ajax=1',
+      referer:
+          topic == null
+              ? 'https://bgm.tv/ep/$resourceId'
+              : 'https://bgm.tv/$owner/$resourceId',
+      fields: {
+        'formhash': _api.formHash,
+        'content': content.trim(),
+        'related': '${root.id}',
+        'sub_reply_uid': '$replyUser',
+        'post_uid': '$rootUser',
+        'related_photo': '0',
+        'lastview': '',
+        'submit': 'submit',
+      },
+    );
+    _requireReplyConfirmation(json);
+    if (scope != _api.sessionScope) {
+      throw const ApiException('commentSessionChanged', outcomeUnknown: true);
+    }
+    invalidateCommentReads(
+      episodeId: topic == null ? resourceId : null,
+      topic: topic,
+    );
   }
 
   @override

@@ -5,43 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/network/app_image_cache.dart';
 import '../core/text/bbcode_document.dart';
 import '../core/localization/app_localizations.dart';
+import '../core/text/emoji_catalog.dart';
+import 'rich_comment_image.dart';
 
 String? bangumiEmojiUrl(String smileId) {
-  final normalized = smileId.toLowerCase().replaceAll(
-    RegExp(r'[^a-z0-9_]'),
-    '',
-  );
-  final characterSticker = RegExp(
-    r'^(musume|blake)_(\d{2,3})$',
-  ).firstMatch(normalized);
-  if (characterSticker != null) {
-    final family = characterSticker.group(1)!;
-    return 'https://lain.bgm.tv/img/smiles/$family/$normalized.gif';
-  }
-  if (!normalized.startsWith('bgm')) return null;
-  if (normalized == 'bgm124_tv') {
-    return 'https://lain.bgm.tv/img/smiles/tv/101.gif';
-  }
-  final id = int.tryParse(normalized.substring(3));
-  if (id == null) return null;
-  if (id >= 1 && id <= 23) {
-    final extension = id == 11 || id == 23 ? 'gif' : 'png';
-    return 'https://lain.bgm.tv/img/smiles/bgm/${id.toString().padLeft(2, '0')}.$extension';
-  }
-  if (id >= 24 && id <= 123) {
-    return 'https://lain.bgm.tv/img/smiles/tv/${(id - 23).toString().padLeft(2, '0')}.gif';
-  }
-  if (id == 124) return 'https://lain.bgm.tv/img/smiles/tv/101.png';
-  if (id == 125) return 'https://lain.bgm.tv/img/smiles/tv/102.gif';
-  if (id >= 200 && id <= 238) {
-    return 'https://lain.bgm.tv/img/smiles/tv_vs/bgm_$id.png';
-  }
-  if (id >= 500 && id <= 529) {
-    const gifIds = <int>{500, 501, 505, 515, 516, 517, 518, 519, 521, 522, 523};
-    final extension = gifIds.contains(id) ? 'gif' : 'png';
-    return 'https://lain.bgm.tv/img/smiles/tv_500/bgm_$id.$extension';
-  }
-  return null;
+  return EmojiCatalog.find(smileId)?.url;
 }
 
 String reactionImageUrl(String value) {
@@ -159,31 +127,21 @@ class BangumiRichText extends StatelessWidget {
                 BangumiBbCode.plain(node.children),
               );
               if (uri == null) return const TextSpan(text: '[img]');
-              if (++images > 20 ||
-                  !{
-                    'lain.bgm.tv',
-                    'bgm.tv',
-                    'bangumi.tv',
-                    'chii.in',
-                  }.contains(uri.host)) {
-                return WidgetSpan(
-                  child: TextButton.icon(
-                    onPressed: () => _openLink(context, uri),
-                    icon: const Icon(Icons.image_outlined),
-                    label: Text(_label(context, 'externalImage')),
-                  ),
-                );
-              }
+              final deferred = ++images > 20;
               return WidgetSpan(
                 alignment: PlaceholderAlignment.middle,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: inlineWidth.clamp(0, 320).toDouble(),
-                      maxHeight: 240,
+                      maxWidth: inlineWidth.clamp(0, 900).toDouble(),
+                      maxHeight: 720,
                     ),
-                    child: _RichImage(uri: uri.replace(scheme: 'https')),
+                    child: RichCommentImage(
+                      key: ValueKey('$images:$uri'),
+                      uri: uri,
+                      deferred: deferred,
+                    ),
                   ),
                 ),
               );
@@ -369,32 +327,4 @@ class _SpoilerState extends State<_Spoiler> {
       ),
     );
   }
-}
-
-class _RichImage extends StatefulWidget {
-  const _RichImage({required this.uri});
-  final Uri uri;
-  @override
-  State<_RichImage> createState() => _RichImageState();
-}
-
-class _RichImageState extends State<_RichImage> {
-  int _revision = 0;
-  @override
-  Widget build(BuildContext context) => CachedNetworkImage(
-    key: ValueKey(_revision),
-    imageUrl: widget.uri.toString(),
-    cacheManager: AppImageCache.manager,
-    memCacheWidth: 960,
-    fit: BoxFit.contain,
-    errorWidget:
-        (_, __, ___) => TextButton.icon(
-          icon: const Icon(Icons.refresh),
-          label: Text(_label(context, 'retry')),
-          onPressed: () async {
-            await AppImageCache.manager.removeFile(widget.uri.toString());
-            if (mounted) setState(() => _revision++);
-          },
-        ),
-  );
 }

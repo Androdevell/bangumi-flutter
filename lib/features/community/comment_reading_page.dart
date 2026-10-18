@@ -9,6 +9,8 @@ import '../../widgets/common.dart';
 import '../user/user_profile_page.dart';
 import 'comment_page_controller.dart';
 import 'community_widgets.dart';
+import '../../domain/repositories/nested_comment_repository.dart';
+import '../../app/state/session_scope.dart';
 
 class CommentReadingPage<T> extends StatefulWidget {
   const CommentReadingPage({
@@ -39,7 +41,7 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
     load: widget.load,
     session: () => CommentSubmitUseCase.currentScope(widget.repository),
   );
-  final _editor = CommentEditorSession();
+  final Map<(SessionScope, String), CommentEditorSession> _editors = {};
   bool _editorOpen = false;
   Listenable? get _sessionChanges =>
       widget.repository is CollectionFeatureRepository
@@ -54,12 +56,20 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
     _model.refresh();
   }
 
-  void _sessionChanged() => _model.refresh(reset: true);
+  void _sessionChanged() {
+    for (final editor in _editors.values) {
+      editor.invalidateSession();
+    }
+    _model.refresh(reset: true);
+  }
+
   @override
   void dispose() {
     _sessionChanges?.removeListener(_sessionChanged);
     _model.dispose();
-    _editor.dispose();
+    for (final editor in _editors.values) {
+      editor.dispose();
+    }
     super.dispose();
   }
 
@@ -74,7 +84,7 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
     return _model.refresh(afterPublish: afterPublish);
   }
 
-  Future<void> _compose() async {
+  Future<void> _compose([ComposeCommentReplyTarget? reply]) async {
     if (_editorOpen) return;
     final strings = AppLocalizations.of(context);
     if (!widget.repository.isLoggedIn) {
@@ -84,7 +94,16 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
       return;
     }
     setState(() => _editorOpen = true);
-    final sent = await _editor.open(context, widget.repository, widget.target);
+    final target =
+        reply == null
+            ? widget.target
+            : ComposeCommentTarget.reply(widget.target, reply);
+    final key = (
+      CommentSubmitUseCase.currentScope(widget.repository),
+      target.key,
+    );
+    final editor = _editors.putIfAbsent(key, CommentEditorSession.new);
+    final sent = await editor.open(context, widget.repository, target);
     if (!mounted) return;
     setState(() => _editorOpen = false);
     if (sent != null) {
@@ -92,7 +111,7 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
         context,
       ).showSnackBar(SnackBar(content: Text(strings.t('published'))));
       await _refresh(afterPublish: true);
-    } else if (_editor.needsVerification) {
+    } else if (editor.needsVerification) {
       await _refresh();
     }
   }
@@ -190,11 +209,36 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
                       authorUsername: widget.authorUsername?.call(data) ?? '',
                       header: widget.header?.call(data),
                       onUserTap: _user,
+                      onReply:
+                          canPost &&
+                                  widget.repository
+                                      is NestedCommentRepository &&
+                                  !_editorOpen
+                              ? (root, reply) => _compose(
+                                ComposeCommentReplyTarget(
+                                  root: root,
+                                  reply: reply,
+                                ),
+                              )
+                              : null,
                       onLike: (item, value) {
                         if (!widget.repository.isLoggedIn) {
                           throw ApiException(strings.t('loginComment'));
                         }
-                        return widget.onReact(item, value);
+                        final scope = CommentSubmitUseCase.currentScope(
+                          widget.repository,
+                        );
+                        return widget.onReact(item, value).then((_) {
+                          if (scope !=
+                              CommentSubmitUseCase.currentScope(
+                                widget.repository,
+                              )) {
+                            throw const ApiException(
+                              'commentSessionChanged',
+                              outcomeUnknown: true,
+                            );
+                          }
+                        });
                       },
                     ),
                   ),

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'android_image_file_service.dart';
+import 'safe_image_file_service.dart';
 
 abstract final class AppImageCache {
   static BaseCacheManager _manager = DefaultCacheManager();
@@ -21,7 +22,7 @@ abstract final class AppImageCache {
     final FileService service =
         Platform.isAndroid
             ? AndroidImageFileService()
-            : HttpFileService(httpClient: client);
+            : SafeImageFileService(client);
     service.concurrentFetches = 3;
     _manager = CacheManager(
       Config(

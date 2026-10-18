@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'json_utils.dart' as dates;
 
 import 'models.dart';
+import 'episode_types.dart';
 
 @immutable
 class SubjectDetailData {
@@ -135,6 +136,11 @@ class SubjectEpisode {
     required this.airdate,
     required this.commentCount,
     required this.description,
+    this.type = EpisodeKind.main,
+    this.disc = 0,
+    this.subjectId = 0,
+    this.collectionStatus = EpisodeStatus.none,
+    this.collectionUpdatedAt,
   });
 
   factory SubjectEpisode.fromJson(Map<String, dynamic> json) => SubjectEpisode(
@@ -146,6 +152,11 @@ class SubjectEpisode {
     airdate: _text(json['airdate']),
     commentCount: _integer(json['comment']),
     description: _text(json['desc']),
+    type: _integer(json['type']),
+    disc: _integer(json['disc']),
+    subjectId: _integer(json['subjectID'] ?? json['subject_id']),
+    collectionStatus: _integer(_map(json['collection'])['status']),
+    collectionUpdatedAt: dates.parseDate(_map(json['collection'])['updatedAt']),
   );
 
   final int id;
@@ -156,6 +167,8 @@ class SubjectEpisode {
   final String airdate;
   final int commentCount;
   final String description;
+  final int type, disc, subjectId, collectionStatus;
+  final DateTime? collectionUpdatedAt;
 
   String get title => nameCn.isNotEmpty ? nameCn : name;
 }

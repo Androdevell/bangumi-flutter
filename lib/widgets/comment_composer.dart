@@ -8,6 +8,7 @@ import '../features/community/comment_composer_controller.dart';
 import '../domain/use_cases/comment_submit_use_case.dart';
 import '../data/bangumi_repository.dart';
 import 'bangumi_rich_text.dart';
+import 'emoji_picker.dart';
 
 class _UrlInputDialog extends StatefulWidget {
   const _UrlInputDialog({required this.image});
@@ -55,6 +56,7 @@ class CommentEditorSession {
   CommentSubmitUseCase? _useCase;
   bool get needsVerification =>
       _controller?.state.status == CommentSubmitStatus.unknown;
+  void invalidateSession() => _controller?.invalidateSession();
   Future<String?> open(
     BuildContext context,
     BangumiRepository repository,
@@ -75,7 +77,10 @@ class CommentEditorSession {
       context,
       title: strings.t('postComment'),
       hint: strings.t('commentHint'),
-      target: target.title,
+      target:
+          target.replyTarget == null
+              ? target.title
+              : '${strings.t('replyTo')} @${target.replyTarget!.reply.user.nickname}\n${target.title}',
       username: _useCase!.scope.username,
       controller: _controller,
     );
@@ -263,43 +268,7 @@ class _CommentComposerState extends State<_CommentComposer> {
   }
 
   Future<void> _emojis() async {
-    final code = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder:
-          (context) => SafeArea(
-            child: SizedBox(
-              height: 280,
-              child: GridView.count(
-                crossAxisCount: 6,
-                padding: const EdgeInsets.all(16),
-                children: [
-                  for (final value in [
-                    'bgm38',
-                    'bgm46',
-                    'bgm63',
-                    'bgm64',
-                    'bgm67',
-                    'bgm69',
-                    'bgm72',
-                    'bgm74',
-                    'bgm88',
-                    'bgm106',
-                    'musume_15',
-                    'blake_03',
-                  ])
-                    IconButton(
-                      tooltip: '($value)',
-                      onPressed: () => Navigator.pop(context, '($value)'),
-                      icon: FittedBox(
-                        child: BangumiRichText('($value)', selectable: false),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-    );
+    final code = await showEmojiPicker(context);
     if (!mounted || code == null) return;
     _model.insert(code);
     _focus.requestFocus();

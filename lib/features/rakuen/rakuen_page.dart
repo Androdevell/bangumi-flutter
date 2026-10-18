@@ -13,6 +13,10 @@ import '../user/user_profile_page.dart';
 import '../../core/subject_detail_models.dart';
 import 'person_comments_page.dart';
 import 'topic_detail_page.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../domain/repositories/group_repository.dart';
+import '../../widgets/lazy_tab_view.dart';
+import '../groups/group_directory_page.dart';
 
 class RakuenPage extends StatefulWidget {
   const RakuenPage({
@@ -179,7 +183,45 @@ class _RakuenPageState extends State<RakuenPage> {
   }
 
   @override
-  Widget build(BuildContext context) => SafeArea(
+  Widget build(BuildContext context) {
+    final repo = widget.repository;
+    if (repo is! GroupFeature) return _discussions(context);
+    final strings = AppLocalizations.of(context);
+    return DefaultTabController(
+      length: 2,
+      child: SafeArea(
+        child: Column(
+          children: [
+            TabBar(
+              tabs: [
+                Tab(
+                  icon: const Icon(Icons.forum_outlined),
+                  text: strings.t('discussions'),
+                ),
+                Tab(
+                  icon: const Icon(Icons.groups_outlined),
+                  text: strings.t('groupDirectory'),
+                ),
+              ],
+            ),
+            Expanded(
+              child: LazyTabView(
+                builders: [
+                  () => _discussions(context),
+                  () => GroupDirectoryPage(
+                    repository: repo,
+                    groups: (repo as GroupFeature).groups,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _discussions(BuildContext context) => SafeArea(
     child: ContentFrame(
       maxWidth: 980,
       child: FutureBuilder<List<Topic>>(

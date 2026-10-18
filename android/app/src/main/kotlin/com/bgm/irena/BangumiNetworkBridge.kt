@@ -7,6 +7,8 @@ import io.flutter.plugin.common.MethodChannel
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Dispatcher
+import okhttp3.Dns
+import android.graphics.BitmapFactory
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -41,6 +43,25 @@ class BangumiNetworkBridge(
     private val requests = ConcurrentHashMap<String, Call>()
     private val imageClient = client.newBuilder()
         .dispatcher(Dispatcher().apply { maxRequests = 3; maxRequestsPerHost = 3 })
+        .dns(object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                val addresses = client.dns.lookup(hostname)
+                if (addresses.isEmpty() || addresses.any { !isPublicImageAddress(it) }) {
+                    throw IOException("Private image address")
+                }
+                return addresses
+            }
+        })
+        .addNetworkInterceptor { chain ->
+            val original = chain.request()
+            if (!original.url.isHttps || original.url.port != 443 ||
+                original.url.username.isNotEmpty() || original.url.password.isNotEmpty()) {
+                throw IOException("Unsafe image redirect")
+            }
+            chain.proceed(original.newBuilder().removeHeader("Cookie")
+                .removeHeader("Authorization").removeHeader("Proxy-Authorization")
+                .removeHeader("Referer").build())
+        }
         .callTimeout(40, TimeUnit.SECONDS)
         .followSslRedirects(false)
         .build()
@@ -84,7 +105,8 @@ class BangumiNetworkBridge(
         }
         val request = requestBuilder.method(method, requestBody).build()
         if (call.method == "downloadImage") {
-            if (!request.url.isHttps) {
+            if (!request.url.isHttps || request.url.port != 443 ||
+                request.url.username.isNotEmpty() || request.url.password.isNotEmpty()) {
                 result.error("invalid_image_url", "图片地址必须使用 HTTPS", null)
                 return
             }
@@ -184,6 +206,12 @@ class BangumiNetworkBridge(
                                     }
                                 }
                             }
+                            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            BitmapFactory.decodeFile(file.absolutePath, bounds)
+                            if (bounds.outWidth > 0 && bounds.outHeight > 0 &&
+                                bounds.outWidth.toLong() * bounds.outHeight > 24L * 1024 * 1024) {
+                                throw IOException("Image pixel limit exceeded")
+                            }
                         }
                         val path = temporary?.absolutePath
                         activity.runOnUiThread { result.success(mapOf("statusCode" to it.code, "headers" to headers, "path" to path, "length" to length)) }
@@ -200,6 +228,15 @@ class BangumiNetworkBridge(
         const val CHANNEL_NAME = "com.xiaoyv.bangumi/network"
         private const val MAX_API_BYTES = 4L * 1024 * 1024
         private const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
+
+        internal fun isPublicImageAddress(address: InetAddress): Boolean {
+            if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+                address.isSiteLocalAddress || address.isMulticastAddress) return false
+            val bytes = address.address.map { it.toInt() and 255 }
+            if (bytes.size == 4) return bytes[0] != 0 && bytes[0] < 224 &&
+                !(bytes[0] == 100 && bytes[1] in 64..127)
+            return bytes.size == 16 && (bytes[0] and 254) != 252
+        }
 
     }
 }

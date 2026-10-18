@@ -51,6 +51,10 @@ class CommentComposerController extends ChangeNotifier {
   final List<TextEditingValue> _redo = [];
   bool _closed = false;
   bool get busy => state.status == CommentSubmitStatus.submitting;
+  void invalidateSession() {
+    if (!_closed) _set(status: CommentSubmitStatus.stale);
+  }
+
   bool get canSubmit =>
       !busy &&
       state.status != CommentSubmitStatus.confirmed &&

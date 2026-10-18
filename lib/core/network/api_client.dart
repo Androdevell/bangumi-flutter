@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:flutter/foundation.dart';
 
 import '../auth/auth_service.dart';
@@ -211,7 +212,17 @@ class ApiClient {
     String path, {
     Map<String, String>? query,
     Object? body,
-  }) => _request('PATCH', path, query: query, body: body, requiresAuth: true);
+    SessionScope? expectedScope,
+    Set<String>? invalidatePaths,
+  }) => _request(
+    'PATCH',
+    path,
+    query: query,
+    body: body,
+    requiresAuth: true,
+    expectedScope: expectedScope,
+    invalidatePaths: invalidatePaths,
+  );
 
   Future<dynamic> delete(
     String path, {
@@ -286,6 +297,81 @@ class ApiClient {
   }
 
   String get formHash => _authService?.user?.formHash ?? '';
+
+  Future<void> updateProfileIdentity({
+    required SessionScope scope,
+    required String nickname,
+    required String avatarUrl,
+  }) async {
+    _requireScope(scope);
+    await _authService?.updateProfileIdentity(
+      username: scope.username,
+      nickname: nickname,
+      avatarUrl: avatarUrl,
+    );
+    _requireScope(scope);
+  }
+
+  /// 账号资料通道固定为本站 settings，不接收外部提交地址或自动重发写请求。
+  Future<String> accountSettings({
+    required SessionScope scope,
+    Map<String, String>? fields,
+    Uint8List? avatar,
+  }) async {
+    _requireScope(scope);
+    if (!isLoggedIn) throw const ApiException('loginRequired');
+    final uri = Uri.parse('https://bgm.tv/settings');
+    final http.BaseRequest request;
+    if (fields != null) {
+      final multipart = http.MultipartRequest('POST', uri)
+        ..fields.addAll(fields);
+      if (avatar != null) {
+        multipart.files.add(
+          http.MultipartFile.fromBytes(
+            'picfile',
+            avatar,
+            filename: 'avatar.png',
+            contentType: MediaType('image', 'png'),
+          ),
+        );
+      }
+      request = multipart;
+    } else {
+      request = http.Request('GET', uri);
+    }
+    request.followRedirects = false;
+    request.headers.addAll({
+      'accept': 'text/html',
+      'referer': 'https://bgm.tv/settings',
+      'cookie': 'kira=4',
+    });
+    try {
+      final response = await http.Response.fromStream(
+        await _client.send(request).timeout(const Duration(seconds: 20)),
+      ).timeout(const Duration(seconds: 20));
+      _requireScope(scope);
+      if (fields != null &&
+          (response.statusCode == 302 || response.statusCode == 303) &&
+          uri.resolve(response.headers['location'] ?? '').path == '/settings') {
+        return '';
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(
+          'profileFormInvalid',
+          statusCode: response.statusCode,
+          outcomeUnknown: fields != null && response.statusCode >= 500,
+        );
+      }
+      return utf8.decode(response.bodyBytes, allowMalformed: false);
+    } on ApiException {
+      rethrow;
+    } on Object {
+      throw ApiException(
+        fields == null ? 'profileFormInvalid' : 'profileUnconfirmed',
+        outcomeUnknown: fields != null,
+      );
+    }
+  }
 
   Future<dynamic> _request(
     String method,

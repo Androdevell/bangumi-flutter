@@ -395,13 +395,17 @@ void main() {
     },
   );
   testWidgets(
-    'subject summary renders without fetching chapters; tab loads its own section',
+    'summary renders while progress is pending and chapter tab reuses its request',
     (tester) async {
       final paths = <String>[];
+      final chapters = Completer<http.Response>();
       final repo = RemoteBangumiRepository(
         apiClient: ApiClient(
           client: MockClient((request) async {
             paths.add(request.url.path);
+            if (request.url.path == '/p1/subjects/42/episodes') {
+              return chapters.future;
+            }
             if (request.url.path == '/p1/subjects/42') {
               return json({
                 'id': 42,
@@ -423,15 +427,18 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
-      expect(paths, ['/p1/subjects/42']);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(paths.toSet(), {'/p1/subjects/42', '/p1/subjects/42/episodes'});
       expect(
         find.textContaining('Immediate summary', findRichText: true),
         findsWidgets,
       );
+      chapters.complete(json({'data': [], 'total': 0}));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('章节'));
       await tester.pumpAndSettle();
-      expect(paths, ['/p1/subjects/42', '/p1/subjects/42/episodes']);
+      expect(paths.where((p) => p.endsWith('/episodes')).length, 1);
       await tester.pumpWidget(const SizedBox());
       repo.close();
     },

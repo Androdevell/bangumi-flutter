@@ -30,7 +30,7 @@ class AuthService extends ChangeNotifier {
   static const _userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
       'AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.2.2';
+      'Chrome/131.0.0.0 Safari/537.36 BangumiFlutter/1.2.3';
 
   final http.Client _client;
   final PersistentCookieStore _cookies;
@@ -47,6 +47,26 @@ class AuthService extends ChangeNotifier {
   AuthUser? get user => _user;
   bool get isLoggedIn => _user != null && _token != null;
   int get sessionEpoch => _sessionGeneration;
+
+  /// 仅刷新已确认的本人资料，不改变账号身份或会话代次。
+  Future<void> updateProfileIdentity({
+    required String username,
+    required String nickname,
+    required String avatarUrl,
+  }) async {
+    final user = _user;
+    final generation = _sessionGeneration;
+    if (user == null || user.username != username) return;
+    _user = AuthUser(
+      id: user.id,
+      username: user.username,
+      nickname: nickname,
+      avatarUrl: avatarUrl.isEmpty ? user.avatarUrl : avatarUrl,
+      formHash: user.formHash,
+    );
+    await _persistCredentials(generation);
+    if (generation == _sessionGeneration) notifyListeners();
+  }
 
   Future<void> initialize() async {
     String? storedUser;

@@ -3,19 +3,36 @@ import '../../app/state/session_scope.dart';
 import '../../core/models.dart';
 import '../../core/network/api_client.dart';
 import '../../data/bangumi_repository.dart';
+import '../../core/community_models.dart';
+import '../repositories/nested_comment_repository.dart';
 
 @immutable
 class ComposeCommentTarget {
-  const ComposeCommentTarget.episode(this.id, this.title) : topic = null;
+  const ComposeCommentTarget.episode(this.id, this.title)
+    : topic = null,
+      replyTarget = null;
   ComposeCommentTarget.topic(Topic value)
     : id = value.id,
       title = value.title,
-      topic = value;
+      topic = value,
+      replyTarget = null;
+  ComposeCommentTarget.reply(ComposeCommentTarget target, this.replyTarget)
+    : id = target.id,
+      title = target.title,
+      topic = target.topic;
   final int id;
   final String title;
   final Topic? topic;
+  final ComposeCommentReplyTarget? replyTarget;
   int get maxLength => topic == null ? 1000 : 2000;
-  String get key => '${topic?.type ?? 'episode'}:$id';
+  String get key =>
+      '${topic?.type ?? 'episode'}:$id:${replyTarget?.root.id ?? 0}:${replyTarget?.reply.id ?? 0}';
+}
+
+@immutable
+class ComposeCommentReplyTarget {
+  const ComposeCommentReplyTarget({required this.root, required this.reply});
+  final CommunityReply root, reply;
 }
 
 /// 发布绑定打开编辑器时的账号会话，只调用已支持的写入路径，不自动重发。
@@ -44,7 +61,20 @@ class CommentSubmitUseCase {
     if (topic != null && topic.type != 'group' && topic.type != 'subject') {
       throw const ApiException('commentInvalid');
     }
-    if (topic == null) {
+    final reply = target.replyTarget;
+    if (reply != null) {
+      final repo = repository;
+      if (repo is! NestedCommentRepository) {
+        throw const ApiException('commentInvalid');
+      }
+      await (repo as NestedCommentRepository).createNestedComment(
+        resourceId: target.id,
+        topic: topic,
+        root: reply.root,
+        replyTo: reply.reply,
+        content: value.trim(),
+      );
+    } else if (topic == null) {
       await repository.createEpisodeComment(target.id, value.trim());
     } else {
       await repository.createTopicReply(topic, value.trim());

@@ -10,6 +10,9 @@ import '../../core/update/app_update_service.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../../widgets/third_party_preview_setting.dart';
+import '../../widgets/rich_comment_image.dart';
+import '../../domain/repositories/account_settings_repository.dart';
+import 'editor/profile_editor_page.dart';
 import '../auth/login_page.dart';
 import '../user/user_profile_page.dart';
 
@@ -516,6 +519,29 @@ class _ProfilePageState extends State<ProfilePage> {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: user == null ? _openLogin : () => _openMyProfile(0),
                   ),
+                  if (widget.repository is AccountSettingsFeature)
+                    ListTile(
+                      leading: const Icon(Icons.edit_outlined),
+                      title: Text(strings.t('editProfile')),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap:
+                          user == null
+                              ? _openLogin
+                              : () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder:
+                                        (_) => ProfileEditorPage(
+                                          repository:
+                                              (widget.repository
+                                                      as AccountSettingsFeature)
+                                                  .accountSettings,
+                                        ),
+                                  ),
+                                );
+                                _refreshProfile();
+                              },
+                    ),
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.privacy_tip_outlined),
@@ -532,6 +558,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     const Divider(height: 1),
                     ThirdPartyPreviewSetting(service: service),
                   ],
+                  const Divider(height: 1),
+                  const CommentImageSetting(),
                 ],
               ),
             ),

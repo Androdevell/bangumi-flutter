@@ -3,6 +3,7 @@ import 'json_utils.dart' as dates;
 import 'collection_labels.dart';
 
 import 'models.dart';
+import 'media/avatar_revision.dart';
 
 @immutable
 class CommunityUser {
@@ -33,7 +34,7 @@ class CommunityUser {
       id: _int(json['id']),
       username: _text(json['username']),
       nickname: _first([json['nickname'], json['username']]),
-      avatarUrl: _image(json['avatar']),
+      avatarUrl: AvatarRevision.resolve(_image(json['avatar'])),
       sign: _text(json['sign']),
       bio: _text(json['bio']),
       location: _text(json['location']),
@@ -96,16 +97,25 @@ class CommunityReply {
     required this.createdAt,
     required this.replies,
     required this.reactions,
+    this.state = 0,
+    this.relatedId = 0,
+    this.creatorId = 0,
   });
 
   factory CommunityReply.fromJson(Map<String, dynamic> json) => CommunityReply(
     id: _int(json['id']),
-    content: _text(json['content'] ?? json['comment']),
+    content:
+        _int(json['state']) == 0
+            ? _text(json['content'] ?? json['comment'])
+            : '',
     user: CommunityUser.fromJson(_map(json['user'] ?? json['creator'])),
     createdAt: _date(json['createdAt'] ?? json['updatedAt']),
     replies: _list(json['replies']).map(CommunityReply.fromJson).toList(),
     reactions:
         _list(json['reactions']).map(CommunityReaction.fromJson).toList(),
+    state: _int(json['state']),
+    relatedId: _int(json['relatedID']),
+    creatorId: _int(json['creatorID']),
   );
 
   final int id;
@@ -114,6 +124,8 @@ class CommunityReply {
   final DateTime? createdAt;
   final List<CommunityReply> replies;
   final List<CommunityReaction> reactions;
+  final int state, relatedId, creatorId;
+  bool get isVisible => state == 0;
 
   int get reactionCount => reactions.fold(0, (sum, item) => sum + item.count);
   bool likedBy(String username) => reactions.any(

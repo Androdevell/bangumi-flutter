@@ -7,6 +7,7 @@ import '../../core/network/cookie_session_client.dart';
 import '../../core/network/platform_http_client.dart';
 import '../../core/network/third_party_preview_service.dart';
 import '../../core/settings/app_preferences.dart';
+import '../../core/media/rich_image_policy.dart';
 import '../../core/cache/calendar_snapshot.dart';
 import '../../data/bangumi_repository.dart';
 
@@ -34,6 +35,7 @@ class AppDependencies {
     final vault = PlatformSecureVault();
     final preferences = AppPreferences(vault);
     final settings = await preferences.load();
+    await RichImagePolicy.instance.initialize(vault);
     final cookies = PersistentCookieStore(vault);
     await cookies.initialize();
     final apiTransport = CookieSessionClient(

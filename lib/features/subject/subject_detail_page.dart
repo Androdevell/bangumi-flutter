@@ -22,6 +22,9 @@ import '../episode/episode_comments_page.dart';
 import '../person/person_detail_page.dart';
 import '../user/user_profile_page.dart';
 import 'subject_preview_panel.dart';
+import '../../domain/repositories/episode_progress_repository.dart';
+import '../../widgets/episode_progress_panel.dart';
+import 'episode_progress_controller.dart';
 
 class SubjectDetailPage extends StatefulWidget {
   const SubjectDetailPage({
@@ -59,6 +62,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
   int? _savedRate;
   String? _savedComment;
   bool? _savedPrivate;
+  EpisodeProgressController? _progress;
 
   @override
   void initState() {
@@ -83,6 +87,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
 
   @override
   void dispose() {
+    _progress?.dispose();
     final repository = widget.repository;
     if (repository is CollectionFeatureRepository) {
       (repository as CollectionFeatureRepository).collections.sessionChanges
@@ -91,12 +96,25 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     super.dispose();
   }
 
-  Future<SubjectDetailData> _load() =>
-      widget.repository is DetailSectionsRepository
-          ? (widget.repository as DetailSectionsRepository).fetchSubjectBase(
-            widget.subject.id,
-          )
-          : widget.repository.fetchSubjectDetails(widget.subject.id);
+  Future<SubjectDetailData> _load() async {
+    final details =
+        await (widget.repository is DetailSectionsRepository
+            ? (widget.repository as DetailSectionsRepository).fetchSubjectBase(
+              widget.subject.id,
+            )
+            : widget.repository.fetchSubjectDetails(widget.subject.id));
+    final repo = widget.repository;
+    if (mounted &&
+        _progress == null &&
+        {SubjectType.anime, SubjectType.real}.contains(details.subject.type) &&
+        repo is EpisodeProgressFeature) {
+      _progress = EpisodeProgressController(
+        (repo as EpisodeProgressFeature).episodeProgress,
+        widget.subject.id,
+      )..refresh();
+    }
+    return details;
+  }
 
   void _retry() {
     invalidateRepositoryCache(widget.repository);
@@ -436,15 +454,34 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                               : LazyTabView(
                                 key: ValueKey(identityHashCode(_details)),
                                 builders: [
-                                  () => _SummarySection(details: details),
-                                  () => _section(
-                                    details,
-                                    'episodes',
-                                    (value) => _EpisodeSection(
-                                      items: value.episodes,
-                                      repository: widget.repository,
-                                    ),
+                                  () => _SummarySection(
+                                    details: details,
+                                    progress:
+                                        _progress == null
+                                            ? null
+                                            : EpisodeProgressPanel(
+                                              controller: _progress!,
+                                              repository: widget.repository,
+                                            ),
                                   ),
+                                  () =>
+                                      _progress != null
+                                          ? SingleChildScrollView(
+                                            padding: const EdgeInsets.all(16),
+                                            child: EpisodeProgressPanel(
+                                              controller: _progress!,
+                                              repository: widget.repository,
+                                              expanded: true,
+                                            ),
+                                          )
+                                          : _section(
+                                            details,
+                                            'episodes',
+                                            (value) => _EpisodeSection(
+                                              items: value.episodes,
+                                              repository: widget.repository,
+                                            ),
+                                          ),
                                   () => SubjectPreviewPanel(
                                     subject: subject,
                                     service: previewServiceFor(
@@ -746,9 +783,10 @@ class _EpisodeSection extends StatelessWidget {
 }
 
 class _SummarySection extends StatelessWidget {
-  const _SummarySection({required this.details});
+  const _SummarySection({required this.details, this.progress});
 
   final SubjectDetailData details;
+  final Widget? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -761,6 +799,7 @@ class _SummarySection extends StatelessWidget {
           details.subject.summary.isEmpty ? '暂无简介' : details.subject.summary,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
+        if (progress != null) ...[const SizedBox(height: 20), progress!],
         if (details.tags.isNotEmpty) ...[
           const SizedBox(height: 24),
           _SectionTitle(title: '标签', icon: Icons.sell_outlined),

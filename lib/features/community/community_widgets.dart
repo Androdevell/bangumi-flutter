@@ -67,12 +67,14 @@ class CommunityReplyList extends StatelessWidget {
     this.header,
     this.authorUsername = '',
     this.canReact = true,
+    this.onReply,
   });
 
   final List<CommunityReply> items;
   final Widget? header;
   final String authorUsername;
   final bool canReact;
+  final void Function(CommunityReply root, CommunityReply reply)? onReply;
   final String currentUsername;
   final ValueChanged<String> onUserTap;
   final Future<void> Function(CommunityReply item, String? value) onLike;
@@ -115,6 +117,7 @@ class CommunityReplyList extends StatelessWidget {
                     currentUsername: currentUsername,
                     onUserTap: onUserTap,
                     onLike: onLike,
+                    onReply: onReply,
                   ),
     );
   }
@@ -129,11 +132,19 @@ class _ReplyTile extends StatefulWidget {
     required this.onLike,
     required this.authorUsername,
     required this.canReact,
+    this.root,
+    this.onReply,
+    this.depth = 0,
+    this.showChildren = true,
   });
 
   final CommunityReply item;
   final String authorUsername;
   final bool canReact;
+  final CommunityReply? root;
+  final int depth;
+  final bool showChildren;
+  final void Function(CommunityReply root, CommunityReply reply)? onReply;
   final String currentUsername;
   final ValueChanged<String> onUserTap;
   final Future<void> Function(CommunityReply item, String? value) onLike;
@@ -217,31 +228,52 @@ class _ReplyTileState extends State<_ReplyTile> {
     final item = widget.item;
     final strings = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.depth == 0 ? 16 : 6,
+        vertical: widget.depth == 0 ? 16 : 8,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CommentHeader(
-            user: item.user,
-            date: item.createdAt,
-            currentUsername: widget.currentUsername,
-            onUserTap: widget.onUserTap,
-            authorUsername: widget.authorUsername,
-          ),
+          if (item.isVisible)
+            CommentHeader(
+              user: item.user,
+              date: item.createdAt,
+              currentUsername: widget.currentUsername,
+              onUserTap: widget.onUserTap,
+              authorUsername: widget.authorUsername,
+            ),
           const SizedBox(height: 12),
-          CommentBody(item.content),
-          if (item.replies.isNotEmpty) ...[
+          if (item.isVisible)
+            CommentBody(item.content)
+          else
+            Text(strings.t('commentUnavailable')),
+          if (widget.showChildren && item.replies.isNotEmpty) ...[
             const SizedBox(height: 12),
             NestedReplyPreview(
               items: item.replies,
               onUserTap: widget.onUserTap,
+              root: widget.root ?? item,
+              currentUsername: widget.currentUsername,
+              onLike: widget.onLike,
+              onReply: widget.onReply,
+              canReact: widget.canReact,
+              depth: widget.depth + 1,
             ),
           ],
           const SizedBox(height: 6),
           Row(
             children: [
               Expanded(child: ReactionSummary(reactions: _reactions)),
-              if (widget.canReact)
+              if (widget.onReply != null &&
+                  item.isVisible &&
+                  (widget.root?.isVisible ?? true))
+                IconButton(
+                  tooltip: strings.t('reply'),
+                  onPressed: () => widget.onReply!(widget.root ?? item, item),
+                  icon: const Icon(Icons.reply_rounded, size: 20),
+                ),
+              if (widget.canReact && item.isVisible)
                 IconButton(
                   tooltip: strings.t(
                     _selectedValue == null ? 'react' : 'changeReaction',
@@ -379,59 +411,75 @@ class NestedReplyPreview extends StatefulWidget {
     super.key,
     required this.items,
     required this.onUserTap,
+    this.root,
+    this.currentUsername = '',
+    this.onLike,
+    this.onReply,
+    this.canReact = false,
+    this.depth = 1,
   });
   final List<CommunityReply> items;
   final ValueChanged<String> onUserTap;
+  final CommunityReply? root;
+  final String currentUsername;
+  final bool canReact;
+  final int depth;
+  final Future<void> Function(CommunityReply, String?)? onLike;
+  final void Function(CommunityReply, CommunityReply)? onReply;
   @override
   State<NestedReplyPreview> createState() => _NestedReplyPreviewState();
 }
 
 class _NestedReplyPreviewState extends State<NestedReplyPreview> {
   bool _expanded = false;
+  List<CommunityReply> _flatten(List<CommunityReply> roots) {
+    final pending = roots.reversed.toList();
+    final result = <CommunityReply>[];
+    while (pending.isNotEmpty) {
+      final item = pending.removeLast();
+      result.add(item);
+      pending.addAll(item.replies.reversed);
+    }
+    return result;
+  }
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final reply in widget.items.take(
-          _expanded ? widget.items.length : 3,
-        ))
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InkWell(
-                  onTap: () => widget.onUserTap(reply.user.username),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Text(
-                      reply.user.nickname,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                ),
-                CommentBody(reply.content),
-              ],
+  Widget build(BuildContext context) {
+    final items = widget.depth >= 2 ? _flatten(widget.items) : widget.items;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final reply in items.take(_expanded ? items.length : 3))
+            _ReplyTile(
+              key: ValueKey('nested:${reply.id}:${widget.currentUsername}'),
+              item: reply,
+              root: widget.root,
+              currentUsername: widget.currentUsername,
+              onUserTap: widget.onUserTap,
+              onLike: widget.onLike ?? (_, __) async {},
+              authorUsername: '',
+              canReact: widget.canReact && widget.onLike != null,
+              onReply: widget.onReply,
+              depth: widget.depth,
+              showChildren: widget.depth < 2,
             ),
-          ),
-        if (widget.items.length > 3)
-          TextButton(
-            onPressed: () => setState(() => _expanded = !_expanded),
-            child: Text(
-              AppLocalizations.of(
-                context,
-              ).t(_expanded ? 'collapse' : 'showReplies'),
+          if (items.length > 3)
+            TextButton(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              child: Text(
+                AppLocalizations.of(
+                  context,
+                ).t(_expanded ? 'collapse' : 'showReplies'),
+              ),
             ),
-          ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
