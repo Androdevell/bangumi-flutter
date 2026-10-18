@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart' as http;
 import '../media/rich_image_policy.dart';
+import 'image_request_headers.dart';
 
 /// 图片通道不使用 Cookie 会话，逐次检查重定向，并限制流式响应大小。
 class SafeImageFileService extends FileService {
@@ -33,15 +34,7 @@ class SafeImageFileService extends FileService {
         throw const HttpException('Private image address');
       }
       final request = http.Request('GET', uri)..followRedirects = false;
-      for (final entry in (headers ?? <String, String>{}).entries) {
-        if (const {
-          'if-none-match',
-          'if-modified-since',
-          'accept',
-        }.contains(entry.key.toLowerCase())) {
-          request.headers[entry.key] = entry.value;
-        }
-      }
+      request.headers.addAll(imageRequestHeaders(uri, headers));
       final response = await client
           .send(request)
           .timeout(const Duration(seconds: 20));

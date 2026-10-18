@@ -250,23 +250,56 @@ class _SubjectPreviewPanelState extends State<SubjectPreviewPanel> {
   }
 }
 
-class _PreviewImage extends StatelessWidget {
+class _PreviewImage extends StatefulWidget {
   const _PreviewImage({required this.url, required this.fit});
   final String url;
   final BoxFit fit;
 
   @override
+  State<_PreviewImage> createState() => _PreviewImageState();
+}
+
+class _PreviewImageState extends State<_PreviewImage> {
+  int _revision = 0;
+  bool _retrying = false;
+
+  Future<void> _retry() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      await CachedNetworkImage.evictFromCache(
+        widget.url,
+        cacheManager: AppImageCache.manager,
+      );
+      if (mounted) setState(() => _revision++);
+    } on Object {
+      // 清除失败仍保持局部错误态，允许稍后重试，不触发整页刷新。
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => CachedNetworkImage(
-    imageUrl: url,
+    key: ValueKey('${widget.url}-$_revision'),
+    imageUrl: widget.url,
     cacheManager: AppImageCache.manager,
-    httpHeaders: const {
-      'Referer': 'https://m.douban.com/',
-      'User-Agent': 'Mozilla/5.0',
-    },
-    fit: fit,
+    fit: widget.fit,
     placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
     errorWidget:
-        (_, __, ___) =>
-            const Center(child: Icon(Icons.image_not_supported_outlined)),
+        (_, __, ___) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.image_not_supported_outlined),
+              Text(AppLocalizations.of(context).t('imageFailed')),
+              TextButton.icon(
+                onPressed: _retrying ? null : _retry,
+                icon: const Icon(Icons.refresh),
+                label: Text(AppLocalizations.of(context).t('retry')),
+              ),
+            ],
+          ),
+        ),
   );
 }

@@ -58,9 +58,7 @@ class BangumiNetworkBridge(
                 original.url.username.isNotEmpty() || original.url.password.isNotEmpty()) {
                 throw IOException("Unsafe image redirect")
             }
-            chain.proceed(original.newBuilder().removeHeader("Cookie")
-                .removeHeader("Authorization").removeHeader("Proxy-Authorization")
-                .removeHeader("Referer").build())
+            chain.proceed(anonymousImageRequest(original))
         }
         .callTimeout(40, TimeUnit.SECONDS)
         .followSslRedirects(false)

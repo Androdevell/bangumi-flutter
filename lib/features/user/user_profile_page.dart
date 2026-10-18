@@ -38,6 +38,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   late Future<UserProfileData> _profile = _load();
   bool? _isFriend;
   bool _friendBusy = false;
+  final _collectionSelection = ValueNotifier<CollectionQuery?>(null);
 
   @override
   void initState() {
@@ -60,6 +61,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   void dispose() {
+    _collectionSelection.dispose();
     widget.repository.collectionChanges.removeListener(_onCollectionChanged);
     final repository = widget.repository;
     if (repository is CollectionFeatureRepository) {
@@ -272,12 +274,21 @@ class _UserProfilePageState extends State<UserProfilePage> {
                             data: data,
                             subjectCount: subjectCount,
                             onSubjectTap: _openTimelineSubject,
+                            onCollectionTap: _openSubject,
+                            onCollectionSelection:
+                                (status) =>
+                                    _collectionSelection
+                                        .value = CollectionQuery(
+                                      username: widget.username,
+                                      status: status,
+                                    ),
                           ),
                           () => _CollectionBrowser(
                             items: data.collections,
                             repository: widget.repository,
                             username: widget.username,
                             onTap: _openSubject,
+                            selection: _collectionSelection,
                           ),
                           () => _tab(
                             data,
@@ -379,12 +390,16 @@ class _TimeMachine extends StatelessWidget {
     required this.data,
     required this.subjectCount,
     required this.onSubjectTap,
+    required this.onCollectionTap,
+    required this.onCollectionSelection,
   });
   final BangumiRepository repository;
   final CommunityUser user;
   final UserProfileData data;
   final int subjectCount;
   final ValueChanged<TimelineEntry> onSubjectTap;
+  final ValueChanged<UserContentItem> onCollectionTap;
+  final ValueChanged<int?> onCollectionSelection;
   @override
   Widget build(BuildContext context) {
     final stats = user.stats;
@@ -401,21 +416,31 @@ class _TimeMachine extends StatelessWidget {
                     label: '收藏',
                     value: subjectCount,
                     icon: Icons.bookmarks_outlined,
+                    onTap: () {
+                      onCollectionSelection(null);
+                      DefaultTabController.of(context).animateTo(1);
+                    },
                   ),
                   _TimeMachineStat(
                     label: '看过',
                     value: stats.watched,
                     icon: Icons.done_all_rounded,
+                    onTap: () {
+                      onCollectionSelection(CollectionStatus.done);
+                      DefaultTabController.of(context).animateTo(1);
+                    },
                   ),
                   _TimeMachineStat(
                     label: '日志',
                     value: stats.blogs,
                     icon: Icons.article_outlined,
+                    onTap: () => DefaultTabController.of(context).animateTo(3),
                   ),
                   _TimeMachineStat(
                     label: '好友',
                     value: stats.friends,
                     icon: Icons.people_outline_rounded,
+                    onTap: () => DefaultTabController.of(context).animateTo(5),
                   ),
                 ],
               ),
@@ -461,10 +486,15 @@ class _TimeMachine extends StatelessWidget {
                       (value) => _RecentActivity(
                         data: value,
                         onSubjectTap: onSubjectTap,
+                        onCollectionTap: onCollectionTap,
                       ),
                 )
               else
-                _RecentActivity(data: data, onSubjectTap: onSubjectTap),
+                _RecentActivity(
+                  data: data,
+                  onSubjectTap: onSubjectTap,
+                  onCollectionTap: onCollectionTap,
+                ),
             ],
           ),
     );
@@ -515,9 +545,14 @@ class _ProfileBioState extends State<_ProfileBio> {
 }
 
 class _RecentActivity extends StatelessWidget {
-  const _RecentActivity({required this.data, required this.onSubjectTap});
+  const _RecentActivity({
+    required this.data,
+    required this.onSubjectTap,
+    required this.onCollectionTap,
+  });
   final UserProfileData data;
   final ValueChanged<TimelineEntry> onSubjectTap;
+  final ValueChanged<UserContentItem> onCollectionTap;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder:
@@ -526,7 +561,13 @@ class _RecentActivity extends StatelessWidget {
                 ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 3, child: _CollectionOverview(data: data)),
+                    Expanded(
+                      flex: 3,
+                      child: _CollectionOverview(
+                        data: data,
+                        onTap: onCollectionTap,
+                      ),
+                    ),
                     const SizedBox(width: 24),
                     Expanded(
                       flex: 2,
@@ -540,7 +581,7 @@ class _RecentActivity extends StatelessWidget {
                 : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _CollectionOverview(data: data),
+                    _CollectionOverview(data: data, onTap: onCollectionTap),
                     const SizedBox(height: 26),
                     _TimelineOverview(data: data, onSubjectTap: onSubjectTap),
                   ],
@@ -549,8 +590,9 @@ class _RecentActivity extends StatelessWidget {
 }
 
 class _CollectionOverview extends StatelessWidget {
-  const _CollectionOverview({required this.data});
+  const _CollectionOverview({required this.data, required this.onTap});
   final UserProfileData data;
+  final ValueChanged<UserContentItem> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -589,30 +631,35 @@ class _CollectionOverview extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (_, index) {
                 final item = group.$2[index];
-                return SizedBox(
-                  width: 86,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: CachedNetworkImage(
-                          imageUrl: item.imageUrl,
-                          cacheManager: AppImageCache.manager,
-                          width: 86,
-                          height: 112,
-                          memCacheWidth: 258,
-                          fit: BoxFit.cover,
+                return InkWell(
+                  key: ValueKey('recent-subject-${item.id}'),
+                  onTap: () => onTap(item),
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 86,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: CachedNetworkImage(
+                            imageUrl: item.imageUrl,
+                            cacheManager: AppImageCache.manager,
+                            width: 86,
+                            height: 112,
+                            memCacheWidth: 258,
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+                        const SizedBox(height: 5),
+                        Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -721,31 +768,39 @@ class _TimeMachineStat extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    required this.onTap,
   });
   final String label;
   final int value;
   final IconData icon;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 125,
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(7),
-    ),
-    child: Row(
-      children: [
-        Icon(icon, size: 19),
-        const SizedBox(width: 9),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerLow,
+    borderRadius: BorderRadius.circular(7),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      key: ValueKey('profile-stat-$label'),
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 125, minHeight: 64),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$value', style: Theme.of(context).textTheme.titleMedium),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            Icon(icon, size: 19),
+            const SizedBox(width: 9),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$value', style: Theme.of(context).textTheme.titleMedium),
+                Text(label, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ],
         ),
-      ],
+      ),
     ),
   );
 }
@@ -756,12 +811,14 @@ class _CollectionBrowser extends StatefulWidget {
     required this.onTap,
     required this.repository,
     required this.username,
+    required this.selection,
   });
 
   final List<UserContentItem> items;
   final ValueChanged<UserContentItem> onTap;
   final BangumiRepository repository;
   final String username;
+  final ValueNotifier<CollectionQuery?> selection;
 
   @override
   State<_CollectionBrowser> createState() => _CollectionBrowserState();
@@ -786,7 +843,7 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
   ];
 
   late final CollectionController _controller = CollectionController(
-    query: CollectionQuery(username: widget.username),
+    query: widget.selection.value ?? CollectionQuery(username: widget.username),
     load: _loadPage,
   );
   int get _subjectType => _controller.state.query.subjectType ?? 0;
@@ -795,6 +852,7 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
   @override
   void initState() {
     super.initState();
+    widget.selection.addListener(_select);
     widget.repository.collectionChanges.addListener(_refresh);
     final repository = widget.repository;
     if (repository is CollectionFeatureRepository) {
@@ -802,6 +860,13 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
           .addListener(_controller.clearSession);
     }
     unawaited(_controller.dispatch(const LoadCollections()));
+  }
+
+  void _select() {
+    final query = widget.selection.value;
+    if (query != null && query.username == widget.username) {
+      unawaited(_controller.dispatch(ChangeCollectionFilter(query)));
+    }
   }
 
   Future<Paged<UserContentItem>> _loadPage(
@@ -855,6 +920,7 @@ class _CollectionBrowserState extends State<_CollectionBrowser> {
 
   @override
   void dispose() {
+    widget.selection.removeListener(_select);
     widget.repository.collectionChanges.removeListener(_refresh);
     final repository = widget.repository;
     if (repository is CollectionFeatureRepository) {

@@ -22,6 +22,8 @@ import '../domain/repositories/group_repository.dart';
 import 'repositories/remote_group_repository.dart';
 import '../domain/repositories/account_settings_repository.dart';
 import 'repositories/remote_account_settings_repository.dart';
+import '../domain/repositories/privacy_repository.dart';
+import 'repositories/remote_privacy_repository.dart';
 
 abstract interface class BangumiRepository {
   bool get isLoggedIn;
@@ -199,6 +201,7 @@ class RemoteBangumiRepository
         NestedCommentRepository,
         GroupFeature,
         AccountSettingsFeature,
+        PrivacyFeature,
         SubjectPreviewRepository,
         RefreshableRepository {
   RemoteBangumiRepository({
@@ -220,6 +223,8 @@ class RemoteBangumiRepository
   final ThirdPartyPreviewService previewService;
 
   final ApiClient _api;
+  @override
+  late final PrivacyRepository privacy = RemotePrivacyRepository(_api);
   @override
   late final AccountSettingsRepository accountSettings =
       RemoteAccountSettingsRepository(

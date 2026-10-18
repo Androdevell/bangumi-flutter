@@ -13,6 +13,8 @@ import '../../widgets/third_party_preview_setting.dart';
 import '../../widgets/rich_comment_image.dart';
 import '../../domain/repositories/account_settings_repository.dart';
 import 'editor/profile_editor_page.dart';
+import '../../domain/repositories/privacy_repository.dart';
+import 'privacy/privacy_page.dart';
 import '../auth/login_page.dart';
 import '../user/user_profile_page.dart';
 
@@ -546,12 +548,22 @@ class _ProfilePageState extends State<ProfilePage> {
                   ListTile(
                     leading: const Icon(Icons.privacy_tip_outlined),
                     title: Text(strings.t('privacy')),
-                    subtitle: Text(strings.t('privacySubtitle')),
+                    subtitle: Text(strings.t('privacyDescription')),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap:
-                        () => ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(strings.t('privacyHint'))),
-                        ),
+                        widget.repository is PrivacyFeature &&
+                                widget.repository.isLoggedIn
+                            ? () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder:
+                                    (_) => PrivacyPage(
+                                      repository:
+                                          (widget.repository as PrivacyFeature)
+                                              .privacy,
+                                    ),
+                              ),
+                            )
+                            : null,
                   ),
                   if (previewServiceFor(widget.repository)
                       case final service?) ...[

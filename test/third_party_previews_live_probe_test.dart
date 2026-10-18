@@ -2,10 +2,47 @@ import 'dart:io';
 
 import 'package:bangumi_flutter/core/models.dart';
 import 'package:bangumi_flutter/core/network/third_party_preview_service.dart';
+import 'package:bangumi_flutter/core/network/safe_image_file_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/io_client.dart';
 
 void main() {
+  test(
+    'production safe image transport downloads Douban photos',
+    () async {
+      final service = ThirdPartyPreviewService(
+        enabled: true,
+        clientFactory:
+            () => IOClient(HttpClient()..findProxy = (_) => 'DIRECT'),
+      );
+      addTearDown(service.dispose);
+      final photos = await service.fetch(
+        const Subject(
+          id: 273,
+          title: '千与千寻',
+          originalTitle: '千と千尋の神隠し',
+          type: 2,
+          airDate: '2001-07-20',
+        ),
+      );
+      expect(photos, isNotEmpty);
+      final client = IOClient(HttpClient()..findProxy = (_) => 'DIRECT');
+      addTearDown(client.close);
+      final response = await SafeImageFileService(
+        client,
+      ).get(photos.first.imageUrl);
+      expect(response.statusCode, 200);
+      expect(
+        (await response.content.expand((chunk) => chunk).toList()).length,
+        greaterThan(0),
+      );
+    },
+    skip:
+        const bool.fromEnvironment('RUN_LIVE_PREVIEWS')
+            ? false
+            : 'Live third-party probe',
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
   test(
     'Magic Explorer TV photos and image load through canonical redirect',
     () async {
