@@ -3,7 +3,8 @@ param(
     [string]$Flutter = 'flutter',
     [string]$OAuthConfig = '',
     [Parameter(Mandatory = $true)][string]$PreviousApk,
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+    [switch]$NoPub
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,9 +57,11 @@ try {
     $output = Join-Path $projectRoot "dist/$name"
     if (Test-Path -LiteralPath $output) { throw '发布目录已存在，请保留已有文件或提升版本' }
     $defines = @("--dart-define=BGM_OAUTH_APP_ID=$clientId", "--dart-define=BGM_OAUTH_APP_SECRET=$clientSecret")
-    & $Flutter build apk --release --target-platform android-arm64 @defines
+    [string[]]$pubArguments = @()
+    if ($NoPub) { $pubArguments += '--no-pub' }
+    & $Flutter build apk --release --target-platform android-arm64 @pubArguments @defines
     if ($LASTEXITCODE -ne 0) { throw 'Android Release 构建失败' }
-    & $Flutter build windows --release @defines
+    & $Flutter build windows --release @pubArguments @defines
     if ($LASTEXITCODE -ne 0) { throw 'Windows Release 构建失败' }
     $apk = Join-Path $projectRoot 'build/app/outputs/flutter-apk/app-release.apk'
     $current = Read-Package $apk

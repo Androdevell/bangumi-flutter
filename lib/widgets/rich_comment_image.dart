@@ -153,6 +153,7 @@ class _RichCommentImageState extends State<RichCommentImage> {
   }
 }
 
+/// 评论图片设置；独立保存展开状态，不与父级列表的滚动位置共用缓存键。
 class CommentImageSetting extends StatelessWidget {
   const CommentImageSetting({super.key});
   @override
@@ -162,6 +163,7 @@ class CommentImageSetting extends StatelessWidget {
       final strings = AppLocalizations.of(context);
       final policy = RichImagePolicy.instance;
       return ExpansionTile(
+        key: const PageStorageKey('comment-image-setting-expansion'),
         leading: const Icon(Icons.image_outlined),
         title: Text(strings.t('commentImages')),
         childrenPadding: const EdgeInsets.symmetric(horizontal: 16),
