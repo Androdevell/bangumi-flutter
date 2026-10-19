@@ -469,7 +469,7 @@ class _FakeAuth extends AuthService {
   @override
   Future<String?> validAccessToken() async => null;
   @override
-  Future<LoginChallenge> beginLogin() async {
+  Future<LoginChallenge> beginLogin({String? expectedUsername}) async {
     beginCalls++;
     return gate?.future ??
         Future.value(const LoginChallenge({'token': 'first'}));

@@ -44,6 +44,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
           initialLocale: dependencies.settings.locale,
           initialAppIconStyle: dependencies.settings.iconStyle,
           initialReduceMotion: dependencies.settings.reduceMotion,
+          initialTheme: dependencies.settings.theme,
           repository: dependencies.repository,
         );
       }

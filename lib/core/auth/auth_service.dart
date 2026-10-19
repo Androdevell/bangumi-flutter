@@ -97,7 +97,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<LoginChallenge> beginLogin() async {
+  Future<LoginChallenge> beginLogin({String? expectedUsername}) async {
     if (_appId.isEmpty || _appSecret.isEmpty) {
       throw const AuthException('当前构建未配置 Bangumi OAuth，请通过 dart-define 提供应用凭据');
     }
@@ -110,6 +110,7 @@ class AuthService extends ChangeNotifier {
     if (loginForm == null) {
       final existingUser = _parseUser(document);
       if (existingUser != null) {
+        _checkExpectedUser(existingUser, expectedUsername);
         await _completeLogin(existingUser, generation);
         return const LoginChallenge({});
       }
@@ -123,6 +124,7 @@ class AuthService extends ChangeNotifier {
     }
     fields.putIfAbsent('referer', () => 'https://bgm.tv/');
     fields.putIfAbsent('dreferer', () => 'https://bgm.tv/');
+    // 网页勾选 cookietime=0 表示不保存登录；保留网页默认长效登录行为。
     fields.remove('cookietime');
     return LoginChallenge(fields);
   }
@@ -143,6 +145,7 @@ class AuthService extends ChangeNotifier {
     required String password,
     required String captcha,
     required LoginChallenge challenge,
+    String? expectedUsername,
   }) async {
     final generation = _sessionGeneration;
     if (email.trim().isEmpty || password.isEmpty || captcha.trim().isEmpty) {
@@ -173,6 +176,7 @@ class AuthService extends ChangeNotifier {
       );
     }
 
+    _checkExpectedUser(parsedUser, expectedUsername);
     await _completeLogin(parsedUser, generation);
   }
 
@@ -195,6 +199,16 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  void _checkExpectedUser(AuthUser user, String? expected) {
+    final sameNumericIdentity =
+        _user?.username == expected &&
+        (_user?.id ?? 0) > 0 &&
+        user.username == _user!.id.toString();
+    if (expected != null && expected != user.username && !sameNumericIdentity) {
+      throw const AuthException('请使用当前账号完成网页登录验证');
+    }
+  }
+
   Future<void> logout() async {
     _sessionGeneration++;
     _refreshing = null;
@@ -209,7 +223,13 @@ class AuthService extends ChangeNotifier {
     if (generation != _sessionGeneration) {
       throw const AuthException('登录已取消，请重新登录');
     }
-    var user = parsedUser;
+    var user = AuthUser(
+      id: token.userId > 0 ? token.userId : parsedUser.id,
+      username: parsedUser.username,
+      nickname: parsedUser.nickname,
+      formHash: parsedUser.formHash,
+      avatarUrl: parsedUser.avatarUrl,
+    );
     try {
       final profileResponse = await _request(
         'GET',
@@ -262,8 +282,11 @@ class AuthService extends ChangeNotifier {
       if (generation != _sessionGeneration) return false;
       notifyListeners();
       return true;
-    } on Object {
+    } on Object catch (refreshError) {
       if (generation != _sessionGeneration) return false;
+      if (refreshError is! AuthException || !refreshError.credentialsRejected) {
+        rethrow;
+      }
       try {
         final refreshed = await _authorize(currentUser.formHash, generation);
         if (generation != _sessionGeneration) return false;
@@ -272,7 +295,8 @@ class AuthService extends ChangeNotifier {
         if (generation != _sessionGeneration) return false;
         notifyListeners();
         return true;
-      } on Object {
+      } on Object catch (error) {
+        if (error is! AuthException || !error.credentialsRejected) rethrow;
         if (generation == _sessionGeneration) await logout();
         return false;
       }
@@ -281,7 +305,7 @@ class AuthService extends ChangeNotifier {
 
   Future<AuthToken> _authorize(String formHash, int generation) async {
     if (formHash.isEmpty) {
-      throw const AuthException('登录成功，但未找到授权参数');
+      throw const AuthException('登录成功，但未找到授权参数', credentialsRejected: true);
     }
     final authorizeUri = _webUri('oauth/authorize').replace(
       queryParameters: {
@@ -305,6 +329,7 @@ class AuthService extends ChangeNotifier {
           document.querySelector('#colunmNotice .text')?.text.trim();
       throw AuthException(
         message?.isNotEmpty == true ? message! : 'Bangumi OAuth 授权失败',
+        credentialsRejected: response.statusCode < 500,
       );
     }
     return _requestToken({
@@ -329,7 +354,12 @@ class AuthService extends ChangeNotifier {
         'client_secret': _appSecret,
       },
     );
-    _requireSuccess(response, '获取登录令牌失败');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AuthException(
+        '获取登录令牌失败',
+        credentialsRejected: {400, 401, 403}.contains(response.statusCode),
+      );
+    }
     try {
       final decoded = Map<String, dynamic>.from(
         jsonDecode(_responseText(response)) as Map,

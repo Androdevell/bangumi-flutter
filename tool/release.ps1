@@ -71,6 +71,7 @@ try {
     if ($fingerprint -ne (Read-Certificate (Resolve-Path -LiteralPath $PreviousApk).Path)) { throw '新旧 APK 签名不一致，不能覆盖安装' }
     $windowsBundle = Join-Path $projectRoot 'build/windows/x64/runner/Release'
     if ((Get-Item (Join-Path $windowsBundle 'bangumi_flutter.exe')).VersionInfo.ProductVersion -ne "$name+$code") { throw 'Windows 产物版本不一致' }
+    & (Join-Path $PSScriptRoot 'verify_windows_icons.ps1') -Executable (Join-Path $windowsBundle 'bangumi_flutter.exe')
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [System.IO.Compression.ZipFile]::OpenRead($apk)
     try {

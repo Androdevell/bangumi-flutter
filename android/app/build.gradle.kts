@@ -94,6 +94,7 @@ flutter {
 }
 
 dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.conscrypt:conscrypt-android:2.6.3")
     testImplementation("junit:junit:4.13.2")

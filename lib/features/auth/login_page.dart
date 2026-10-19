@@ -7,9 +7,14 @@ import '../../core/auth/auth_service.dart';
 import '../../widgets/common.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.authService});
+  const LoginPage({
+    super.key,
+    required this.authService,
+    this.expectedUsername,
+  });
 
   final AuthService authService;
+  final String? expectedUsername;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -66,6 +71,7 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text,
         captcha: _captchaController.text,
         challenge: _challenge!,
+        expectedUsername: widget.expectedUsername,
       );
       _passwordController.clear();
       _captchaController.clear();
@@ -90,9 +96,11 @@ class _LoginPageState extends State<LoginPage> {
       }
     });
     try {
-      final challenge = await widget.authService.beginLogin();
+      final challenge = await widget.authService.beginLogin(
+        expectedUsername: widget.expectedUsername,
+      );
       if (!mounted) return;
-      if (widget.authService.isLoggedIn) {
+      if (challenge.hiddenFields.isEmpty && widget.authService.isLoggedIn) {
         Navigator.of(context).pop(true);
         return;
       }

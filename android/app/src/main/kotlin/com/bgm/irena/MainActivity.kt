@@ -8,6 +8,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var updateBridge: UpdateBridge? = null
     private val highRefreshRateController by lazy { HighRefreshRateController(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,6 +28,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val updateChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.bgm.irena/update")
+        updateBridge = UpdateBridge(this, updateChannel)
+        updateChannel.setMethodCallHandler(updateBridge)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             BangumiNetworkBridge.CHANNEL_NAME,
@@ -72,6 +76,11 @@ class MainActivity : FlutterActivity() {
             )
             result.success(true)
         }
+    }
+
+    override fun onDestroy() {
+        updateBridge?.close()
+        super.onDestroy()
     }
 
     companion object {

@@ -16,12 +16,55 @@ class AppUpdateResult {
     required this.latestVersion,
     required this.releaseUrl,
     required this.updateAvailable,
+    this.notes = '',
+    this.publishedAt,
+    this.assets = const [],
   });
 
   final String currentVersion;
   final String latestVersion;
   final Uri? releaseUrl;
   final bool updateAvailable;
+  final String notes;
+  final DateTime? publishedAt;
+  final List<ComposeUpdateAsset> assets;
+  ComposeUpdateAsset? assetFor({required bool android}) =>
+      assets
+          .where(
+            (asset) =>
+                asset.name ==
+                'bangumi-$latestVersion-${android ? 'arm64-v8a.apk' : 'windows-x64.zip'}',
+          )
+          .firstOrNull;
+}
+
+@immutable
+class ComposeUpdateAsset {
+  const ComposeUpdateAsset({
+    required this.name,
+    required this.url,
+    required this.size,
+    this.digest,
+  });
+  final String name;
+  final Uri url;
+  final int size;
+  final String? digest;
+}
+
+bool isTrustedUpdateUri(Uri uri) {
+  if (uri.scheme != 'https' || uri.userInfo.isNotEmpty || uri.port != 443) {
+    return false;
+  }
+  if (uri.host == 'github.com') {
+    return uri.path.startsWith(
+      '/Androdevell/bangumi-flutter/releases/download/',
+    );
+  }
+  return const {
+    'release-assets.githubusercontent.com',
+    'objects.githubusercontent.com',
+  }.contains(uri.host);
 }
 
 class AppUpdateService {
@@ -95,6 +138,34 @@ class AppUpdateService {
       currentVersion: current,
       latestVersion: latest,
       releaseUrl: releaseUrl,
+      notes: '${json['body'] ?? ''}',
+      publishedAt: DateTime.tryParse('${json['published_at'] ?? ''}'),
+      assets: List.unmodifiable([
+        if (json['assets'] is List)
+          for (final item in json['assets'])
+            if (item is Map)
+              if (Uri.tryParse('${item['browser_download_url']}')
+                  case final Uri url)
+                if (isTrustedUpdateUri(url) &&
+                    RegExp(
+                      r'^bangumi-[0-9.]+-(arm64-v8a\.apk|windows-x64\.zip)$',
+                    ).hasMatch('${item['name']}') &&
+                    item['size'] is int &&
+                    item['size'] > 0 &&
+                    item['size'] < 512 * 1024 * 1024)
+                  ComposeUpdateAsset(
+                    name: item['name'],
+                    url: url,
+                    size: item['size'],
+                    digest:
+                        item['digest'] is String &&
+                                RegExp(
+                                  r'^sha256:[a-fA-F0-9]{64}$',
+                                ).hasMatch(item['digest'])
+                            ? item['digest'].toLowerCase()
+                            : null,
+                  ),
+      ]),
       updateAvailable:
           json['draft'] != true &&
           (includePrereleases ||

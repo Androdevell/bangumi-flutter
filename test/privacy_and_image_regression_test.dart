@@ -14,6 +14,7 @@ import 'package:bangumi_flutter/domain/models/privacy_settings.dart';
 import 'package:bangumi_flutter/domain/repositories/privacy_repository.dart';
 import 'package:bangumi_flutter/features/profile/privacy/privacy_controller.dart';
 import 'package:bangumi_flutter/features/profile/privacy/privacy_page.dart';
+import 'package:bangumi_flutter/widgets/settings_choice.dart';
 import 'package:bangumi_flutter/core/localization/app_localizations.dart';
 import 'community_extensions_test.dart' show authenticated, session, png;
 import 'comment_experience_test.dart' show host;
@@ -242,7 +243,7 @@ void main() {
         host(PrivacyPage(repository: repository), locale: locale),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(7));
+      expect(find.byType(SettingsChoiceTile), findsWidgets);
       expect(
         tester
             .widget<FilledButton>(find.byKey(const ValueKey('privacy-save')))

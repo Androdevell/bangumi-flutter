@@ -19,6 +19,23 @@ String emptyHashSettings({String nickname = 'Tester', String links = ''}) =>
     '${settingsHtml(nickname: nickname, formhash: '')}$links';
 
 void main() {
+  test(
+    'profile header accepts a numeric URL for the same account but rejects another account',
+    () {
+      for (final id in [session.accountId, 999999]) {
+        final source =
+            '${settingsHtml()}<div class="idBadgerNeue"><a class="avatar" href="/user/$id"></a></div>';
+        if (id == session.accountId) {
+          expect(parseAccountSettings(source, session).session, session);
+        } else {
+          expect(
+            () => parseAccountSettings(source, session),
+            throwsA(isA<ApiException>()),
+          );
+        }
+      }
+    },
+  );
   test('nonempty form token wins over links and cached session token', () {
     final result = parseAccountSettings(
       '${settingsHtml(formhash: 'form-token')}<a href="/erase/notify/all?gh=page-token">dismiss</a>',

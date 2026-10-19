@@ -71,6 +71,19 @@ class ApiClient {
   );
   Listenable get sessionChanges => _sessionChanges;
 
+  /// 隐私始终以当前 OAuth 身份读写，避免旧网页 Cookie 覆盖身份。
+  Future<dynamic> privacy({
+    Map<String, String>? settings,
+    SessionScope? scope,
+  }) => _request(
+    settings == null ? 'GET' : 'PATCH',
+    'p1/privacy',
+    body: settings == null ? null : {'settings': settings},
+    requiresAuth: true,
+    expectedScope: scope,
+    invalidatePaths: {'p1/privacy'},
+  );
+
   void _onAuthChanged() {
     if (_sessionChanges.value == sessionScope) return;
     _permissionRevision++;
@@ -608,9 +621,13 @@ class ApiClient {
     if (body != null) request.body = jsonEncode(body);
     final watch = Stopwatch()..start();
     try {
-      final streamed = await (transport ?? _client)
-          .send(request)
-          .timeout(timeout);
+      final bearerPrivacy = accessToken != null && uri.path == '/p1/privacy';
+      final selectedTransport =
+          transport ??
+          (bearerPrivacy && _client is CookieSessionClient
+              ? _client.anonymousTransport
+              : _client);
+      final streamed = await selectedTransport.send(request).timeout(timeout);
       NetworkTiming.record('headers', watch);
       final response = await http.Response.fromStream(
         streamed,

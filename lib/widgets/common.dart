@@ -3,14 +3,21 @@ import '../app/app_motion.dart';
 import '../core/localization/app_localizations.dart';
 
 class ContentFrame extends StatelessWidget {
-  const ContentFrame({super.key, required this.child, this.maxWidth = 1320});
+  const ContentFrame({
+    super.key,
+    required this.child,
+    this.maxWidth = 1320,
+    this.shrinkWrap = false,
+  });
 
   final Widget child;
   final double maxWidth;
+  final bool shrinkWrap;
 
   @override
   Widget build(BuildContext context) {
     return Align(
+      heightFactor: shrinkWrap ? 1 : null,
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
@@ -196,10 +203,12 @@ class NetworkErrorView extends StatelessWidget {
     super.key,
     required this.error,
     required this.onRetry,
+    this.retryLabel,
   });
 
   final Object error;
   final VoidCallback onRetry;
+  final String? retryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +235,7 @@ class NetworkErrorView extends StatelessWidget {
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重试'),
+              label: Text(retryLabel ?? '重试'),
             ),
           ],
         ),

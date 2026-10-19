@@ -12,23 +12,6 @@ namespace {
 
 constexpr char kAppIconChannel[] = "com.bgm.irena/app-icon";
 
-std::wstring AnimeIconAssetPath() {
-  wchar_t executable_path[MAX_PATH];
-  const DWORD length =
-      GetModuleFileNameW(nullptr, executable_path, MAX_PATH);
-  if (length == 0 || length == MAX_PATH) {
-    return L"";
-  }
-  std::wstring directory(executable_path, length);
-  const auto separator = directory.find_last_of(L"\\/");
-  if (separator == std::wstring::npos) {
-    return L"";
-  }
-  directory.resize(separator);
-  return directory +
-         L"\\data\\flutter_assets\\assets\\branding\\app_icon_anime.ico";
-}
-
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -103,45 +86,21 @@ void FlutterWindow::OnDestroy() {
 bool FlutterWindow::SetAppIcon(bool anime) {
   HICON big_icon = nullptr;
   HICON small_icon = nullptr;
-  if (anime) {
-    const std::wstring path = AnimeIconAssetPath();
-    if (path.empty()) {
-      return false;
-    }
-    big_icon = reinterpret_cast<HICON>(LoadImageW(
-        nullptr, path.c_str(), IMAGE_ICON, GetSystemMetrics(SM_CXICON),
-        GetSystemMetrics(SM_CYICON), LR_LOADFROMFILE));
-    small_icon = reinterpret_cast<HICON>(LoadImageW(
-        nullptr, path.c_str(), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
-        GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE));
-    if (big_icon == nullptr || small_icon == nullptr) {
-      if (big_icon != nullptr) DestroyIcon(big_icon);
-      if (small_icon != nullptr) DestroyIcon(small_icon);
-      return false;
-    }
-  } else {
-    const HINSTANCE instance = GetModuleHandle(nullptr);
-    big_icon = reinterpret_cast<HICON>(LoadImageW(
-        instance, MAKEINTRESOURCEW(IDI_APP_ICON), IMAGE_ICON,
-        GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED));
-    small_icon = reinterpret_cast<HICON>(LoadImageW(
-        instance, MAKEINTRESOURCEW(IDI_APP_ICON), IMAGE_ICON,
-        GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
-        LR_SHARED));
-    if (big_icon == nullptr || small_icon == nullptr) {
-      return false;
-    }
-  }
+  const HINSTANCE instance = GetModuleHandle(nullptr);
+  const int resource_id = anime ? IDI_ANIME_ICON : IDI_APP_ICON;
+  big_icon = reinterpret_cast<HICON>(LoadImageW(
+      instance, MAKEINTRESOURCEW(resource_id), IMAGE_ICON,
+      GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED));
+  small_icon = reinterpret_cast<HICON>(LoadImageW(
+      instance, MAKEINTRESOURCEW(resource_id), IMAGE_ICON,
+      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+  if (big_icon == nullptr || small_icon == nullptr) return false;
 
   SendMessage(GetHandle(), WM_SETICON, ICON_BIG,
               reinterpret_cast<LPARAM>(big_icon));
   SendMessage(GetHandle(), WM_SETICON, ICON_SMALL,
               reinterpret_cast<LPARAM>(small_icon));
   ReleaseCustomIcons();
-  if (anime) {
-    custom_icon_big_ = big_icon;
-    custom_icon_small_ = small_icon;
-  }
   return true;
 }
 

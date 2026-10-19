@@ -24,12 +24,24 @@ class ProfileEditorController extends ChangeNotifier {
     repository.sessionChanges.addListener(_changed);
   }
   final AccountSettingsRepository repository;
-  final SessionScope _session;
+  SessionScope _session;
   ComposeProfileEditorState state = const ComposeProfileEditorState();
   int _generation = 0;
   bool _closed = false;
   void _changed() {
     _generation++;
+    final next = repository.scope;
+    if (next.username == _session.username &&
+        next.accountId == _session.accountId) {
+      _session = next;
+      state = ComposeProfileEditorState(
+        original: state.original,
+        unknown: true,
+        error: const ApiException('profileReverify'),
+      );
+      notifyListeners();
+      return;
+    }
     state = ComposeProfileEditorState(original: state.original, stale: true);
     notifyListeners();
   }

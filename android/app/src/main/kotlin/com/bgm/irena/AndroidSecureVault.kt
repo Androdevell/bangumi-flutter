@@ -37,7 +37,7 @@ class AndroidSecureVault(context: Context) : MethodChannel.MethodCallHandler {
                     }
                 }
                 "delete" -> {
-                    preferences.edit().remove(key).apply()
+                    check(preferences.edit().remove(key).commit()) { "Secure storage delete failed" }
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -81,9 +81,9 @@ class AndroidSecureVault(context: Context) : MethodChannel.MethodCallHandler {
             .put(cipher.iv)
             .put(encrypted)
             .array()
-        preferences.edit()
+        check(preferences.edit()
             .putString(key, Base64.encodeToString(payload, Base64.NO_WRAP))
-            .apply()
+            .commit()) { "Secure storage write failed" }
     }
 
     private fun getExistingKey(): SecretKey? {

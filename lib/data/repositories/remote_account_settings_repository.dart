@@ -122,6 +122,17 @@ ComposeAccountSettings parseAccountSettings(
   String fallbackFormHash = '',
 }) {
   final document = html.parse(text);
+  final identityHref =
+      document.querySelector('.idBadgerNeue a.avatar')?.attributes['href'];
+  final webIdentity =
+      identityHref == null
+          ? null
+          : Uri.tryParse(identityHref)?.pathSegments.lastOrNull;
+  if (webIdentity != null &&
+      webIdentity != session.username &&
+      !(session.accountId > 0 && webIdentity == session.accountId.toString())) {
+    throw const ApiException('profileWebLoginRequired');
+  }
   final nickname = document.querySelector('input[name="nickname"]');
   final form = _ancestor(nickname, 'form');
   if (document.querySelector('#loginForm') != null) {

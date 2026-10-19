@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/secure_vault.dart';
+import 'theme_preferences.dart';
 
 enum AppIconStyle { classic, anime }
 
@@ -11,12 +12,14 @@ class AppPreferenceSnapshot {
     required this.iconStyle,
     this.thirdPartyPreviews = false,
     this.reduceMotion = false,
+    this.theme = const ComposeThemePreferences(),
   });
 
   final Locale locale;
   final AppIconStyle iconStyle;
   final bool thirdPartyPreviews;
   final bool reduceMotion;
+  final ComposeThemePreferences theme;
 }
 
 class AppPreferences {
@@ -35,6 +38,7 @@ class AppPreferences {
       _vault.read(_iconKey),
       _vault.read(_previewsKey),
       _vault.read(_motionKey),
+      _vault.read('app.preference.theme.v1'),
     ]);
     final localeCode = switch (values[0]) {
       'en' => 'en',
@@ -50,6 +54,7 @@ class AppPreferences {
       iconStyle: iconStyle,
       thirdPartyPreviews: values[2] == 'true',
       reduceMotion: values[3] == 'true',
+      theme: ComposeThemePreferences.decode(values[4]),
     );
   }
 
@@ -63,4 +68,6 @@ class AppPreferences {
       _vault.write(_previewsKey, '$enabled');
   Future<void> setReduceMotion(bool enabled) =>
       _vault.write(_motionKey, '$enabled');
+  Future<void> setTheme(ComposeThemePreferences value) =>
+      _vault.write('app.preference.theme.v1', value.encode());
 }

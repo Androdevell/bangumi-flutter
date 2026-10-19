@@ -72,8 +72,7 @@ class _WindowsSecureVault implements PlatformSecureVault {
       final encrypted = base64Decode(await file.readAsString());
       return utf8.decode(_transform(encrypted, decrypt: true));
     } on Object {
-      if (await file.exists()) await file.delete();
-      return null;
+      throw StateError('Secure storage could not be read; saved data retained');
     }
   }
 

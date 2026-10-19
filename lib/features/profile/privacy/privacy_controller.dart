@@ -18,6 +18,7 @@ class PrivacyController extends ChangeNotifier {
   bool _disposed = false;
   int _generation = 0;
   bool get loaded => _original != null;
+  int get editCount => _edits.length;
   bool get canSave => loaded && !busy && !uncertain && _edits.isNotEmpty;
 
   void _sessionChanged() {

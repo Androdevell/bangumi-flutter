@@ -102,7 +102,13 @@ Future<(ApiClient, AuthService)> authenticated(http.Client client) async {
     'chii_auth=synthetic-cookie; Path=/; Secure',
   );
   final transport = CookieSessionClient(client, cookies);
-  final auth = AuthService(client: transport, cookies: cookies, vault: vault);
+  final auth = AuthService(
+    client: transport,
+    cookies: cookies,
+    vault: vault,
+    appId: 'fixture-app',
+    appSecret: 'fixture-secret',
+  );
   await auth.initialize();
   return (ApiClient(client: transport, authService: auth), auth);
 }
@@ -724,12 +730,36 @@ void main() {
     final repo = _Settings();
     final model = ProfileEditorController(repo);
     await model.load();
+    repo.currentScope = const SessionScope(
+      username: 'other',
+      accountId: 99,
+      epoch: 2,
+    );
     repo.changes.notifyListeners();
     expect(model.state.stale, isTrue);
     expect(await model.save({'nickname': 'Other'}), isFalse);
     expect(repo.saves, 0);
     model.dispose();
   });
+  test(
+    'same account revalidation can reload and save without closing the editor',
+    () async {
+      final repo = _Settings();
+      final model = ProfileEditorController(repo);
+      await model.load();
+      repo.currentScope = SessionScope(
+        username: session.username,
+        accountId: session.accountId,
+        epoch: session.epoch + 1,
+      );
+      repo.changes.notifyListeners();
+      expect(model.state.stale, false);
+      expect(await model.save({'nickname': 'New'}), false);
+      await model.load();
+      expect(await model.save({'nickname': 'New'}), true);
+      model.dispose();
+    },
+  );
   for (final locale in ['zh', 'en', 'ja']) {
     testWidgets(
       'profile editor keeps fields and fits narrow large text in $locale',
@@ -874,17 +904,18 @@ class _GroupDetail extends _Groups {
 }
 
 class _Settings implements AccountSettingsRepository {
+  SessionScope currentScope = session;
   final changes = ChangeNotifier();
   bool failSave = false, failLoad = false;
   int saves = 0;
   @override
-  SessionScope get scope => session;
+  SessionScope get scope => currentScope;
   @override
   Listenable get sessionChanges => changes;
   @override
   Future<ComposeAccountSettings> load() async {
     if (failLoad) throw const ApiException('read failed');
-    return parseAccountSettings(settingsHtml(), session);
+    return parseAccountSettings(settingsHtml(), scope);
   }
 
   @override
@@ -899,7 +930,7 @@ class _Settings implements AccountSettingsRepository {
     }
     return parseAccountSettings(
       settingsHtml(nickname: edits['nickname'] ?? 'Tester'),
-      session,
+      scope,
     );
   }
 }

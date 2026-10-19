@@ -97,9 +97,10 @@ class AuthToken {
 }
 
 class AuthException implements Exception {
-  const AuthException(this.message);
+  const AuthException(this.message, {this.credentialsRejected = false});
 
   final String message;
+  final bool credentialsRejected;
 
   @override
   String toString() => message;

@@ -17,6 +17,10 @@ import '../../domain/repositories/privacy_repository.dart';
 import 'privacy/privacy_page.dart';
 import '../auth/login_page.dart';
 import '../user/user_profile_page.dart';
+import '../../app/theme_controller.dart';
+import 'theme_settings_page.dart';
+import 'network_diagnostics_page.dart';
+import 'update_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({
@@ -53,7 +57,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<CommunityUser>? _profile;
   late final AppUpdateService _updateService = AppUpdateService();
   late final Future<String> _appVersion = _updateService.currentVersion();
-  bool _checkingUpdate = false;
   late Future<int> _cacheUsage = AppImageCache.diskUsageBytes();
 
   AppLocalizations get _strings => AppLocalizations.of(context);
@@ -124,72 +127,15 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _testNetwork() async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(SnackBar(content: Text(_strings.t('connecting'))));
-    try {
-      await widget.repository.fetchTrending(limit: 1);
-      if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text(_strings.t('connectionOk'))),
-      );
-    } on Object catch (error) {
-      if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text('${_strings.t('connectionFailed')}：$error')),
-      );
-    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const NetworkDiagnosticsPage()),
+    );
   }
 
   Future<void> _checkUpdate() async {
-    if (_checkingUpdate) return;
-    setState(() => _checkingUpdate = true);
-    try {
-      final result = await _updateService.check();
-      if (!mounted) return;
-      if (!result.updateAvailable) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${_strings.t('latestVersion')} ${result.currentVersion}',
-            ),
-          ),
-        );
-        return;
-      }
-      final open = await showDialog<bool>(
-        context: context,
-        builder:
-            (context) => AlertDialog(
-              title: Text(_strings.t('newVersion')),
-              content: Text(
-                '${_strings.t('currentVersion')} ${result.currentVersion}'
-                '\n${_strings.t('newestVersion')} ${result.latestVersion}',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: Text(_strings.t('later')),
-                ),
-                FilledButton.icon(
-                  onPressed: () => Navigator.pop(context, true),
-                  icon: const Icon(Icons.open_in_new_rounded),
-                  label: Text(_strings.t('openRelease')),
-                ),
-              ],
-            ),
-      );
-      if (open == true) await _updateService.openRelease(result);
-    } on Object catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${_strings.t('updateFailed')}：$error')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _checkingUpdate = false);
-    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const UpdatePage()));
   }
 
   Future<void> _openLogin() async {
@@ -547,6 +493,25 @@ class _ProfilePageState extends State<ProfilePage> {
                                   MaterialPageRoute<void>(
                                     builder:
                                         (_) => ProfileEditorPage(
+                                          onRevalidate:
+                                              widget.authService == null
+                                                  ? null
+                                                  : () async =>
+                                                      await Navigator.of(
+                                                        context,
+                                                      ).push<bool>(
+                                                        MaterialPageRoute(
+                                                          builder:
+                                                              (_) => LoginPage(
+                                                                authService:
+                                                                    widget
+                                                                        .authService!,
+                                                                expectedUsername:
+                                                                    user.username,
+                                                              ),
+                                                        ),
+                                                      ) ==
+                                                      true,
                                           repository:
                                               (widget.repository
                                                       as AccountSettingsFeature)
@@ -609,6 +574,21 @@ class _ProfilePageState extends State<ProfilePage> {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: widget.onToggleTheme,
                   ),
+                  if (AppThemeScope.maybeOf(context)
+                      case final ThemeController controller)
+                    ListTile(
+                      leading: const Icon(Icons.color_lens_outlined),
+                      title: Text(strings.t('themeColors')),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder:
+                                  (_) =>
+                                      ThemeSettingsPage(controller: controller),
+                            ),
+                          ),
+                    ),
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.translate_rounded),
@@ -637,13 +617,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: _chooseAppIcon,
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.speed_rounded),
-                    title: Text(strings.t('screenRefresh')),
-                    subtitle: Text(strings.t('screenRefreshSubtitle')),
-                    trailing: const Icon(Icons.check_circle_outline_rounded),
                   ),
                   const Divider(height: 1),
                   SwitchListTile(
@@ -713,22 +686,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading:
-                        _checkingUpdate
-                            ? const Padding(
-                              padding: EdgeInsets.all(3),
-                              child: SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                            : const Icon(Icons.system_update_outlined),
+                    leading: const Icon(Icons.system_update_outlined),
                     title: Text(strings.t('checkUpdate')),
                     subtitle: Text(strings.t('checkUpdateSubtitle')),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: _checkingUpdate ? null : _checkUpdate,
+                    onTap: _checkUpdate,
                   ),
                   const Divider(height: 1),
                   ListTile(

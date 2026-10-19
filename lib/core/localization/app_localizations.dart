@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'community_strings.dart';
+import 'settings_strings.dart';
 
 class AppLocalizations {
   const AppLocalizations(this.locale);
@@ -15,6 +16,7 @@ class AppLocalizations {
       const AppLocalizations(Locale('zh'));
 
   String t(String key) =>
+      settingsStrings[locale.languageCode]?[key] ??
       communityStrings[locale.languageCode]?[key] ??
       (_values[locale.languageCode] ?? _values['zh']!)[key] ??
       _values['zh']![key] ??
@@ -207,8 +209,6 @@ class AppLocalizations {
       'animeIcon': '二次元图标',
       'iconAndroidHint': 'Android 启动器图标会随选择更新',
       'iconDesktopHint': 'Windows 窗口与任务栏图标会随选择更新',
-      'screenRefresh': '屏幕刷新率',
-      'screenRefreshSubtitle': '跟随系统，支持最高 120Hz',
       'autoPlay': '自动播放预览',
       'reduceMotion': '减少界面动效',
       'reduceMotionSubtitle': '适合省电模式或低性能设备',
@@ -404,8 +404,6 @@ class AppLocalizations {
       'animeIcon': 'Anime icon',
       'iconAndroidHint': 'The Android launcher icon updates with your choice',
       'iconDesktopHint': 'The Windows title bar and taskbar icon will update',
-      'screenRefresh': 'Display refresh rate',
-      'screenRefreshSubtitle': 'Follows the system, up to 120 Hz',
       'autoPlay': 'Autoplay previews',
       'reduceMotion': 'Reduce motion',
       'reduceMotionSubtitle': 'Useful for battery saver or slower devices',
@@ -587,8 +585,6 @@ class AppLocalizations {
       'animeIcon': 'アニメアイコン',
       'iconAndroidHint': 'Android のランチャーアイコンも切り替わります',
       'iconDesktopHint': 'Windows のウィンドウとタスクバーに反映されます',
-      'screenRefresh': '画面のリフレッシュレート',
-      'screenRefreshSubtitle': 'システムに従い、最大 120Hz に対応',
       'autoPlay': 'プレビューを自動再生',
       'reduceMotion': 'アニメーションを減らす',
       'reduceMotionSubtitle': '省電力モードや低性能端末向け',

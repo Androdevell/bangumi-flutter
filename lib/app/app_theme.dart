@@ -4,7 +4,9 @@ import 'app_motion.dart';
 abstract final class AppTheme {
   static const _brand = Color(0xFFE85D87);
 
-  static ThemeData light() {
+  static ThemeData light({Color? seed, ColorScheme? dynamicScheme}) {
+    if (dynamicScheme != null) return _build(dynamicScheme);
+    if (seed != null) return _build(ColorScheme.fromSeed(seedColor: seed));
     final scheme = ColorScheme.fromSeed(
       seedColor: _brand,
       brightness: Brightness.light,
@@ -15,7 +17,13 @@ abstract final class AppTheme {
     return _build(scheme);
   }
 
-  static ThemeData dark() {
+  static ThemeData dark({Color? seed, ColorScheme? dynamicScheme}) {
+    if (dynamicScheme != null) return _build(dynamicScheme);
+    if (seed != null) {
+      return _build(
+        ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark),
+      );
+    }
     final scheme = ColorScheme.fromSeed(
       seedColor: _brand,
       brightness: Brightness.dark,

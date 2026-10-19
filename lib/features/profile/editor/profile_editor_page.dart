@@ -10,11 +10,17 @@ import '../../../domain/repositories/account_settings_repository.dart';
 import '../../../widgets/avatar_crop_dialog.dart';
 import '../../../widgets/bangumi_rich_text.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/settings_choice.dart';
 import 'profile_editor_controller.dart';
 
 class ProfileEditorPage extends StatefulWidget {
-  const ProfileEditorPage({super.key, required this.repository});
+  const ProfileEditorPage({
+    super.key,
+    required this.repository,
+    this.onRevalidate,
+  });
   final AccountSettingsRepository repository;
+  final Future<bool> Function()? onRevalidate;
   @override
   State<ProfileEditorPage> createState() => _ProfileEditorPageState();
 }
@@ -60,6 +66,22 @@ class _ProfileEditorPageState extends State<ProfileEditorPage> {
   void _sync() {
     final original = _model.state.original;
     if (original != null && _original == null) _fill(original);
+    if (original != null &&
+        _original != null &&
+        original.session != _original!.session &&
+        original.session.username == _original!.session.username) {
+      final drafts = {
+        for (final field in _fields.entries)
+          if (field.value.text != _original!.value(field.key))
+            field.key: field.value.text,
+      };
+      final avatar = _avatar;
+      _fill(original);
+      for (final entry in drafts.entries) {
+        _fields[entry.key]!.text = entry.value;
+      }
+      _avatar = avatar;
+    }
     if (mounted) setState(() {});
   }
 
@@ -75,6 +97,14 @@ class _ProfileEditorPageState extends State<ProfileEditorPage> {
   }
 
   Future<void> _reload() async {
+    final error = _model.state.error;
+    if (error is ApiException &&
+        {'profileWebLoginRequired', 'loginRequired'}.contains(error.message) &&
+        widget.onRevalidate != null) {
+      if (!await widget.onRevalidate!() || !mounted) return;
+      await _model.load();
+      return;
+    }
     if (_dirty && !await _discard()) return;
     await _model.load();
     if (mounted &&
@@ -208,6 +238,12 @@ class _ProfileEditorPageState extends State<ProfileEditorPage> {
                       ? NetworkErrorView(
                         error: _errorText(strings, state.error!),
                         onRetry: _reload,
+                        retryLabel:
+                            state.error is ApiException &&
+                                    (state.error as ApiException).message ==
+                                        'profileWebLoginRequired'
+                                ? strings.t('webRevalidate')
+                                : strings.t('retry'),
                       )
                       : const LoadingView()
                   : Form(
@@ -362,41 +398,19 @@ class _ProfileEditorPageState extends State<ProfileEditorPage> {
                                 ),
                           ),
                         const SizedBox(height: 16),
-                        DropdownButtonFormField<String>(
-                          value:
-                              _original!.timezones.containsKey(
-                                    _fields['timeoffsetnew']!.text,
-                                  )
-                                  ? _fields['timeoffsetnew']!.text
-                                  : null,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: strings.t('timezone'),
-                            border: const OutlineInputBorder(),
-                          ),
-                          items: [
-                            for (final zone in _original!.timezones.entries)
-                              DropdownMenuItem(
-                                value: zone.key,
-                                child: Text(
-                                  zone.value,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
+                        SettingsChoiceTile(
+                          title: strings.t('timezone'),
+                          icon: Icons.schedule_rounded,
+                          value: _fields['timeoffsetnew']!.text,
+                          options: _original!.timezones,
+                          searchable: true,
                           onChanged:
                               locked
                                   ? null
-                                  : (value) {
-                                    if (value != null) {
-                                      setState(
-                                        () =>
-                                            _fields['timeoffsetnew']!.text =
-                                                value,
-                                      );
-                                    }
-                                  },
+                                  : (value) => setState(
+                                    () =>
+                                        _fields['timeoffsetnew']!.text = value,
+                                  ),
                         ),
                         if (_original!.restrictedField != null)
                           SwitchListTile(

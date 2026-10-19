@@ -5,8 +5,10 @@ import '../../domain/models/privacy_settings.dart';
 import '../../domain/repositories/privacy_repository.dart';
 
 class RemotePrivacyRepository implements PrivacyRepository {
-  RemotePrivacyRepository(this.api);
+  RemotePrivacyRepository(this.api, {Future<void> Function(Duration)? delay})
+    : _delay = delay ?? Future<void>.delayed;
   final ApiClient api;
+  final Future<void> Function(Duration) _delay;
   @override
   SessionScope get scope => api.sessionScope;
   @override
@@ -21,7 +23,7 @@ class RemotePrivacyRepository implements PrivacyRepository {
   Future<ComposePrivacySettings> load() async {
     final session = scope;
     _check(session);
-    final json = await api.get('p1/privacy', fresh: true);
+    final json = await api.privacy(scope: session);
     _check(session);
     try {
       return ComposePrivacySettings.fromJson(json, session);
@@ -54,12 +56,21 @@ class RemotePrivacyRepository implements PrivacyRepository {
     if (patch.isEmpty) return current;
     // P1 接受部分 settings；不发送未编辑字段或任何 preferences/只读能力字段。
     try {
-      await api.patch(
-        'p1/privacy',
-        body: {'settings': patch},
-        expectedScope: original.session,
-        invalidatePaths: {'p1/privacy'},
+      final response = await api.privacy(
+        settings: patch,
+        scope: original.session,
       );
+      if (response != null) {
+        final applied = ComposePrivacySettings.fromJson(
+          response,
+          original.session,
+        );
+        if (patch.entries.any(
+          (entry) => applied.settings[entry.key] != entry.value,
+        )) {
+          throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
+        }
+      }
     } on ApiException catch (error) {
       if ({400, 401, 403, 429}.contains(error.statusCode)) {
         throw ApiException(
@@ -71,17 +82,23 @@ class RemotePrivacyRepository implements PrivacyRepository {
     } on Object {
       throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
     }
-    try {
-      final confirmed = await load();
-      _check(original.session);
-      if (patch.entries.any(
-        (entry) => confirmed.settings[entry.key] != entry.value,
-      )) {
-        throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final confirmed = await load();
+        _check(original.session);
+        if (patch.entries.any(
+          (entry) => confirmed.settings[entry.key] != entry.value,
+        )) {
+          throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
+        }
+        return confirmed;
+      } on Object {
+        _check(original.session);
+        if (attempt < 2) {
+          await _delay(Duration(milliseconds: 350 * (attempt + 1)));
+        }
       }
-      return confirmed;
-    } on Object {
-      throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
     }
+    throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
   }
 }
