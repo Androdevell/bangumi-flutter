@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'paged.dart';
+import 'network/read_task_scope.dart';
 
 class PagedController<T> extends ChangeNotifier {
   PagedController({
@@ -11,7 +12,9 @@ class PagedController<T> extends ChangeNotifier {
   final Object Function(T item) idOf;
   final bool pageBased;
   final List<T> _items = [];
-  List<T> get items => List.unmodifiable(_items);
+  final Set<Object> _ids = {};
+  List<T>? _snapshot;
+  List<T> get items => _snapshot ??= List.unmodifiable(_items);
   bool loading = false;
   bool hasMore = true;
   Object? error;
@@ -19,15 +22,22 @@ class PagedController<T> extends ChangeNotifier {
   int _cursor = 0;
   int _generation = 0;
   bool _disposed = false;
+  ReadTaskScope _read = ReadTaskScope();
 
   Future<void> reset({bool keepItems = false}) {
+    _read.cancel();
+    _read = ReadTaskScope();
     _generation++;
     _cursor = 0;
     loading = false;
     hasMore = true;
     error = null;
     total = null;
-    if (!keepItems) _items.clear();
+    if (!keepItems) {
+      _items.clear();
+      _ids.clear();
+      _snapshot = null;
+    }
     return loadMore();
   }
 
@@ -39,12 +49,15 @@ class PagedController<T> extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final page = await load(cursor);
+      final page = await _read.run(() => load(cursor));
       if (_disposed || generation != _generation) return;
-      if (cursor == 0) _items.clear();
-      final ids = _items.map(idOf).toSet();
-      final fresh = page.items.where((item) => ids.add(idOf(item))).toList();
+      if (cursor == 0) {
+        _items.clear();
+        _ids.clear();
+      }
+      final fresh = page.items.where((item) => _ids.add(idOf(item))).toList();
       _items.addAll(fresh);
+      _snapshot = null;
       total = page.total;
       hasMore = page.hasMore && fresh.isNotEmpty;
       _cursor = pageBased ? cursor + 1 : page.nextOffset;
@@ -61,6 +74,7 @@ class PagedController<T> extends ChangeNotifier {
 
   @override
   void dispose() {
+    _read.cancel();
     _disposed = true;
     _generation++;
     super.dispose();

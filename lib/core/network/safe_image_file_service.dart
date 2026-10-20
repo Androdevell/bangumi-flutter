@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart' as http;
 import '../media/rich_image_policy.dart';
 import 'image_request_headers.dart';
+import 'bounded_response.dart';
+import 'image_transfer_files.dart';
 
 /// 图片通道不使用 Cookie 会话，逐次检查重定向，并限制流式响应大小。
 class SafeImageFileService extends FileService {
@@ -16,6 +17,7 @@ class SafeImageFileService extends FileService {
   final http.Client client;
   final Future<List<InternetAddress>> Function(String) lookup;
   static const maxBytes = 20 * 1024 * 1024;
+  static final _files = ImageTransferFiles();
   @override
   Future<FileServiceResponse> get(
     String url, {
@@ -75,27 +77,52 @@ class SafeImageFileService extends FileService {
         }
       }
 
-      final data = BytesBuilder(copy: false);
-      await for (final chunk in bounded()) {
-        data.add(chunk);
+      if (response.statusCode != 200) {
+        final small = await readBoundedResponse(response, maxBytes: 64 * 1024);
+        return HttpGetResponse(
+          http.StreamedResponse(
+            Stream.value(small.bodyBytes),
+            small.statusCode,
+            headers: small.headers,
+          ),
+        );
       }
-      final bytes = data.takeBytes();
-      if (response.statusCode == 200) {
-        final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      final file = await _files.create();
+      try {
+        final sink = file.openWrite();
+        try {
+          await sink.addStream(bounded());
+        } finally {
+          await sink.close();
+        }
+        final buffer = await ui.ImmutableBuffer.fromFilePath(file.path);
         ui.ImageDescriptor? descriptor;
         try {
           descriptor = await ui.ImageDescriptor.encoded(buffer);
-          if (descriptor.width * descriptor.height > 24 * 1024 * 1024) {
+          if (descriptor.width <= 0 ||
+              descriptor.height <= 0 ||
+              descriptor.width * descriptor.height > 24 * 1024 * 1024) {
             throw const HttpException('Image pixel limit exceeded');
           }
         } finally {
           descriptor?.dispose();
           buffer.dispose();
         }
+      } catch (_) {
+        await _files.release(file);
+        rethrow;
       }
+      Stream<List<int>> content() async* {
+        try {
+          yield* file.openRead();
+        } finally {
+          await _files.release(file);
+        }
+      }
+
       return HttpGetResponse(
         http.StreamedResponse(
-          Stream.value(bytes),
+          content(),
           response.statusCode,
           headers: response.headers,
           contentLength: response.contentLength,

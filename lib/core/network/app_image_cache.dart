@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'android_image_file_service.dart';
 import 'safe_image_file_service.dart';
+import 'quota_cache_manager.dart';
 
 abstract final class AppImageCache {
   static BaseCacheManager _manager = DefaultCacheManager();
@@ -24,7 +25,7 @@ abstract final class AppImageCache {
             ? AndroidImageFileService()
             : SafeImageFileService(client);
     service.concurrentFetches = 3;
-    _manager = CacheManager(
+    _manager = QuotaCacheManager(
       Config(
         _cacheKey,
         stalePeriod: const Duration(days: 14),

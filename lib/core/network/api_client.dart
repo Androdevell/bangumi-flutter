@@ -14,6 +14,8 @@ import '../../app/state/session_scope.dart';
 import '../cache/query_key.dart';
 import 'platform_http_client.dart';
 import 'cookie_session_client.dart';
+import 'bounded_response.dart';
+import 'read_task_scope.dart';
 import '../diagnostics/network_timing.dart';
 
 class ApiClient {
@@ -26,12 +28,14 @@ class ApiClient {
     DateTime Function()? clock,
     bool closeClient = true,
     Duration readBudget = const Duration(seconds: 12),
+    int cacheMaxBytes = 8 * 1024 * 1024,
   }) : _client = client ?? createPlatformHttpClient(),
        _closeClient = closeClient,
        _cacheTtl = cacheTtl,
        _delay = delay ?? Future<void>.delayed,
        _clock = clock ?? DateTime.now,
        _readBudget = readBudget,
+       _cacheMaxBytes = cacheMaxBytes,
        _authService = authService,
        _baseUri =
            baseUri ??
@@ -51,14 +55,17 @@ class ApiClient {
   final Uri _baseUri;
   final Duration _cacheTtl;
   final Duration _readBudget;
+  final int _cacheMaxBytes;
+  int _cacheBytes = 0;
   final Set<Completer<void>> _activeAborts = {};
   Future<dynamic>? _publicCalendar;
   DateTime? _publicCalendarAt;
   int _publicCalendarGeneration = 0;
   final Future<void> Function(Duration) _delay;
   final DateTime Function() _clock;
-  final Map<QueryKey, ({DateTime at, dynamic value})> _cache = {};
+  final Map<QueryKey, ({DateTime at, dynamic value, int bytes})> _cache = {};
   final Map<QueryKey, Future<dynamic>> _inFlight = {};
+  final _leases = Expando<_ReadLease>();
   late final ValueNotifier<SessionScope> _sessionChanges;
   int _permissionRevision = 0;
   bool _closed = false;
@@ -98,12 +105,14 @@ class ApiClient {
     bool matches(QueryKey key) =>
         paths.any((path) => key.path.startsWith(path));
     _cache.removeWhere((key, _) => matches(key));
+    _cacheBytes = _cache.values.fold(0, (sum, entry) => sum + entry.bytes);
     _inFlight.removeWhere((key, _) => matches(key));
   }
 
   void clearCache() {
     _cacheGeneration++;
     _cache.clear();
+    _cacheBytes = 0;
     _inFlight.clear();
     _invalidatePublicCalendar();
   }
@@ -145,7 +154,7 @@ class ApiClient {
         );
       }
       if (_closed) throw const ApiException('客户端已关闭');
-      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final data = await decodeResponseJson(response);
       if (generation == _publicCalendarGeneration) _publicCalendarAt = _clock();
       return data;
     } on Object {
@@ -159,6 +168,8 @@ class ApiClient {
     Map<String, String>? query, {
     bool fresh = false,
   }) async {
+    final owner = ReadTaskScope.current;
+    owner?.check();
     if (fresh) invalidateResources({path});
     final key = QueryKey(
       environment: _baseUri.toString(),
@@ -169,25 +180,68 @@ class ApiClient {
     );
     final cached = _cache[key];
     if (cached != null && _clock().difference(cached.at) < _cacheTtl) {
+      _cache.remove(key);
+      _cache[key] = cached;
       return cached.value;
     }
-    if (_inFlight[key] case final running?) return running;
+    if (cached != null) {
+      _cache.remove(key);
+      _cacheBytes -= cached.bytes;
+    }
+    if (_inFlight[key] case final running?) {
+      if (!_leases[running]!.transport.isCancelled) {
+        return _joinRead(running, owner);
+      }
+      // ignore: unawaited_futures
+      _inFlight.remove(key);
+    }
     final generation = _cacheGeneration;
-    final request = _request('GET', path, query: query);
+    var bytes = 0;
+    final lease = _ReadLease();
+    late Future<dynamic> request;
+    request = () async {
+      try {
+        final result = await _request(
+          'GET',
+          path,
+          query: query,
+          onBytes: (size) => bytes = size,
+          readTask: lease.transport,
+        );
+        if (generation == _cacheGeneration && bytes <= _cacheMaxBytes) {
+          while (_cache.isNotEmpty &&
+              (_cache.length >= 200 || _cacheBytes + bytes > _cacheMaxBytes)) {
+            _cacheBytes -= _cache.remove(_cache.keys.first)!.bytes;
+          }
+          _cache[key] = (at: _clock(), value: result, bytes: bytes);
+          _cacheBytes += bytes;
+        }
+        return result;
+      } finally {
+        lease.finished = true;
+        if (identical(_inFlight[key], request)) {
+          // 请求已在上方等待；这里只移除缓存引用，不再次监听其错误。
+          // ignore: unawaited_futures
+          _inFlight.remove(key);
+        }
+      }
+    }();
+    _leases[request] = lease;
     _inFlight[key] = request;
+    return _joinRead(request, owner);
+  }
+
+  Future<dynamic> _joinRead(
+    Future<dynamic> request,
+    ReadTaskScope? owner,
+  ) async {
+    final lease = _leases[request]!;
+    lease.consumers++;
     try {
-      final result = await request;
-      if (generation == _cacheGeneration) {
-        if (_cache.length >= 200) _cache.remove(_cache.keys.first);
-        _cache[key] = (at: _clock(), value: result);
-      }
-      return result;
+      return await (owner?.wait(request) ?? request);
     } finally {
-      if (identical(_inFlight[key], request)) {
-        // 请求已在上方等待；这里只移除缓存引用，不再次监听其错误。
-        // ignore: unawaited_futures
-        _inFlight.remove(key);
-      }
+      lease.consumers--;
+      if (lease.consumers == 0 && !lease.finished) lease.transport.cancel();
     }
   }
 
@@ -265,7 +319,7 @@ class ApiClient {
           ..bodyFields = fields;
     try {
       _requireScope(scope);
-      final response = await http.Response.fromStream(
+      final response = await readBoundedResponse(
         await _client.send(request).timeout(const Duration(seconds: 20)),
       ).timeout(const Duration(seconds: 20));
       _requireScope(scope);
@@ -371,7 +425,7 @@ class ApiClient {
       'cookie': 'kira=4',
     });
     try {
-      final response = await http.Response.fromStream(
+      final response = await readBoundedResponse(
         await _client.send(request).timeout(const Duration(seconds: 20)),
       ).timeout(const Duration(seconds: 20));
       _requireScope(scope);
@@ -455,6 +509,8 @@ class ApiClient {
     Object? body,
     bool requiresAuth = false,
     bool? mutation,
+    void Function(int)? onBytes,
+    ReadTaskScope? readTask,
     SessionScope? expectedScope,
     Set<String>? invalidatePaths,
   }) async {
@@ -466,13 +522,23 @@ class ApiClient {
       final authFuture =
           _authService?.validAccessToken() ?? Future<String?>.value();
       final authWatch = Stopwatch()..start();
-      var accessToken = await (budget?.wait(authFuture) ?? authFuture);
+      var accessToken =
+          await (readTask?.wait(budget?.wait(authFuture) ?? authFuture) ??
+              (budget?.wait(authFuture) ?? authFuture));
       NetworkTiming.record('auth', authWatch);
       _requireScope(scope);
       if (requiresAuth && _authService != null && accessToken == null) {
         throw const ApiException('登录已失效，请重新登录后再操作');
       }
-      var response = await _send(method, uri, body, accessToken, scope, budget);
+      var response = await _send(
+        method,
+        uri,
+        body,
+        accessToken,
+        scope,
+        budget,
+        readTask: readTask,
+      );
       _requireScope(scope);
       if (response.statusCode == HttpStatus.unauthorized &&
           accessToken != null &&
@@ -485,10 +551,19 @@ class ApiClient {
         if (requiresAuth && accessToken == null) {
           throw const ApiException('登录已失效，请重新登录后再操作');
         }
-        response = await _send(method, uri, body, accessToken, scope, budget);
+        response = await _send(
+          method,
+          uri,
+          body,
+          accessToken,
+          scope,
+          budget,
+          readTask: readTask,
+        );
         _requireScope(scope);
       }
-      final text = utf8.decode(response.bodyBytes, allowMalformed: true);
+      onBytes?.call(response.bodyBytes.length);
+      readTask?.check();
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
           response.statusCode == 401
@@ -497,7 +572,10 @@ class ApiClient {
               ? '请求过于频繁，请稍后重试'
               : '服务器返回 ${response.statusCode}',
           statusCode: response.statusCode,
-          details: text,
+          details: utf8.decode(
+            response.bodyBytes.take(8192).toList(),
+            allowMalformed: true,
+          ),
         );
       }
       if (mutation ?? method != 'GET') {
@@ -507,9 +585,18 @@ class ApiClient {
           invalidateResources(invalidatePaths);
         }
       }
-      if (text.trim().isEmpty) return null;
+      if (response.bodyBytes.isEmpty ||
+          (response.bodyBytes.length < 128 &&
+              response.bodyBytes.every(
+                (b) => b == 9 || b == 10 || b == 13 || b == 32,
+              ))) {
+        return null;
+      }
       try {
-        return jsonDecode(text);
+        final decoded = await decodeResponseJson(response);
+        _requireScope(scope);
+        readTask?.check();
+        return decoded;
       } on FormatException {
         throw const ApiException('服务器返回了无法识别的数据');
       }
@@ -528,9 +615,11 @@ class ApiClient {
     Object? body,
     String? accessToken,
     SessionScope scope,
-    _ReadBudget? budget,
-  ) async {
+    _ReadBudget? budget, {
+    ReadTaskScope? readTask,
+  }) async {
     for (var attempt = 0; ; attempt++) {
+      readTask?.check();
       try {
         final response = await _sendLimited(
           method,
@@ -539,6 +628,7 @@ class ApiClient {
           accessToken,
           scope,
           budget,
+          readTask: readTask,
         );
         if (method != 'GET' ||
             attempt >= 2 ||
@@ -553,6 +643,7 @@ class ApiClient {
         }
         await (budget?.wait(_delay(wait)) ?? _delay(wait));
       } on Object catch (error) {
+        readTask?.check();
         if (method != 'GET' ||
             attempt >= 2 ||
             !(error is SocketException ||
@@ -587,14 +678,16 @@ class ApiClient {
     Object? body,
     String? accessToken,
     SessionScope scope,
-    _ReadBudget? budget,
-  ) async {
+    _ReadBudget? budget, {
+    ReadTaskScope? readTask,
+  }) async {
     if (_activeRequests >= 3) {
       final waiter = Completer<void>();
       _waiters.add(waiter);
       final watch = Stopwatch()..start();
       try {
-        await (budget?.wait(waiter.future) ?? waiter.future);
+        await (readTask?.wait(budget?.wait(waiter.future) ?? waiter.future) ??
+            (budget?.wait(waiter.future) ?? waiter.future));
       } on Object {
         if (!_waiters.remove(waiter)) _releaseSlot();
         rethrow;
@@ -605,7 +698,16 @@ class ApiClient {
     }
     try {
       _requireScope(scope);
-      return await _sendOnce(method, uri, body, accessToken, budget);
+      readTask?.check();
+      final response = _sendOnce(
+        method,
+        uri,
+        body,
+        accessToken,
+        budget,
+        readTask: readTask,
+      );
+      return await (readTask?.wait(response) ?? response);
     } finally {
       _releaseSlot();
     }
@@ -627,10 +729,18 @@ class ApiClient {
     _ReadBudget? budget, {
     http.Client? transport,
     bool anonymous = false,
+    ReadTaskScope? readTask,
   }) async {
     final timeout = budget?.remaining ?? const Duration(seconds: 20);
     final abort = Completer<void>();
     _activeAborts.add(abort);
+    if (readTask != null) {
+      unawaited(
+        readTask.whenCancelled.then((_) {
+          if (!abort.isCompleted) abort.complete();
+        }),
+      );
+    }
     final timer = Timer(timeout, () {
       if (!abort.isCompleted) abort.complete();
     });
@@ -655,8 +765,9 @@ class ApiClient {
       final selectedTransport = transport ?? _client;
       final streamed = await selectedTransport.send(request).timeout(timeout);
       NetworkTiming.record('headers', watch);
-      final response = await http.Response.fromStream(
+      final response = await readBoundedResponse(
         streamed,
+        timeout: budget?.remaining ?? const Duration(seconds: 20),
       ).timeout(budget?.remaining ?? const Duration(seconds: 20));
       NetworkTiming.record('response', watch);
       return response;
@@ -678,6 +789,12 @@ class ApiClient {
     _sessionChanges.dispose();
     if (_closeClient) _client.close();
   }
+}
+
+class _ReadLease {
+  final transport = ReadTaskScope();
+  int consumers = 0;
+  bool finished = false;
 }
 
 class _ReadBudget {

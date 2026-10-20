@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../core/community_models.dart';
 import '../../core/paged.dart';
+import '../../core/network/read_task_scope.dart';
 import '../../domain/models/collection_models.dart';
 
 @immutable
@@ -114,15 +115,20 @@ class CollectionController extends ChangeNotifier {
   ComposeCollectionState get state => _state;
   int _generation = 0;
   bool _disposed = false;
+  ReadTaskScope _read = ReadTaskScope();
 
   Future<void> dispatch(CollectionIntent intent) async {
     if (_disposed) return;
     if (intent is ChangeCollectionFilter) {
+      _read.cancel();
+      _read = ReadTaskScope();
       _generation++;
       _state = ComposeCollectionState(query: intent.query);
       await _load(fresh: false);
     } else if (intent is LoadCollections) {
       if (intent.refresh) {
+        _read.cancel();
+        _read = ReadTaskScope();
         _generation++;
         await _load(fresh: true, reset: true);
       } else {
@@ -139,7 +145,7 @@ class CollectionController extends ChangeNotifier {
     _state = reduceCollection(_state, CollectionLoading(offset));
     notifyListeners();
     try {
-      final page = await load(query, offset, fresh);
+      final page = await _read.run(() => load(query, offset, fresh));
       if (_disposed || generation != _generation) return;
       _state = reduceCollection(_state, CollectionLoaded(page));
     } on Object catch (error) {
@@ -151,6 +157,8 @@ class CollectionController extends ChangeNotifier {
 
   void clearSession() {
     if (_disposed) return;
+    _read.cancel();
+    _read = ReadTaskScope();
     _generation++;
     _state = ComposeCollectionState(query: _state.query);
     notifyListeners();
@@ -159,6 +167,7 @@ class CollectionController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _read.cancel();
     _disposed = true;
     _generation++;
     super.dispose();

@@ -5,6 +5,7 @@ import '../../core/network/api_client.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../core/network/cookie_session_client.dart';
 import '../../core/network/platform_http_client.dart';
+import '../../core/network/image_transport.dart';
 import '../../core/network/third_party_preview_service.dart';
 import '../../core/settings/app_preferences.dart';
 import '../../core/media/rich_image_policy.dart';
@@ -42,7 +43,7 @@ class AppDependencies {
       createPlatformHttpClient(),
       cookies,
     );
-    final imageTransport = createPlatformHttpClient();
+    final imageTransport = ImageTransport(createPlatformHttpClient());
     final auth = AuthService(
       client: apiTransport,
       cookies: cookies,
