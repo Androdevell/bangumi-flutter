@@ -9,6 +9,7 @@ import 'package:bangumi_flutter/core/auth/secure_vault.dart';
 import 'package:bangumi_flutter/core/network/api_client.dart';
 import 'package:bangumi_flutter/core/models.dart';
 import 'package:bangumi_flutter/core/network/app_image_cache.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:bangumi_flutter/core/network/cookie_session_client.dart';
 import 'package:bangumi_flutter/data/bangumi_repository.dart';
 import 'package:bangumi_flutter/features/auth/login_page.dart';
@@ -396,6 +397,7 @@ void main() {
     final first = AppImageCache.manager;
     AppImageCache.initialize(client);
     expect(identical(first, AppImageCache.manager), true);
+    expect(AppImageCache.manager, isNot(isA<ImageCacheManager>()));
     expect(PaintingBinding.instance.imageCache.maximumSizeBytes, 64 << 20);
   });
   testWidgets(

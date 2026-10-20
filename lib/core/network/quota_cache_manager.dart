@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 /// 只经缓存管理器删除已完成且近期未使用的条目，不触碰下载中或刚返回的文件。
-class QuotaCacheManager extends CacheManager with ImageCacheManager {
+/// 不混入 ImageCacheManager：库的磁盘缩图会先额外完整解码原图，沿用 Widget 的目标尺寸解码。
+class QuotaCacheManager extends CacheManager {
   QuotaCacheManager(this.configuration, {this.maxBytes = 512 * 1024 * 1024})
     : super(configuration);
   final Config configuration;
