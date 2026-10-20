@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/community_models.dart';
 import '../../core/localization/app_localizations.dart';
@@ -247,6 +248,11 @@ class _ReplyTileState extends State<_ReplyTile> {
             CommentBody(item.content)
           else
             Text(strings.t('commentUnavailable')),
+          if (item.truncated)
+            Text(
+              strings.t('replyLimited'),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
           if (widget.showChildren && item.replies.isNotEmpty) ...[
             const SizedBox(height: 12),
             NestedReplyPreview(
@@ -430,7 +436,19 @@ class NestedReplyPreview extends StatefulWidget {
 }
 
 class _NestedReplyPreviewState extends State<NestedReplyPreview> {
-  bool _expanded = false;
+  int _visible = 3;
+  late List<CommunityReply> _items = _resolve();
+  List<CommunityReply> _resolve() =>
+      widget.depth >= 2 ? _flatten(widget.items) : widget.items;
+  @override
+  void didUpdateWidget(covariant NestedReplyPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.items, widget.items) ||
+        oldWidget.depth != widget.depth) {
+      _items = _resolve();
+    }
+  }
+
   List<CommunityReply> _flatten(List<CommunityReply> roots) {
     final pending = roots.reversed.toList();
     final result = <CommunityReply>[];
@@ -444,7 +462,7 @@ class _NestedReplyPreviewState extends State<NestedReplyPreview> {
 
   @override
   Widget build(BuildContext context) {
-    final items = widget.depth >= 2 ? _flatten(widget.items) : widget.items;
+    final items = _items;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -454,7 +472,7 @@ class _NestedReplyPreviewState extends State<NestedReplyPreview> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final reply in items.take(_expanded ? items.length : 3))
+          for (final reply in items.take(_visible))
             _ReplyTile(
               key: ValueKey('nested:${reply.id}:${widget.currentUsername}'),
               item: reply,
@@ -470,11 +488,15 @@ class _NestedReplyPreviewState extends State<NestedReplyPreview> {
             ),
           if (items.length > 3)
             TextButton(
-              onPressed: () => setState(() => _expanded = !_expanded),
+              onPressed:
+                  () => setState(
+                    () =>
+                        _visible = _visible >= items.length ? 3 : _visible + 20,
+                  ),
               child: Text(
                 AppLocalizations.of(
                   context,
-                ).t(_expanded ? 'collapse' : 'showReplies'),
+                ).t(_visible >= items.length ? 'collapse' : 'showMoreReplies'),
               ),
             ),
         ],

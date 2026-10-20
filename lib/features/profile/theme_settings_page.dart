@@ -1,4 +1,4 @@
-import 'dart:io';
+import '../../core/media/safe_image_thumbnail.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import '../../app/theme_controller.dart';
@@ -49,7 +49,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
       if (file == null) return;
       if (await file.length() > 20 * 1024 * 1024) throw const FormatException();
       final scheme = await ColorScheme.fromImageProvider(
-        provider: FileImage(File(file.path)),
+        provider: MemoryImage(
+          await safeImageThumbnail(await file.readAsBytes()),
+        ),
       );
       if (mounted) {
         _select(

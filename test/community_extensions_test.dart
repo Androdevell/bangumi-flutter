@@ -430,8 +430,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('展开回复'));
-    await tester.tap(find.text('展开回复'));
+    await tester.ensureVisible(find.text('展开更多回复'));
+    await tester.tap(find.text('展开更多回复'));
     await tester.pumpAndSettle();
     expect(find.text('deepest visible', findRichText: true), findsOneWidget);
     expect(tester.takeException(), isNull);

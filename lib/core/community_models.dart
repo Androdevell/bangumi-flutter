@@ -156,23 +156,44 @@ class CommunityReply {
     this.state = 0,
     this.relatedId = 0,
     this.creatorId = 0,
+    this.truncated = false,
   });
 
-  factory CommunityReply.fromJson(Map<String, dynamic> json) => CommunityReply(
-    id: _int(json['id']),
-    content:
+  factory CommunityReply.fromJson(Map<String, dynamic> json) =>
+      _parseReply(json, _ReplyBudget(), 0);
+
+  static CommunityReply _parseReply(
+    Map<String, dynamic> json,
+    _ReplyBudget budget,
+    int depth,
+  ) {
+    budget.remaining--;
+    final children = _list(json['replies']);
+    final replies = <CommunityReply>[];
+    if (depth < 16) {
+      for (final child in children) {
+        if (budget.remaining <= 0) break;
+        replies.add(_parseReply(child, budget, depth + 1));
+      }
+    }
+    final content =
         _int(json['state']) == 0
             ? _text(json['content'] ?? json['comment'])
-            : '',
-    user: CommunityUser.fromJson(_map(json['user'] ?? json['creator'])),
-    createdAt: _date(json['createdAt'] ?? json['updatedAt']),
-    replies: _list(json['replies']).map(CommunityReply.fromJson).toList(),
-    reactions:
-        _list(json['reactions']).map(CommunityReaction.fromJson).toList(),
-    state: _int(json['state']),
-    relatedId: _int(json['relatedID']),
-    creatorId: _int(json['creatorID']),
-  );
+            : '';
+    return CommunityReply(
+      id: _int(json['id']),
+      content: content.length > 65536 ? content.substring(0, 65536) : content,
+      user: CommunityUser.fromJson(_map(json['user'] ?? json['creator'])),
+      createdAt: _date(json['createdAt'] ?? json['updatedAt']),
+      replies: List.unmodifiable(replies),
+      truncated: content.length > 65536 || children.length != replies.length,
+      reactions:
+          _list(json['reactions']).map(CommunityReaction.fromJson).toList(),
+      state: _int(json['state']),
+      relatedId: _int(json['relatedID']),
+      creatorId: _int(json['creatorID']),
+    );
+  }
 
   final int id;
   final String content;
@@ -181,6 +202,7 @@ class CommunityReply {
   final List<CommunityReply> replies;
   final List<CommunityReaction> reactions;
   final int state, relatedId, creatorId;
+  final bool truncated;
   bool get isVisible => state == 0;
 
   int get reactionCount => reactions.fold(0, (sum, item) => sum + item.count);
@@ -204,7 +226,8 @@ class CommunityReply {
         listEquals(other.reactions, reactions) &&
         other.state == state &&
         other.relatedId == relatedId &&
-        other.creatorId == creatorId;
+        other.creatorId == creatorId &&
+        other.truncated == truncated;
   }
 
   @override
@@ -218,7 +241,12 @@ class CommunityReply {
     state,
     relatedId,
     creatorId,
+    truncated,
   );
+}
+
+class _ReplyBudget {
+  int remaining = 2000;
 }
 
 @immutable
