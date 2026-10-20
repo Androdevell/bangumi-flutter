@@ -6,8 +6,10 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:flutter/foundation.dart';
+import 'package:html/parser.dart' as html;
 
 import '../auth/auth_service.dart';
+import '../app_identity.dart';
 import '../../app/state/session_scope.dart';
 import '../cache/query_key.dart';
 import 'platform_http_client.dart';
@@ -71,18 +73,11 @@ class ApiClient {
   );
   Listenable get sessionChanges => _sessionChanges;
 
-  /// 隐私始终以当前 OAuth 身份读写，避免旧网页 Cookie 覆盖身份。
-  Future<dynamic> privacy({
-    Map<String, String>? settings,
-    SessionScope? scope,
-  }) => _request(
-    settings == null ? 'GET' : 'PATCH',
-    'p1/privacy',
-    body: settings == null ? null : {'settings': settings},
-    requiresAuth: true,
-    expectedScope: scope,
-    invalidatePaths: {'p1/privacy'},
-  );
+  /// 与官网及 view 客户端使用同一套隐私表单，不混用 OAuth 的隐私接口。
+  Future<String> privacySettings({
+    required SessionScope scope,
+    Map<String, String>? fields,
+  }) => _webSettings('/settings/privacy', scope: scope, fields: fields);
 
   void _onAuthChanged() {
     if (_sessionChanges.value == sessionScope) return;
@@ -334,12 +329,22 @@ class ApiClient {
     required SessionScope scope,
     Map<String, String>? fields,
     Uint8List? avatar,
+  }) => _webSettings('/settings', scope: scope, fields: fields, avatar: avatar);
+
+  Future<String> _webSettings(
+    String path, {
+    required SessionScope scope,
+    Map<String, String>? fields,
+    Uint8List? avatar,
+    bool retryRead = true,
   }) async {
     _requireScope(scope);
     if (!isLoggedIn) throw const ApiException('loginRequired');
-    final uri = Uri.parse('https://bgm.tv/settings');
+    final uri = Uri.parse('https://bgm.tv$path');
     final http.BaseRequest request;
-    if (fields != null) {
+    if (fields != null && path == '/settings/privacy') {
+      request = http.Request('POST', uri)..bodyFields = fields;
+    } else if (fields != null) {
       final multipart = http.MultipartRequest('POST', uri)
         ..fields.addAll(fields);
       if (avatar != null) {
@@ -359,7 +364,10 @@ class ApiClient {
     request.followRedirects = false;
     request.headers.addAll({
       'accept': 'text/html',
-      'referer': 'https://bgm.tv/settings',
+      'referer': uri.toString(),
+      'user-agent': browserUserAgent,
+      'cache-control': 'no-cache',
+      if (fields != null) 'origin': 'https://bgm.tv',
       'cookie': 'kira=4',
     });
     try {
@@ -378,7 +386,7 @@ class ApiClient {
       if (fields != null &&
           (response.statusCode == 302 || response.statusCode == 303) &&
           sameSite &&
-          redirect.path == '/settings') {
+          redirect.path == path) {
         return '';
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -406,7 +414,30 @@ class ApiClient {
                   (response.statusCode >= 300 && response.statusCode < 400)),
         );
       }
-      return utf8.decode(response.bodyBytes, allowMalformed: false);
+      final text = utf8.decode(response.bodyBytes, allowMalformed: false);
+      if (fields == null) {
+        final document = html.parse(text);
+        final selector =
+            path == '/settings'
+                ? 'input[name="nickname"]'
+                : 'select[name="privacy_set[1]"]';
+        if (document.querySelector(selector) == null) {
+          // 旧 sid 恢复后的首个网页响应可能只更新 Cookie。只重读一次 GET，
+          // 不重放提交，不清除 OAuth，更不把提示页当成可编辑的表单。
+          if (retryRead &&
+              _client is CookieSessionClient &&
+              _client.hasWebAuthentication(uri)) {
+            return _webSettings(path, scope: scope, retryRead: false);
+          }
+          if (document.querySelector(
+                '#loginForm, .guest, #dock a[href="/login"]',
+              ) !=
+              null) {
+            throw const ApiException('profileWebLoginRequired');
+          }
+        }
+      }
+      return text;
     } on ApiException {
       rethrow;
     } on Object {
@@ -621,12 +652,7 @@ class ApiClient {
     if (body != null) request.body = jsonEncode(body);
     final watch = Stopwatch()..start();
     try {
-      final bearerPrivacy = accessToken != null && uri.path == '/p1/privacy';
-      final selectedTransport =
-          transport ??
-          (bearerPrivacy && _client is CookieSessionClient
-              ? _client.anonymousTransport
-              : _client);
+      final selectedTransport = transport ?? _client;
       final streamed = await selectedTransport.send(request).timeout(timeout);
       NetworkTiming.record('headers', watch);
       final response = await http.Response.fromStream(

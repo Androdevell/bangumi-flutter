@@ -146,6 +146,21 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<bool> _verifyWebSession() async {
+    final auth = widget.authService;
+    if (auth == null || !auth.isLoggedIn) return false;
+    return await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder:
+                (_) => LoginPage(
+                  authService: auth,
+                  expectedUsername: auth.user!.username,
+                ),
+          ),
+        ) ==
+        true;
+  }
+
   Future<void> _logout() async {
     final authService = widget.authService;
     if (authService == null) return;
@@ -535,6 +550,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               MaterialPageRoute<void>(
                                 builder:
                                     (_) => PrivacyPage(
+                                      onRevalidate:
+                                          widget.authService == null
+                                              ? null
+                                              : _verifyWebSession,
                                       repository:
                                           (widget.repository as PrivacyFeature)
                                               .privacy,

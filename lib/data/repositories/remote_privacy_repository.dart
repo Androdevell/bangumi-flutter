@@ -3,6 +3,7 @@ import '../../app/state/session_scope.dart';
 import '../../core/network/api_client.dart';
 import '../../domain/models/privacy_settings.dart';
 import '../../domain/repositories/privacy_repository.dart';
+import 'web_privacy_form.dart';
 
 class RemotePrivacyRepository implements PrivacyRepository {
   RemotePrivacyRepository(this.api, {Future<void> Function(Duration)? delay})
@@ -23,10 +24,10 @@ class RemotePrivacyRepository implements PrivacyRepository {
   Future<ComposePrivacySettings> load() async {
     final session = scope;
     _check(session);
-    final json = await api.privacy(scope: session);
+    final text = await api.privacySettings(scope: session);
     _check(session);
     try {
-      return ComposePrivacySettings.fromJson(json, session);
+      return parseWebPrivacy(text, session).settings;
     } on FormatException {
       throw const ApiException('privacyInvalid');
     }
@@ -46,7 +47,11 @@ class RemotePrivacyRepository implements PrivacyRepository {
     )) {
       throw const ApiException('fieldInvalid');
     }
-    final current = await load();
+    final fresh = parseWebPrivacy(
+      await api.privacySettings(scope: original.session),
+      original.session,
+    );
+    final current = fresh.settings;
     _check(original.session);
     if (patch.keys.any(
       (key) => current.settings[key] != original.settings[key],
@@ -54,24 +59,20 @@ class RemotePrivacyRepository implements PrivacyRepository {
       throw const ApiException('privacyConflict');
     }
     if (patch.isEmpty) return current;
-    // P1 接受部分 settings；不发送未编辑字段或任何 preferences/只读能力字段。
+    // 网页按整份隐私表单保存；未编辑项取刚读取的服务器值，防止重置为默认。
+    final values = {...current.settings, ...patch};
     try {
-      final response = await api.privacy(
-        settings: patch,
+      await api.privacySettings(
+        fields: {
+          for (final entry in webPrivacyFields.entries)
+            entry.value: webPrivacyAudiences[values[entry.key]]!,
+          'formhash': fresh.formHash,
+          'submit_privacy': '保存',
+        },
         scope: original.session,
       );
-      if (response != null) {
-        final applied = ComposePrivacySettings.fromJson(
-          response,
-          original.session,
-        );
-        if (patch.entries.any(
-          (entry) => applied.settings[entry.key] != entry.value,
-        )) {
-          throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
-        }
-      }
     } on ApiException catch (error) {
+      if (error.message == 'profileWebLoginRequired') rethrow;
       if ({400, 401, 403, 429}.contains(error.statusCode)) {
         throw ApiException(
           error.statusCode == 401 ? 'loginRequired' : 'privacyFailed',
@@ -92,8 +93,15 @@ class RemotePrivacyRepository implements PrivacyRepository {
           throw const ApiException('privacyUnconfirmed', outcomeUnknown: true);
         }
         return confirmed;
-      } on Object {
+      } on Object catch (error) {
         _check(original.session);
+        if (error is ApiException &&
+            error.message == 'profileWebLoginRequired') {
+          throw const ApiException(
+            'profileWebLoginRequired',
+            outcomeUnknown: true,
+          );
+        }
         if (attempt < 2) {
           await _delay(Duration(milliseconds: 350 * (attempt + 1)));
         }

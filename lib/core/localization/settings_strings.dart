@@ -1,6 +1,6 @@
 const settingsStrings = <String, Map<String, String>>{
   'zh': {
-    'profileWebLoginRequired': '网页登录已过期，请验证后继续编辑资料',
+    'profileWebLoginRequired': '网页登录已失效，请验证后继续管理资料和隐私；无需先退出账号',
     'choiceSearch': '搜索选项',
     'unsavedSettings': '有未保存的修改',
     'privacyContact': '谁可以联系我',
@@ -59,7 +59,7 @@ const settingsStrings = <String, Map<String, String>>{
     'iconApplyFailed': '图标切换失败，已保留原图标',
   },
   'en': {
-    'profileWebLoginRequired': 'Verify your web sign-in to continue editing your profile.',
+    'profileWebLoginRequired': 'Verify your web sign-in to manage profile and privacy settings. No sign-out is needed.',
     'choiceSearch': 'Search options',
     'unsavedSettings': 'Unsaved changes',
     'privacyContact': 'Who can contact me',
@@ -123,7 +123,7 @@ const settingsStrings = <String, Map<String, String>>{
         'Could not change the icon. The previous icon is retained.',
   },
   'ja': {
-    'profileWebLoginRequired': 'Webログインを確認してプロフィールの編集を続けてください。',
+    'profileWebLoginRequired': 'Webログインを確認してプロフィールとプライバシーを管理してください。ログアウトは不要です。',
     'choiceSearch': '選択肢を検索',
     'unsavedSettings': '未保存の変更があります',
     'privacyContact': '連絡できる相手',

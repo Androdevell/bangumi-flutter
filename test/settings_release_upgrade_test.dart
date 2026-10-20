@@ -21,7 +21,7 @@ import 'package:bangumi_flutter/features/auth/login_page.dart';
 import 'package:bangumi_flutter/features/profile/theme_settings_page.dart';
 import 'comment_experience_test.dart' show host;
 import 'community_extensions_test.dart' show authenticated, png;
-import 'privacy_and_image_regression_test.dart' show privacyJson;
+import 'privacy_and_image_regression_test.dart' show privacyHtml;
 
 void main() {
   test('update download rejects a redirect outside trusted hosts', () async {
@@ -233,23 +233,23 @@ void main() {
   );
 
   test(
-    'privacy waits for independent readback and never repeats the write or sends stale cookies',
+    'web privacy waits for independent readback and never repeats the write',
     () async {
       var patches = 0, readbacks = 0;
       final (api, auth) = await authenticated(
         MockClient((request) async {
-          expect(request.headers['cookie'] ?? '', isNot(contains('chii_auth')));
-          expect(request.headers['authorization'], 'Bearer synthetic');
-          if (request.method == 'PATCH') {
+          expect(
+            request.headers['cookie'],
+            contains('chii_auth=synthetic-cookie'),
+          );
+          expect(request.headers['authorization'], isNull);
+          if (request.method == 'POST') {
             patches++;
-            return http.Response(
-              jsonEncode(privacyJson({'follow': 'none'})),
-              200,
-            );
+            return http.Response(privacyHtml({'follow': 'none'}), 200);
           }
           if (patches > 0) readbacks++;
           return http.Response(
-            jsonEncode(privacyJson(readbacks >= 2 ? {'follow': 'none'} : {})),
+            privacyHtml(readbacks >= 2 ? {'follow': 'none'} : {}),
             200,
           );
         }),

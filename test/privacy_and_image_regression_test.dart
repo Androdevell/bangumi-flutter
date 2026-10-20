@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +9,7 @@ import 'package:bangumi_flutter/core/network/api_client.dart';
 import 'package:bangumi_flutter/core/network/image_request_headers.dart';
 import 'package:bangumi_flutter/core/network/safe_image_file_service.dart';
 import 'package:bangumi_flutter/data/repositories/remote_privacy_repository.dart';
+import 'package:bangumi_flutter/data/repositories/web_privacy_form.dart';
 import 'package:bangumi_flutter/domain/models/privacy_settings.dart';
 import 'package:bangumi_flutter/domain/repositories/privacy_repository.dart';
 import 'package:bangumi_flutter/features/profile/privacy/privacy_controller.dart';
@@ -31,18 +31,28 @@ Map<String, Object> privacyJson([Map<String, String> edits = const {}]) => {
   },
 };
 
+String privacyHtml([
+  Map<String, String> edits = const {},
+  String hash = 'fresh',
+]) => '''
+<div class="idBadgerNeue"><a class="avatar" href="/user/tester"></a></div>
+<form action="/settings/privacy" method="post"><input name="formhash" value="$hash">
+${webPrivacyFields.entries.map((field) => '<select name="${field.value}">${PrivacyField.options(field.key).map((audience) => '<option value="${webPrivacyAudiences[audience]}" ${audience == (edits[field.key] ?? 'all') ? 'selected' : ''}>$audience</option>').join()}</select>').join()}
+<input type="submit" name="submit_privacy" value="&#20445;&#23384;">
+<form action="/settings/privacy" method="post"><input name="ignore_user" value="do-not-send"><input name="submit_ignore" value="ignore"></form></form>''';
+
 void main() {
   test(
-    'transport failure after PATCH is uncertain and is not retried',
+    'transport failure after web POST is uncertain and is not retried',
     () async {
       var patches = 0;
       final (api, auth) = await authenticated(
         MockClient((request) async {
-          if (request.method == 'PATCH') {
+          if (request.method == 'POST') {
             patches++;
             throw http.ClientException('synthetic connection lost');
           }
-          return http.Response(jsonEncode(privacyJson()), 200);
+          return http.Response(privacyHtml(), 200);
         }),
       );
       addTearDown(api.close);
@@ -64,8 +74,8 @@ void main() {
       var patches = 0;
       final (api, auth) = await authenticated(
         MockClient((request) async {
-          if (request.method == 'PATCH') patches++;
-          return http.Response(jsonEncode(privacyJson()), 200);
+          if (request.method == 'POST') patches++;
+          return http.Response(privacyHtml(), 200);
         }),
       );
       addTearDown(api.close);
@@ -99,20 +109,30 @@ void main() {
     },
   );
   test(
-    'privacy sends only edited settings and verifies fresh read, preserving preferences',
+    'privacy posts a fresh complete web form and verifies readback without touching the block list',
     () async {
       var saved = <String, String>{};
       var patches = 0;
       final (api, auth) = await authenticated(
         MockClient((request) async {
-          if (request.method == 'PATCH') {
+          expect(request.url.toString(), 'https://bgm.tv/settings/privacy');
+          expect(request.headers['authorization'], isNull);
+          if (request.method == 'POST') {
             patches++;
-            expect(jsonDecode(request.body), {
-              'settings': {'privateMessage': 'friends'},
+            expect(request.bodyFields, {
+              for (final entry in webPrivacyFields.entries)
+                entry.value:
+                    entry.key == PrivacyField.privateMessage ? '1' : '0',
+              'formhash': 'fresh',
+              'submit_privacy': '保存',
             });
+            expect(
+              request.headers['content-type'],
+              startsWith('application/x-www-form-urlencoded'),
+            );
             saved = {'privateMessage': 'friends'};
           }
-          return http.Response(jsonEncode(privacyJson(saved)), 200);
+          return http.Response(privacyHtml(saved), 200);
         }),
       );
       addTearDown(api.close);
@@ -132,10 +152,10 @@ void main() {
     var patches = 0;
     final (api, auth) = await authenticated(
       MockClient((request) async {
-        if (request.method == 'PATCH') patches++;
+        if (request.method == 'POST') patches++;
         reads++;
         return http.Response(
-          jsonEncode(privacyJson(reads > 1 ? {'privateMessage': 'none'} : {})),
+          privacyHtml(reads > 1 ? {'privateMessage': 'none'} : {}),
           200,
         );
       }),
@@ -170,8 +190,8 @@ void main() {
       var patches = 0;
       final (api, auth) = await authenticated(
         MockClient((request) async {
-          if (request.method == 'PATCH') patches++;
-          return http.Response(jsonEncode(privacyJson()), 200);
+          if (request.method == 'POST') patches++;
+          return http.Response(privacyHtml(), 200);
         }),
       );
       addTearDown(api.close);

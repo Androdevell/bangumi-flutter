@@ -9,8 +9,9 @@ import '../../../widgets/settings_choice.dart';
 import 'privacy_controller.dart';
 
 class PrivacyPage extends StatefulWidget {
-  const PrivacyPage({super.key, required this.repository});
+  const PrivacyPage({super.key, required this.repository, this.onRevalidate});
   final PrivacyRepository repository;
+  final Future<bool> Function()? onRevalidate;
   @override
   State<PrivacyPage> createState() => _PrivacyPageState();
 }
@@ -55,6 +56,15 @@ class _PrivacyPageState extends State<PrivacyPage> {
 
   Future<void> _reload() async {
     if (!await _discard() || !mounted) return;
+    if (_controller.error case ApiException(
+      message: 'profileWebLoginRequired',
+    )) {
+      if (widget.onRevalidate != null) {
+        if (!await widget.onRevalidate!() || !mounted) return;
+        await _controller.load();
+        return;
+      }
+    }
     await _controller.load();
   }
 
@@ -128,7 +138,17 @@ class _PrivacyPageState extends State<PrivacyPage> {
                               key: const ValueKey('privacy-reload'),
                               onPressed: _controller.busy ? null : _reload,
                               icon: const Icon(Icons.refresh),
-                              label: Text(s.t('privacyReload')),
+                              label: Text(
+                                s.t(
+                                  _controller.error is ApiException &&
+                                          (_controller.error as ApiException)
+                                                  .message ==
+                                              'profileWebLoginRequired' &&
+                                          widget.onRevalidate != null
+                                      ? 'webRevalidate'
+                                      : 'privacyReload',
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -208,6 +228,10 @@ class _PrivacyPageState extends State<PrivacyPage> {
           'commentSessionChanged',
           'loginRequired',
           'fieldInvalid',
+          'profileWebLoginRequired',
+          'profileWebUnavailable',
+          'profileTokenMissing',
+          'profileRateLimited',
         }.contains(error.message)) {
       return error.message;
     }

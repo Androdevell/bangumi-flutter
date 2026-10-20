@@ -10,6 +10,7 @@ void main() {
     ).firstMatch(File('pubspec.yaml').readAsStringSync())!.group(1);
     expect(appVersion, version);
     expect(appUserAgent, 'BangumiFlutter/$version');
-    expect(browserUserAgent, endsWith(appUserAgent));
+    // 网页认证标识独立于应用发布版本，不能在升级时改变。
+    expect(browserUserAgent, endsWith('BangumiFlutter/1.2.8'));
   });
 }
