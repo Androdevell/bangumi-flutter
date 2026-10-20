@@ -267,7 +267,7 @@ class _LoginPageState extends State<LoginPage> {
             if (_error != null) ...[
               const SizedBox(height: 14),
               Text(
-                s.t(_error!),
+                AppLocalizations.of(context).t(_error!),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],

@@ -1,0 +1,42 @@
+name: Dependency inventory and advisory review
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 3 * * 3'
+  push:
+    paths:
+      - 'pubspec.lock'
+      - 'android/**.gradle*'
+      - 'tool/dependency_*'
+      - '.github/workflows/dependency-audit.yml'
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.29.3'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: flutter pub get
+      - run: |
+          mkdir -p build/dependency-audit
+          dart pub deps --json > build/dependency-audit/dart.json
+          cd android
+          bash ./gradlew -I ../tool/dependency_inventory.gradle :app:bangumiDependencyInventory -Ptarget-platform=android-arm64 --console=plain
+      - run: python3 -m unittest discover -s tool -p 'test_dependency_audit.py'
+      - run: python3 tool/dependency_audit.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: dependency-inventory-and-review
+          path: build/dependency-audit/
+          if-no-files-found: error

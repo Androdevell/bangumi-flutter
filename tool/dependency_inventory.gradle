@@ -1,0 +1,21 @@
+import groovy.json.JsonOutput
+
+// 仅导出已解析的公开坐标，不导出仓库凭据、环境或 Gradle 属性。
+allprojects { project ->
+    if (project.path == ':app') {
+        project.tasks.register('bangumiDependencyInventory') {
+            doLast {
+                def items = project.configurations.getByName('debugRuntimeClasspath')
+                    .incoming.resolutionResult.allComponents.findAll {
+                        it.id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier
+                    }.collect {
+                        def id = it.id
+                        [group: id.group, name: id.module, version: id.version]
+                    }.unique().sort { a, b -> "${a.group}:${a.name}" <=> "${b.group}:${b.name}" }
+                def output = new File(project.rootDir.parentFile, 'build/dependency-audit/maven.json')
+                output.parentFile.mkdirs()
+                output.setText(JsonOutput.toJson(items), 'UTF-8')
+            }
+        }
+    }
+}

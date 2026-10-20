@@ -54,11 +54,34 @@ try {
     if ($code -le $previous.Code) { throw '构建号不高于已发布 APK，拒绝发布降级包' }
     Write-Output "发布预检通过：$name+$code，高于旧版 $($previous.Name)+$($previous.Code)，OAuth 已配置（不输出凭据）"
     if ($ValidateOnly) { return }
+    $sourceCommit = (& git rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or @(& git status --porcelain --untracked-files=no).Count -gt 0) {
+        throw '正式发布前必须提交已审查的代码；不允许从已跟踪文件有修改的工作区构建'
+    }
     $output = Join-Path $projectRoot "dist/$name"
     if (Test-Path -LiteralPath $output) { throw '发布目录已存在，请保留已有文件或提升版本' }
-    $defines = @("--dart-define=BGM_OAUTH_APP_ID=$clientId", "--dart-define=BGM_OAUTH_APP_SECRET=$clientSecret")
+    $defines = if ($OAuthConfig) {
+        @("--dart-define-from-file=$((Resolve-Path -LiteralPath $OAuthConfig).Path)")
+    } else {
+        @("--dart-define=BGM_OAUTH_APP_ID=$clientId", "--dart-define=BGM_OAUTH_APP_SECRET=$clientSecret")
+    }
     [string[]]$pubArguments = @()
     if ($NoPub) { $pubArguments += '--no-pub' }
+    $gateDirectory = Join-Path $projectRoot 'build/release-gates'
+    New-Item -ItemType Directory -Force -Path $gateDirectory | Out-Null
+    Write-Output '发布门禁 1/3：完整静态分析'
+    & $Flutter --no-version-check analyze --fatal-infos @pubArguments
+    if ($LASTEXITCODE -ne 0) { throw '静态分析未通过，拒绝构建正式包' }
+    Write-Output '发布门禁 2/3：完整 Flutter 测试'
+    & $Flutter --no-version-check test @pubArguments --machine |
+        Set-Content -LiteralPath (Join-Path $gateDirectory 'flutter-tests.jsonl') -Encoding utf8
+    if ($LASTEXITCODE -ne 0) { throw 'Flutter 测试未通过，拒绝构建正式包' }
+    Write-Output '发布门禁 3/3：Android 原生单元测试'
+    Push-Location (Join-Path $projectRoot 'android')
+    try {
+        & ./gradlew.bat :app:testDebugUnitTest -Ptarget-platform=android-arm64 --console=plain
+        if ($LASTEXITCODE -ne 0) { throw 'Android 原生测试未通过，拒绝构建正式包' }
+    } finally { Pop-Location }
     & $Flutter build apk --release --target-platform android-arm64 @pubArguments @defines
     if ($LASTEXITCODE -ne 0) { throw 'Android Release 构建失败' }
     & $Flutter build windows --release @pubArguments @defines
@@ -93,7 +116,21 @@ try {
     Copy-Item -LiteralPath $apk -Destination (Join-Path $output "bangumi-$name-arm64-v8a.apk")
     Copy-Item -LiteralPath $windowsBundle -Destination (Join-Path $output 'windows-x64') -Recurse
     Compress-Archive -LiteralPath (Join-Path $output 'windows-x64') -DestinationPath (Join-Path $output "bangumi-$name-windows-x64.zip") -CompressionLevel Optimal
-    $manifest = @{version=$name; versionCode=$code; oauthConfigured=$true; oauthCompiledInBothPlatforms=$true; previousVersionCode=$previous.Code; signerSha256=$fingerprint}
+    if ((& git rev-parse HEAD).Trim() -ne $sourceCommit -or @(& git status --porcelain --untracked-files=no).Count -gt 0) {
+        throw '构建期间代码发生变化；保留本地输出但禁止作为已验证发行发布'
+    }
+    $sdkVersion = (& $Flutter --no-version-check --version --machine) -join "`n" | ConvertFrom-Json
+    $files = @("bangumi-$name-arm64-v8a.apk", "bangumi-$name-windows-x64.zip") | ForEach-Object {
+        $path = Join-Path $output $_
+        @{name=$_; bytes=(Get-Item -LiteralPath $path).Length; sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
+    }
+    $manifest = @{version=$name; versionCode=$code; sourceCommit=$sourceCommit;
+        lockSha256=(Get-FileHash -LiteralPath 'pubspec.lock' -Algorithm SHA256).Hash.ToLowerInvariant();
+        flutter=$sdkVersion.frameworkVersion; dart=$sdkVersion.dartSdkVersion;
+        gates=@{analyze='passed'; flutterTests='passed'; androidUnitTests='passed'; realDeviceUpgrade='not-run'};
+        files=$files; oauthConfigured=$true; oauthCompiledInBothPlatforms=$true;
+        previousVersionCode=$previous.Code; signerSha256=$fingerprint;
+        independentManifestSignature='not-configured'}
     $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-verification.json') -Encoding utf8
     Write-Output "正式包已核对并生成：$output"
 } finally {
