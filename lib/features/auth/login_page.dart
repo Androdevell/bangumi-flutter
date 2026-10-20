@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../../core/localization/app_localizations.dart';
 
 import '../../core/auth/auth_models.dart';
 import '../../core/auth/auth_service.dart';
