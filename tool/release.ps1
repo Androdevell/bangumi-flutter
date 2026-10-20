@@ -60,7 +60,7 @@ try {
     }
     $output = Join-Path $projectRoot "dist/$name"
     if (Test-Path -LiteralPath $output) { throw '发布目录已存在，请保留已有文件或提升版本' }
-    $defines = if ($OAuthConfig) {
+    [string[]]$defines = if ($OAuthConfig) {
         @("--dart-define-from-file=$((Resolve-Path -LiteralPath $OAuthConfig).Path)")
     } else {
         @("--dart-define=BGM_OAUTH_APP_ID=$clientId", "--dart-define=BGM_OAUTH_APP_SECRET=$clientSecret")
