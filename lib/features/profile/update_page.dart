@@ -128,7 +128,10 @@ class _UpdatePageState extends State<UpdatePage> {
                         ] else
                           FilledButton.icon(
                             onPressed:
-                                () => unawaited(_download.download(asset)),
+                                asset.digest == null
+                                    ? null
+                                    : () =>
+                                        unawaited(_download.download(asset)),
                             icon: const Icon(Icons.download_rounded),
                             label: Text(
                               s.t(
@@ -138,6 +141,7 @@ class _UpdatePageState extends State<UpdatePage> {
                               ),
                             ),
                           ),
+                        if (asset.digest == null) Text(s.t('downloadNoDigest')),
                         if (_download.error != null)
                           Text(
                             s.t(_download.error!),

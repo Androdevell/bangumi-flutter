@@ -15,7 +15,8 @@ void main() {
       final stored = PlatformSecureVault();
       final memory = MemorySecureVault();
       for (final key in [
-        'bangumi.cookies.v1',
+      'bangumi.cookies.v1',
+      AuthService.sessionStorageKey,
         'bangumi.auth.user.v1',
         'bangumi.auth.token.v1',
       ]) {

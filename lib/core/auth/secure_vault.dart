@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
+import '../storage/atomic_file_store.dart';
 
 abstract interface class SecureVault {
   Future<String?> read(String key);
@@ -38,6 +39,7 @@ class _AndroidSecureVault implements PlatformSecureVault {
 }
 
 class _WindowsSecureVault implements PlatformSecureVault {
+  final _files = AtomicFileStore();
   _WindowsSecureVault()
     : _crypt32 = DynamicLibrary.open('crypt32.dll'),
       _kernel32 = DynamicLibrary.open('kernel32.dll') {
@@ -80,16 +82,15 @@ class _WindowsSecureVault implements PlatformSecureVault {
   Future<void> write(String key, String value) async {
     final file = await _fileFor(key);
     final encrypted = _transform(utf8.encode(value), decrypt: false);
-    final temporary = File('${file.path}.tmp');
-    await temporary.writeAsString(base64Encode(encrypted), flush: true);
-    if (await file.exists()) await file.delete();
-    await temporary.rename(file.path);
+    await _files.write(file, base64Encode(encrypted));
   }
 
   @override
   Future<void> delete(String key) async {
     final file = await _fileFor(key);
-    if (await file.exists()) await file.delete();
+    await _files.locked(file, () async {
+      if (await file.exists()) await file.delete();
+    });
   }
 
   Future<File> _fileFor(String key) async {

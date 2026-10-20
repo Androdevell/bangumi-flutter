@@ -1,5 +1,9 @@
 const settingsStrings = <String, Map<String, String>>{
   'zh': {
+    'oauthCallbackInvalid': '授权回调验证失败，请重试',
+    'showMoreReplies': '展开更多回复',
+    'replyLimited': '部分内容过长或嵌套过深，请在官网查看完整内容',
+    'responseTooLarge': '响应内容过大，已停止读取，请缩小查询范围后重试',
     'profileWebLoginRequired': '网页登录已失效，请验证后继续管理资料和隐私；无需先退出账号',
     'choiceSearch': '搜索选项',
     'unsavedSettings': '有未保存的修改',
@@ -59,7 +63,14 @@ const settingsStrings = <String, Map<String, String>>{
     'iconApplyFailed': '图标切换失败，已保留原图标',
   },
   'en': {
-    'profileWebLoginRequired': 'Verify your web sign-in to manage profile and privacy settings. No sign-out is needed.',
+    'oauthCallbackInvalid':
+        'Authorization callback could not be verified. Please retry.',
+    'showMoreReplies': 'Show more replies',
+    'replyLimited': 'Content was limited. View the full thread on the website.',
+    'responseTooLarge':
+        'The response is too large. Narrow the query and retry.',
+    'profileWebLoginRequired':
+        'Verify your web sign-in to manage profile and privacy settings. No sign-out is needed.',
     'choiceSearch': 'Search options',
     'unsavedSettings': 'Unsaved changes',
     'privacyContact': 'Who can contact me',
@@ -123,6 +134,10 @@ const settingsStrings = <String, Map<String, String>>{
         'Could not change the icon. The previous icon is retained.',
   },
   'ja': {
+    'oauthCallbackInvalid': '認証のコールバックを確認できませんでした。もう一度お試しください。',
+    'showMoreReplies': '返信をさらに表示',
+    'replyLimited': '長さまたは階層を制限しました。全文は公式サイトで確認してください。',
+    'responseTooLarge': '応答が大きすぎるため停止しました。条件を絞って再試行してください。',
     'profileWebLoginRequired': 'Webログインを確認してプロフィールとプライバシーを管理してください。ログアウトは不要です。',
     'choiceSearch': '選択肢を検索',
     'unsavedSettings': '未保存の変更があります',

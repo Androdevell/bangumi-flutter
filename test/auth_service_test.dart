@@ -64,7 +64,17 @@ void main() {
           return http.Response(
             '',
             302,
-            headers: {'location': 'http://localhost/callback?code=oauth-code'},
+            headers: {
+              'location':
+                  Uri.parse('http://localhost/callback')
+                      .replace(
+                        queryParameters: {
+                          'code': 'oauth-code',
+                          'state': request.url.queryParameters['state']!,
+                        },
+                      )
+                      .toString(),
+            },
           );
         case '/oauth/access_token':
           expect(request.bodyFields['client_id'], isNotEmpty);

@@ -227,7 +227,7 @@ class NetworkErrorView extends StatelessWidget {
             Text('加载失败', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 6),
             Text(
-              '$error',
+              AppLocalizations.of(context).t('$error'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),

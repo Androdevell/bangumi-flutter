@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart';
@@ -8,6 +9,7 @@ import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
 
 import '../network/cookie_session_client.dart';
+import '../network/bounded_response.dart';
 import '../app_identity.dart';
 import 'auth_models.dart';
 import 'secure_vault.dart';
@@ -27,6 +29,7 @@ class AuthService extends ChangeNotifier {
 
   static const _userStorageKey = 'bangumi.auth.user.v1';
   static const _tokenStorageKey = 'bangumi.auth.token.v1';
+  static const sessionStorageKey = 'bangumi.auth.session.v2';
   static const _callback = 'http://localhost/callback';
   static const _userAgent = browserUserAgent;
 
@@ -70,8 +73,21 @@ class AuthService extends ChangeNotifier {
     String? storedUser;
     String? storedToken;
     try {
-      storedUser = await _vault.read(_userStorageKey);
-      storedToken = await _vault.read(_tokenStorageKey);
+      final combined = await _vault.read(sessionStorageKey);
+      if (combined != null) {
+        final record = jsonDecode(combined) as Map;
+        if (record['version'] != 2) return;
+        if (record['signedOut'] == true) {
+          _user = null;
+          _token = null;
+          return;
+        }
+        storedUser = jsonEncode(record['user']);
+        storedToken = jsonEncode(record['token']);
+      } else {
+        storedUser = await _vault.read(_userStorageKey);
+        storedToken = await _vault.read(_tokenStorageKey);
+      }
     } on Object {
       debugPrint('安全存储暂不可用，保留已保存的凭据');
       return;
@@ -86,14 +102,15 @@ class AuthService extends ChangeNotifier {
         );
         if (user.username.isEmpty ||
             token.accessToken.isEmpty ||
-            token.refreshToken.isEmpty) {
+            token.refreshToken.isEmpty ||
+            (user.id > 0 && token.userId > 0 && user.id != token.userId)) {
           throw const FormatException('无效的已保存登录凭据');
         }
         _user = user;
         _token = token;
       }
     } on Object {
-      await _clearCredentials();
+      debugPrint('已保存的会话无法确认，保留原始记录以供重新验证');
     }
   }
 
@@ -307,22 +324,32 @@ class AuthService extends ChangeNotifier {
     if (formHash.isEmpty) {
       throw const AuthException('登录成功，但未找到授权参数', credentialsRejected: true);
     }
+    final random = Random.secure();
+    final state = base64UrlEncode(
+      List.generate(32, (_) => random.nextInt(256)),
+    );
     final authorizeUri = _webUri('oauth/authorize').replace(
       queryParameters: {
         'client_id': _appId,
         'response_type': 'code',
         'redirect_uri': _callback,
+        'state': state,
       },
     );
     final response = await _request(
       'POST',
       authorizeUri,
-      fields: {'formhash': formHash, 'client_id': _appId, 'submit': '授权'},
+      fields: {
+        'formhash': formHash,
+        'client_id': _appId,
+        'submit': '授权',
+        'state': state,
+      },
       followRedirects: false,
       sessionGeneration: generation,
     );
     final location = response.headers[HttpHeaders.locationHeader];
-    final code = _authorizationCode(location);
+    final code = _authorizationCode(location, state);
     if (code.isEmpty) {
       final document = html.parse(_responseText(response));
       final message =
@@ -349,7 +376,6 @@ class AuthService extends ChangeNotifier {
       fields: {
         ...grant,
         'redirect_uri': _callback,
-        'state': '${DateTime.now().millisecondsSinceEpoch}',
         'client_id': _appId,
         'client_secret': _appSecret,
       },
@@ -410,7 +436,7 @@ class AuthService extends ChangeNotifier {
       final streamed = await _client
           .send(request)
           .timeout(const Duration(seconds: 25));
-      final response = await http.Response.fromStream(streamed);
+      final response = await readBoundedResponse(streamed);
       if (generation != _sessionGeneration) {
         throw const AuthException('登录会话已变更，请重新登录');
       }
@@ -422,6 +448,8 @@ class AuthService extends ChangeNotifier {
 
       final nextUri = uri.resolve(location);
       if (nextUri.scheme != 'https' ||
+          nextUri.port != 443 ||
+          nextUri.userInfo.isNotEmpty ||
           !const {
             'bgm.tv',
             'bangumi.tv',
@@ -484,13 +512,33 @@ class AuthService extends ChangeNotifier {
     return value;
   }
 
-  String _authorizationCode(String? location) {
+  String _authorizationCode(String? location, String expectedState) {
     if (location == null || location.isEmpty) return '';
     final parsed = Uri.tryParse(location);
-    final fromQuery = parsed?.queryParameters['code'];
-    if (fromQuery != null && fromQuery.isNotEmpty) return fromQuery;
-    return RegExp(r'[?&]code=([^&]+)').firstMatch(location)?.group(1)?.trim() ??
-        '';
+    final expected = Uri.parse(_callback);
+    if (parsed == null ||
+        parsed.scheme != expected.scheme ||
+        parsed.host != expected.host ||
+        parsed.port != expected.port ||
+        parsed.path != expected.path ||
+        parsed.userInfo.isNotEmpty ||
+        parsed.fragment.isNotEmpty) {
+      return '';
+    }
+    final codes = parsed.queryParametersAll['code'];
+    if (codes == null ||
+        codes.length != 1 ||
+        codes.single.isEmpty ||
+        codes.single.length > 2048) {
+      return '';
+    }
+    final states = parsed.queryParametersAll['state'];
+    if (states == null ||
+        states.length != 1 ||
+        states.single != expectedState) {
+      throw const AuthException('oauthCallbackInvalid');
+    }
+    return codes.single;
   }
 
   Uri _webUri(String path) => Uri.parse('https://bgm.tv/').resolve(path);
@@ -511,10 +559,21 @@ class AuthService extends ChangeNotifier {
       if (generation != _sessionGeneration || user == null || token == null) {
         return;
       }
-      await Future.wait([
-        _vault.write(_userStorageKey, jsonEncode(user.toJson())),
-        _vault.write(_tokenStorageKey, jsonEncode(token.toJson())),
-      ]);
+      await _vault.write(
+        sessionStorageKey,
+        jsonEncode({
+          'version': 2,
+          'user': user.toJson(),
+          'token': token.toJson(),
+        }),
+      );
+      // 新记录提交成功后再清理旧格式；清理失败不影响已提交的完整会话。
+      try {
+        await _vault.delete(_userStorageKey);
+        await _vault.delete(_tokenStorageKey);
+      } on Object {
+        debugPrint('旧会话格式清理延后；已提交的新记录继续有效');
+      }
     });
   }
 
@@ -526,16 +585,14 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _clearStoredCredentials() => _queueStorage(() async {
+    // 先提交注销标记，进程中断也不允许残留的 v1 记录复活账号。
+    await _vault.write(
+      sessionStorageKey,
+      jsonEncode({'version': 2, 'signedOut': true}),
+    );
     await Future.wait([
       _vault.delete(_userStorageKey),
       _vault.delete(_tokenStorageKey),
     ]);
   });
-
-  Future<void> _clearCredentials() async {
-    _sessionGeneration++;
-    _user = null;
-    _token = null;
-    await _clearStoredCredentials();
-  }
 }

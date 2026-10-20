@@ -141,7 +141,11 @@ void main() {
     expect(await Future.wait([first, second]), [true, true]);
     expect(requests, 1);
     expect(await auth.validAccessToken(), 'new-access');
-    expect(await vault.read(_tokenKey), contains('new-access'));
+    expect(
+      await vault.read(AuthService.sessionStorageKey),
+      contains('new-access'),
+    );
+    expect(await vault.read(_tokenKey), isNull);
   });
 
   test(
@@ -334,7 +338,9 @@ class _BlockingVault extends MemorySecureVault {
 
   @override
   Future<void> write(String key, String value) async {
-    if (block && key == _tokenKey) {
+    if (block &&
+        key == AuthService.sessionStorageKey &&
+        !writeStarted.isCompleted) {
       writeStarted.complete();
       await allowWrite.future;
     }

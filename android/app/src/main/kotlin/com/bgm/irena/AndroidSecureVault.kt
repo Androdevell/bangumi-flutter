@@ -91,10 +91,10 @@ class AndroidSecureVault(context: Context) : MethodChannel.MethodCallHandler {
         return keyStore.getKey(KEY_ALIAS, null) as? SecretKey
     }
 
-    private fun getOrCreateKey(): SecretKey {
+    private fun getOrCreateKey(): SecretKey = synchronized(KEY_LOCK) {
         getExistingKey()?.let { return it }
 
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
+        KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
             .apply {
                 init(
                     KeyGenParameterSpec.Builder(
@@ -111,6 +111,7 @@ class AndroidSecureVault(context: Context) : MethodChannel.MethodCallHandler {
     }
 
     companion object {
+        private val KEY_LOCK = Any()
         const val CHANNEL_NAME = "com.xiaoyv.bangumi/secure-storage"
 
         private const val PREFERENCES_NAME = "bangumi_secure_vault"

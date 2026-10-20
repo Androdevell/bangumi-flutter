@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:win_http/win_http.dart';
 import '../app_identity.dart';
+import 'bounded_response.dart';
 
 const _userAgent = browserUserAgent;
 
@@ -109,6 +110,9 @@ class AndroidBangumiHttpClient extends http.BaseClient {
         request: request,
       );
     } on PlatformException catch (error) {
+      if (error.code == 'response_too_large') {
+        throw const ResponseLimitException();
+      }
       if (aborted) throw http.RequestAbortedException(request.url);
       throw http.ClientException(
         error.message ?? 'Android network request failed',

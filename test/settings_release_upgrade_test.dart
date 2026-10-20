@@ -50,6 +50,7 @@ void main() {
           'https://github.com/Androdevell/bangumi-flutter/releases/download/v1.2.8/bangumi-1.2.8-windows-x64.zip',
         ),
         size: 42,
+        digest: 'sha256:${'0' * 64}',
       ),
     );
     expect(requests, 1);
@@ -80,6 +81,7 @@ void main() {
             'https://github.com/Androdevell/bangumi-flutter/releases/download/v1.2.8/bangumi-1.2.8-windows-x64.zip',
           ),
           size: 3,
+          digest: 'sha256:${'0' * 64}',
         ),
       );
       await started.future;

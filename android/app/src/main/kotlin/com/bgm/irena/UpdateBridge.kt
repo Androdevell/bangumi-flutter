@@ -1,6 +1,7 @@
 package com.bgm.irena
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -14,6 +15,7 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.security.MessageDigest
 
 /**
  * 更新包流式落盘，进度通过通道回传；安装仅开放应用更新目录。
@@ -49,10 +51,14 @@ class UpdateBridge(private val activity: MainActivity, private val channel: Meth
                 worker.execute { download(id, name, url, size, result) }
             }
             "install" -> {
-                try {
-                    val file = File(call.argument<String>("path") ?: "").canonicalFile
-                    val folder = File(activity.cacheDir, "updates").canonicalFile
-                    require(file.parentFile == folder && file.isFile && file.name.endsWith(".apk"))
+                val path = call.argument<String>("path") ?: ""
+                val digest = call.argument<String>("sha256") ?: ""
+                worker.execute {
+                  try {
+                    val file = File(path).canonicalFile
+                    require(validPackage(file, digest))
+                    activity.runOnUiThread {
+                      try {
                     if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
                         activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                             Uri.parse("package:${activity.packageName}")))
@@ -64,10 +70,35 @@ class UpdateBridge(private val activity: MainActivity, private val channel: Meth
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                     }
                     result.success(true)
-                } catch (_: Exception) { result.success(false) }
+                      } catch (_: Exception) { result.success(false) }
+                    }
+                  } catch (_: Exception) { activity.runOnUiThread { result.success(false) } }
+                }
             }
             else -> result.notImplemented()
         }
+    }
+
+    private fun validPackage(file: File, expectedDigest: String): Boolean {
+        val folder = File(activity.cacheDir, "updates").canonicalFile
+        if (file.parentFile != folder || !file.isFile || !file.name.endsWith(".apk") ||
+            !Regex("^[a-fA-F0-9]{64}$").matches(expectedDigest)) return false
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val bytes = ByteArray(64 * 1024)
+            while (true) { val n = input.read(bytes); if (n < 0) break; digest.update(bytes, 0, n) }
+        }
+        if (digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) } != expectedDigest.lowercase()) return false
+        val flags = PackageManager.GET_SIGNING_CERTIFICATES
+        val installed = activity.packageManager.getPackageInfo(activity.packageName, flags)
+        val candidate = activity.packageManager.getPackageArchiveInfo(file.path, flags) ?: return false
+        fun signers(info: android.content.pm.PackageInfo) = info.signingInfo?.apkContentsSigners
+            ?.map { it.toCharsString() }?.toSet().orEmpty()
+        val history = candidate.signingInfo?.signingCertificateHistory
+            ?.map { it.toCharsString() }?.toSet().orEmpty()
+        return UpdatePackagePolicy.accepts(installed.packageName, candidate.packageName,
+            installed.longVersionCode, candidate.longVersionCode,
+            signers(installed), signers(candidate), history)
     }
 
     private fun download(id: String, name: String, initial: String, size: Long, result: MethodChannel.Result) {

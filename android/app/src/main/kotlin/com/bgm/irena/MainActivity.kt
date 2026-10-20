@@ -38,6 +38,8 @@ class MainActivity : FlutterActivity() {
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             AndroidSecureVault.CHANNEL_NAME,
+            io.flutter.plugin.common.StandardMethodCodec.INSTANCE,
+            flutterEngine.dartExecutor.binaryMessenger.makeBackgroundTaskQueue(),
         ).setMethodCallHandler(AndroidSecureVault(this))
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

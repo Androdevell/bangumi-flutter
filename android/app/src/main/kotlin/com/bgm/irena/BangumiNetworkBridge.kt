@@ -139,12 +139,13 @@ class BangumiNetworkBridge(
                 response.use {
                     val output = ByteArrayOutputStream()
                     it.body?.byteStream()?.use { input ->
+                        if ((it.body?.contentLength() ?: -1) > MAX_API_BYTES) throw NetworkResponseLimitException()
                         val buffer = ByteArray(64 * 1024)
                         while (true) {
                             val count = input.read(buffer)
                             if (count < 0) break
                             if (output.size().toLong() + count > MAX_API_BYTES) {
-                                throw IOException("API response exceeds size limit")
+                                throw NetworkResponseLimitException()
                             }
                             output.write(buffer, 0, count)
                         }
@@ -166,7 +167,7 @@ class BangumiNetworkBridge(
                     }
                 }
                 } catch (error: Exception) {
-                    activity.runOnUiThread { result.error("network_error", "读取网络响应失败：${error.javaClass.simpleName}", null) }
+                    activity.runOnUiThread { result.error(if (error is NetworkResponseLimitException) "response_too_large" else "network_error", "读取网络响应失败：${error.javaClass.simpleName}", null) }
                 } finally {
                     if (requestId != null) requests.remove(requestId, call)
                 }
@@ -238,6 +239,8 @@ class BangumiNetworkBridge(
 
     }
 }
+
+private class NetworkResponseLimitException : IOException("Response size limit")
 
 /**
  * API 与图片共用的直连配置，也供原生设备网络探针验证。
