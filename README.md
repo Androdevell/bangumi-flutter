@@ -1,134 +1,69 @@
 # Bangumi Flutter
 
-面向 Android 11+（API 30）和 Windows 的第三方 Bangumi 客户端，使用 Flutter 构建。
+<img src="assets/branding/app_icon_anime.png" width="80" alt="Bangumi Flutter 图标">
+
+面向 Android 11+ 与 Windows 的非官方 Bangumi 客户端。
+
+[下载最新版](https://github.com/Androdevell/bangumi-flutter/releases/latest) · [更新记录](CHANGELOG.md)
+
+Android 下载 **arm64-v8a APK**。Windows 请解压完整 ZIP，再运行 `windows-x64/bangumi_flutter.exe`，不要单独移动 EXE。覆盖安装请保留应用数据。
+
+## 界面
+
+Windows 1.2.11 直连模式实拍（2026-10-22）：
+
+![Windows 首页：每日放送与作品卡片](docs/screenshots/windows-home-1.2.11.jpg)
 
 ## 功能
 
-- 每日放送、条目浏览、搜索和完整条目详情
-- 浏览/搜索分页与筛选重置，搜索防抖与短期缓存
-- 时间线、超展开、用户资料、收藏、人物和章节评论
-- Bangumi OAuth 登录、Token 自动刷新和系统安全存储
-- 收藏状态、观看进度、好友与表情反应操作
-- Bangumi 站内图片表情、贴贴和超展开讨论详情
-- GitHub Releases 新版本检测
-- Android 高刷新率支持，以及封面、头像和预览图片磁盘缓存
-- Android 原生网络兼容层和 Windows WinHTTP 系统代理支持
+- 每日放送、搜索、类型筛选、分页与详情；标签可点击进入精确筛选。
+- 收藏、章节进度、时间线、超展开、小组、用户资料及评论回复。
+- 打开 Bangumi 站内链接；支持粘贴、Android 文本分享及网页链接入口。
+- 评论图片、表情与多图查看器；双击、按钮和键盘缩放及复位。
+- 中文、英文、日文；传统/二次元图标、动态取色与自定义主题。
+- 应用内更新说明、下载、摘要验证；登录凭据使用系统加密存储。
 
-## 环境
+## 网络与隐私
 
-- Flutter 3.29 或更高版本
-- Android SDK，最低 API 30
-- Visual Studio 2022 Desktop development with C++（Windows 构建）
+默认 API 为 `https://next.bgm.tv/p1/`。Windows 默认跟随系统代理；可在“我的 → 数据与网络”选择直连，重启生效。直连模式不使用代理，本站域名采用有界加密解析及握手兼容，不更改系统代理、hosts 或证书信任。不保证所有运营商均可访问。
 
-```powershell
-flutter pub get
-flutter analyze
-flutter test
-```
+站外评论图片默认按需加载，可允许图床或禁止。图片请求不发送 Bangumi Cookie 和 OAuth 凭据，拒绝私网地址、不安全跳转和超限资源。
 
-## 发布版本
+第三方剧照默认关闭，仅主动开启并访问预览页后查询。豆瓣会收到作品标题、IP 与请求信息；验证、限流、空检索和下架仍会造成不可用。关闭后停止新请求，已发请求无法撤回。本轮未修复第三方检索服务的可用性问题。
 
-每次发布前先更新 `pubspec.yaml` 中的 `version`。格式为 `主版本.次版本.修订号+构建号`，例如 `1.1.0+2`；随后使用相同版本创建 `v1.1.0` Git 标签和 GitHub Release。应用内“检查更新”以 GitHub 最新 Release 为准。
+公开日历可保存到普通缓存；账号、Cookie、令牌不会迁出加密存储。网页登录失效时可单独验证，无需先退出 OAuth 账号。不要通过卸载或清数据解决普通网络错误。
 
-注意：实际已发布的 1.1.4 APK 构建号为 **2006**（以前命令行覆盖了源码中的构建号）。
-从 `1.1.7+2009` 起在 `pubspec.yaml` 中统一保存真实构建号，后续每次发布继续递增，
-不使用较小的 `+8/+9`，也不通过命令行另行覆盖版本。
+## 开发与测试
 
-## 网络
-
-默认使用 `https://next.bgm.tv/p1/` API。Android 使用原生 OkHttp 网络桥，Windows 使用 WinHTTP 并读取系统代理、PAC/WPAD。
-
-可在构建时覆盖 API 根地址：
+需要项目锁定的 Flutter/Dart SDK、Android SDK，以及 Windows 的 Visual Studio C++ 桌面组件。首次运行 `flutter pub get`。
 
 ```powershell
-flutter run -d windows `
-  --dart-define=BGM_API_BASE_URL=https://your-compatible-api.example/
+# 迭代：按变更映射选择测试；公共层或未知改动回退全量
+./tool/verify.ps1
+# 显式定向
+./tool/verify.ps1 -Tests test/link_image_tag_test.dart
+# 定稿全量
+./tool/verify.ps1 -Mode full
 ```
 
-## 构建
+完整日志与 JSON 摘要保存在 `build/verification/`。外网和真实会话探针默认跳过，不能把跳过计为通过。正式发行脚本仍强制执行分析、完整 Flutter 回归与 Android 原生测试，不接受人工跳过门禁。
 
-### OAuth 与签名
+## 构建与发布
 
-源码不再内置 OAuth 凭据。请先在 Bangumi 开发者后台重置已泄露的旧密钥，
-在本机创建已被 Git 忽略的 `oauth-config.json`：
+每次程序发行同时递增 `pubspec.yaml` 的版本名/构建号与 `lib/core/app_identity.dart` 的版本。不得降低真实已发布 APK 的构建号，也不通过命令行覆盖一个更小的值。保持浏览器认证标识稳定。
 
-```json
-{
-  "BGM_OAUTH_APP_ID": "your-application-id",
-  "BGM_OAUTH_APP_SECRET": "your-new-application-secret"
-}
-```
-
-不得提交真实凭据、`android/key.properties` 或签名文件。
-CI 构建时应从加密 Secrets 注入，不要输出密钥或将配置文件作为构建产物上传。
-移动/桌面客户端中的构建参数仍可从二进制提取，并非保密边界；
-若需要真正保密，必须改用服务端 OAuth 令牌交换。
-不提供 OAuth 参数仍可运行浏览功能，登录入口会明确提示配置缺失。
-
-Android Release 必须提供 `android/key.properties` 的 `storeFile`、`storePassword`、
-`keyAlias`、`keyPassword`，且签名文件必须存在；缺失时拒绝构建，不回退 debug 签名。
-继续使用原正式密钥，以确保旧用户可覆盖安装。
-
-正式发行推荐使用带预检的双平台脚本：
+本地创建被 Git 忽略的 `oauth-config.json`，填写 `BGM_OAUTH_APP_ID` 和 `BGM_OAUTH_APP_SECRET`。Android 还需原正式签名与 `android/key.properties`。不提交或上传这些文件；CI 从加密 Secrets 注入。
 
 ```powershell
-./tool/release.ps1 -OAuthConfig ./oauth-config.json -PreviousApk ./downloaded-last-release.apk
+./tool/release.ps1 -Flutter D:/flutter/bin/flutter.bat `
+  -OAuthConfig ./oauth-config.json `
+  -PreviousApk ./dist/上一版/bangumi-上一版-arm64-v8a.apk -NoPub
 ```
 
-亦可在本地进程或 CI Secrets 中设置 `BGM_OAUTH_APP_ID`、`BGM_OAUTH_APP_SECRET` 后省略 `-OAuthConfig`。
-脚本不输出凭据，校验构建号严格高于基准 APK，校验签名相同、最终 Android/Windows 版本、
-arm64-v8a 架构并打包完整 Windows 目录。仅预检时加 `-ValidateOnly`。
-Android 正式构建还会强制检查完整 OAuth 参数及已发布构建号下界；不能把未配置登录的包当作正式发行。
-本次 1.1.7 依用户要求使用既有配置生成可登录的正式发行包；公开客户端中的 Secret 不构成保密边界，仍建议尽快轮换。
+脚本校验新旧签名、严格递增构建号、ARM64 架构、双端版本、OAuth 构建配置和图标，输出完整 Windows ZIP 与追溯清单。清单不是独立发行者签名。移动/桌面客户端内置 Secret 可被提取，不能作为服务端保密边界；本轮未更换用户确认沿用的配置。
 
-```powershell
-flutter build apk --release --target-platform android-arm64 --dart-define-from-file=oauth-config.json
-flutter build windows --release --dart-define-from-file=oauth-config.json
-```
+Release 标题统一 `v版本号`，正文只包含非空的“功能与优化”“修复”，参见 [模板](tool/release-notes-template.md)。验证、限制和构建记录写入实施文档，不堆进 Release。历史说明可通过 `tool/normalize-release-notes.ps1` 预览，`-Apply` 前自动备份；只修改文本，不改旧标签或附件。
 
-生成位置：
+当前实施与未完成的设备验收见 [1.2.11 实施记录](链接直连与图片交互及测试发布优化实施记录-1.2.11.md)。
 
-- Android：`build/app/outputs/flutter-apk/`
-- Windows：`build/windows/x64/runner/Release/`
-
-Windows 需要分发整个 Release 文件夹，不能只复制 exe。
-
-## 1.1.6 修复与验收
-
-本次版本 `1.1.6+8` 对应 P1 清单的 16 项修复，详见 [修复验收记录](P1-修复验收.md)。
-GET 使用五分钟缓存和相同请求合并，并发不超过三；手动刷新、写操作和登录变化会使缓存失效。
-429 尊重 `Retry-After`，超过十秒的限流直接提示，不提前重试；写操作不自动重试。
-搜索防抖 350ms、缓存两分钟，浏览/搜索通过滚动或“加载更多”翻页；
-时间线、超展开和其他列表本次仍使用原有单次请求上限，未宣称全站分页。
-正式更新渠道忽略预发布，在语义版本优先级相同时额外比较本项目纯数字 `+build`。
-图片内存缓存上限 64 MiB，磁盘缓存保留十四天、最多六百个缓存对象；
-Android 图片传输采用临时文件流，不再整张图片通过 MethodChannel 复制。
-
-之前的 1.1.5/1.1.6 未配置 OAuth 构建仅用于浏览验证，没有上传正式 Release。
-现在正式 Release 强制配置 OAuth；源码推送仍不自动改变应用内的最新 Release，需上传带版本标签的正式产物。
-
-## 安全与隐私修复
-
-1.1.5 改用系统 DNS 后，在解析受干扰的网络上产生了 Android 直连回归。
-1.1.8 为本站六个域名增加限时 HTTPS DNS 查询（每个解析器最多两秒）和 TTL 缓存；
-查询失败时使用已核对的多地址应急路由，三十秒后重试加密解析。
-备用 CDN 地址不是永久解析结果，未来路由变化仍可能需要更新版本；不能保证在所有运营商网络上都可直连。
-非本站域名仍使用系统 DNS，保留仅针对 Bangumi 域名的 TLS 分片兼容与正常证书校验。
-加密解析仅提交域名和 A 记录类型，不提交账户、Cookie 或 OAuth 凭据。
-协议参考：[Cloudflare DoH JSON 文档](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/dns-json/)。
-连接失败只记录域名及异常类别，不记录 URL 查询参数、请求内容或凭据。
-Android 关闭自动备份，单独排除安全存储的云备份与设备迁移；
-Keystore 不可用时不再静默删除密文，新设备需重新登录。
-1.1.10 将豆瓣剧照改为明确授权的可选功能，默认关闭。
-在“我的 → 账户 → 第三方剧照预览”或作品预览页开启并确认后，只有主动打开预览标签页才发送作品标题。
-使用公开网页接口，不使用旧版私有 API 密钥；独立客户端不携带 Bangumi 账号、Cookie 或 OAuth 凭据。
-豆瓣及其图片服务器会收到 IP 和请求信息；关闭后停止新请求并丢弃查询缓存，但已发出的请求无法撤回，
-缓存图片可从“数据与网络 → 清除图片缓存”删除。第三方验证/限流时会提示重试或在浏览器查看。
-
-安全回归检查通过 GitHub Actions 执行：依赖解析、静态分析、单元/widget 测试与覆盖率生成。
-真实网络测试默认跳过，不会在 CI 使用真实账户。
-
-规则依据：[Android 自动备份说明](https://developer.android.com/identity/data/autobackup)、
-[OkHttp 多地址连接说明](https://github.com/square/okhttp/blob/master/README.md)。
-
-本项目是非官方第三方客户端，与 Bangumi 官方无隶属关系。
+本项目与 Bangumi 官方无隶属关系。

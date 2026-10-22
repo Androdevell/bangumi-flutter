@@ -5,6 +5,7 @@ import 'package:http/io_client.dart';
 import '../media/rich_image_policy.dart';
 import '../app_identity.dart';
 import 'image_request_headers.dart';
+import 'tls_connection.dart';
 
 /// 未知图床在实际建连时解析并验证地址。可信固定图床保留系统代理兼容。
 class ImageTransport extends http.BaseClient {
@@ -30,7 +31,10 @@ class ImageTransport extends http.BaseClient {
         throw const HttpException('Private image connection');
       }
       // 直接传入地址，Socket 不会对域名进行第二次解析；TLS 仍使用原 URL 的主机名。
-      return Socket.startConnect(addresses.first, uri.port);
+      return authenticateConnection(
+        uri,
+        await Socket.startConnect(addresses.first, uri.port),
+      );
     };
     pinned = IOClient(sockets);
   }

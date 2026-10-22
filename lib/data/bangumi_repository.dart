@@ -16,6 +16,7 @@ import '../domain/use_cases/collection_save_use_case.dart';
 import 'repositories/remote_collection_repository.dart';
 import 'repositories/remote_user_repository.dart';
 import '../domain/repositories/episode_progress_repository.dart';
+import '../domain/repositories/tag_repository.dart';
 import 'repositories/remote_episode_progress_repository.dart';
 import '../domain/repositories/nested_comment_repository.dart';
 import '../domain/repositories/group_repository.dart';
@@ -118,6 +119,10 @@ abstract interface class CalendarSnapshotRepository {
   Future<Map<String, List<Subject>>> refreshCalendar();
 }
 
+abstract interface class EpisodeMetadataRepository {
+  Future<SubjectEpisode> fetchEpisode(int id);
+}
+
 abstract interface class CommentCacheRepository {
   void invalidateCommentReads({int? episodeId, Topic? topic});
 }
@@ -192,6 +197,8 @@ Future<Paged<Subject>> searchPage(
 class RemoteBangumiRepository
     implements
         BangumiRepository,
+        TagRepository,
+        EpisodeMetadataRepository,
         SubjectPagingRepository,
         CollectionFeatureRepository,
         DetailSectionsRepository,
@@ -237,6 +244,7 @@ class RemoteBangumiRepository
   late final EpisodeProgressRepository episodeProgress =
       RemoteEpisodeProgressRepository(
         _api,
+        collectionChanges: _collectionChanges,
         onChanged: () => _collectionChanges.value++,
       );
   @override
@@ -587,6 +595,31 @@ class RemoteBangumiRepository
   @override
   Future<Subject> fetchSubject(int id) async {
     return Subject.fromJson(await _fetchSubjectJson(id));
+  }
+
+  @override
+  Future<Paged<Subject>> tagPage(ComposeTagQuery query, int page) async {
+    if (!const {1, 2, 3, 4, 6}.contains(query.type) ||
+        query.tag.trim().isEmpty ||
+        query.tag.length > 200 ||
+        page < 1 ||
+        !const {'rank', 'date', 'collects'}.contains(query.sort)) {
+      throw const ApiException('fieldInvalid');
+    }
+    final raw = await _api.get(
+      'p1/subjects',
+      query: {
+        'type': '${query.type}',
+        'sort': query.sort,
+        'page': '$page',
+        'tags': query.tag,
+      },
+    );
+    return _pagedSubjects(
+      raw,
+      fallbackOffset: (page - 1) * 20,
+      fallbackLimit: 20,
+    );
   }
 
   @override
@@ -1000,10 +1033,24 @@ class RemoteBangumiRepository
     int episodeId,
     int type, {
     bool batch = false,
-  }) => _api.patch(
-    'p1/collections/episodes/$episodeId',
-    body: {'type': type, 'batch': batch},
-  );
+  }) async {
+    final episode = await fetchEpisode(episodeId);
+    await episodeProgress.save(
+      episode.subjectId,
+      episodeId,
+      type,
+      session: _api.sessionScope,
+      batch: batch,
+    );
+  }
+
+  @override
+  Future<SubjectEpisode> fetchEpisode(int id) async {
+    if (id <= 0) throw const ApiException('fieldInvalid');
+    final raw = await _api.get('p1/episodes/$id');
+    if (raw is! Map) throw const ApiException('fieldInvalid');
+    return SubjectEpisode.fromJson(Map<String, dynamic>.from(raw));
+  }
 
   @override
   Future<void> toggleCharacterCollection(

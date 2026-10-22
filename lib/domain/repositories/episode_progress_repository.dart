@@ -6,6 +6,8 @@ import '../../core/subject_detail_models.dart';
 abstract interface class EpisodeProgressRepository {
   SessionScope get scope;
   Listenable get sessionChanges;
+  Listenable get collectionChanges;
+  Future<bool> isCollected(int subjectId, {bool fresh = false});
   Future<Paged<SubjectEpisode>> load(
     int subjectId, {
     int offset = 0,

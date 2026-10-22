@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/secure_vault.dart';
 import 'theme_preferences.dart';
+import '../network/platform_http_client.dart';
 
 enum AppIconStyle { classic, anime }
 
@@ -13,6 +14,7 @@ class AppPreferenceSnapshot {
     this.thirdPartyPreviews = false,
     this.reduceMotion = false,
     this.theme = const ComposeThemePreferences(),
+    this.networkMode = WindowsNetworkMode.system,
   });
 
   final Locale locale;
@@ -20,6 +22,7 @@ class AppPreferenceSnapshot {
   final bool thirdPartyPreviews;
   final bool reduceMotion;
   final ComposeThemePreferences theme;
+  final WindowsNetworkMode networkMode;
 }
 
 class AppPreferences {
@@ -39,6 +42,7 @@ class AppPreferences {
       _vault.read(_previewsKey),
       _vault.read(_motionKey),
       _vault.read('app.preference.theme.v1'),
+      _vault.read('app.preference.windowsNetwork.v1'),
     ]);
     final localeCode = switch (values[0]) {
       'en' => 'en',
@@ -55,6 +59,10 @@ class AppPreferences {
       thirdPartyPreviews: values[2] == 'true',
       reduceMotion: values[3] == 'true',
       theme: ComposeThemePreferences.decode(values[4]),
+      networkMode:
+          values[5] == 'direct'
+              ? WindowsNetworkMode.direct
+              : WindowsNetworkMode.system,
     );
   }
 
@@ -70,4 +78,6 @@ class AppPreferences {
       _vault.write(_motionKey, '$enabled');
   Future<void> setTheme(ComposeThemePreferences value) =>
       _vault.write('app.preference.theme.v1', value.encode());
+  Future<void> setNetworkMode(WindowsNetworkMode value) =>
+      _vault.write('app.preference.windowsNetwork.v1', value.name);
 }

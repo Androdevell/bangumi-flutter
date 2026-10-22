@@ -574,7 +574,7 @@ void main() {
             expect(jsonDecode(request.body), {'type': 2, 'batch': false});
             return http.Response('', 204);
           }
-          return http.Response('[]', 200);
+          return http.Response('{"interest":{"type":3}}', 200);
         }),
       );
       final repo = RemoteEpisodeProgressRepository(api, onChanged: () {});
@@ -785,6 +785,10 @@ void main() {
 }
 
 class _Progress implements EpisodeProgressRepository {
+  @override
+  Listenable get collectionChanges => changes;
+  @override
+  Future<bool> isCollected(int subjectId, {bool fresh = false}) async => true;
   int saves = 0;
   final changes = ChangeNotifier();
   SessionScope current = session;

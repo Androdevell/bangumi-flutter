@@ -1,6 +1,7 @@
 package com.bgm.irena
 
 import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -9,6 +10,18 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var updateBridge: UpdateBridge? = null
+    private var linkChannel: MethodChannel? = null
+    private fun linkFrom(intent: Intent?): String? = when (intent?.action) {
+        Intent.ACTION_VIEW -> intent.dataString
+        Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+        else -> null
+    }?.takeIf { it.length <= 8192 }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        linkFrom(intent)?.let { linkChannel?.invokeMethod("link", it) }
+    }
     private val highRefreshRateController by lazy { HighRefreshRateController(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,6 +41,11 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        linkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.bgm.irena/links").also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "initialLink") result.success(linkFrom(intent)) else result.notImplemented()
+            }
+        }
         val updateChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.bgm.irena/update")
         updateBridge = UpdateBridge(this, updateChannel)
         updateChannel.setMethodCallHandler(updateBridge)

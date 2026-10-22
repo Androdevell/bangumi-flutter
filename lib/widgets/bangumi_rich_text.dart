@@ -7,6 +7,7 @@ import '../core/text/bbcode_document.dart';
 import '../core/localization/app_localizations.dart';
 import '../core/text/emoji_catalog.dart';
 import 'rich_comment_image.dart';
+import '../app/app_links.dart';
 
 String? bangumiEmojiUrl(String smileId) {
   return EmojiCatalog.find(smileId)?.url;
@@ -263,6 +264,8 @@ Color? _color(String value) {
 }
 
 Future<void> _openLink(BuildContext context, Uri uri) async {
+  if (await AppLinkDispatcher.open(context, uri)) return;
+  if (!context.mounted) return;
   final allowed = await showDialog<bool>(
     context: context,
     builder:

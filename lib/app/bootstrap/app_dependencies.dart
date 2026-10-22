@@ -10,6 +10,7 @@ import '../../core/network/third_party_preview_service.dart';
 import '../../core/settings/app_preferences.dart';
 import '../../core/media/rich_image_policy.dart';
 import '../../core/cache/calendar_snapshot.dart';
+import '../../core/cache/public_calendar_vault.dart';
 import '../../data/bangumi_repository.dart';
 
 /// 应用装配根；共享客户端只由这里关闭一次。
@@ -35,10 +36,14 @@ class AppDependencies {
   static Future<AppDependencies> initialize() async {
     final vault = PlatformSecureVault();
     final preferences = AppPreferences(vault);
-    final settings = await preferences.load();
-    await RichImagePolicy.instance.initialize(vault);
     final cookies = PersistentCookieStore(vault);
-    await cookies.initialize();
+    final localSettings = await Future.wait<Object?>([
+      preferences.load(),
+      cookies.initialize(),
+      RichImagePolicy.instance.initialize(vault),
+    ]);
+    final settings = localSettings.first! as AppPreferenceSnapshot;
+    windowsNetworkMode = settings.networkMode;
     final apiTransport = CookieSessionClient(
       createPlatformHttpClient(),
       cookies,
@@ -54,7 +59,7 @@ class AppDependencies {
       AppImageCache.initialize(imageTransport);
       final repository = RemoteBangumiRepository(
         calendarStore: CalendarSnapshotStore(
-          vault,
+          PublicCalendarVault(vault),
           const String.fromEnvironment(
             'BGM_API_BASE_URL',
             defaultValue: 'https://next.bgm.tv/',

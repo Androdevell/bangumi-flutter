@@ -34,6 +34,7 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       app_icon_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> link_channel_;
   HICON custom_icon_big_ = nullptr;
   HICON custom_icon_small_ = nullptr;
 };

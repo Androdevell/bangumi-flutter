@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../core/models.dart';
+import '../../core/diagnostics/network_timing.dart';
 import '../../data/bangumi_repository.dart';
 
 @immutable
@@ -41,6 +42,7 @@ class DiscoverController extends ChangeNotifier {
   }
 
   Future<void> _readSnapshot() async {
+    final watch = Stopwatch()..start();
     try {
       final snapshot =
           await (repository as CalendarSnapshotRepository)
@@ -54,6 +56,7 @@ class DiscoverController extends ChangeNotifier {
           error: state.error,
         );
         notifyListeners();
+        NetworkTiming.record('discover-cache', watch);
       }
     } on Object {
       // 缓存损坏或读取失败不影响同时进行的网络刷新。
@@ -63,6 +66,7 @@ class DiscoverController extends ChangeNotifier {
   Future<void> refresh({bool force = true}) async {
     if (_closed || state.loading) return;
     final generation = ++_generation;
+    final watch = Stopwatch()..start();
     state = ComposeDiscoverState(
       calendar: state.calendar,
       loading: true,
@@ -78,6 +82,7 @@ class DiscoverController extends ChangeNotifier {
               : await repository.fetchCalendar();
       if (_closed || generation != _generation) return;
       _fresh = true;
+      NetworkTiming.record('discover-network', watch);
       state = ComposeDiscoverState(
         calendar: Map.unmodifiable(
           result.map(

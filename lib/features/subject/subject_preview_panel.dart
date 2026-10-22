@@ -9,6 +9,7 @@ import '../../core/network/third_party_preview_service.dart';
 import '../../core/subject_detail_models.dart';
 import '../../widgets/common.dart';
 import '../../widgets/third_party_preview_setting.dart';
+import '../../widgets/image_viewer_page.dart';
 
 class SubjectPreviewPanel extends StatefulWidget {
   const SubjectPreviewPanel({
@@ -188,51 +189,24 @@ class _SubjectPreviewPanelState extends State<SubjectPreviewPanel> {
                     borderRadius: BorderRadius.circular(8),
                     child: InkWell(
                       onTap:
-                          () => showDialog<void>(
-                            context: context,
-                            builder:
-                                (context) => Dialog.fullscreen(
-                                  child: ListenableBuilder(
-                                    listenable: service,
-                                    builder:
-                                        (context, _) => Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            if (service.enabled)
-                                              InteractiveViewer(
-                                                minScale: 0.5,
-                                                maxScale: 5,
-                                                child: _PreviewImage(
-                                                  url: item.largeImageUrl,
-                                                  fit: BoxFit.contain,
-                                                ),
-                                              )
-                                            else
-                                              EmptyView(
-                                                message: strings.t(
-                                                  'previewDisabled',
-                                                ),
-                                              ),
-                                            Positioned(
-                                              top: 12,
-                                              right: 12,
-                                              child: SafeArea(
-                                                child: IconButton.filledTonal(
-                                                  tooltip: strings.t(
-                                                    'previewClose',
-                                                  ),
-                                                  onPressed:
-                                                      () => Navigator.pop(
-                                                        context,
-                                                      ),
-                                                  icon: const Icon(Icons.close),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder:
+                                  (_) => ImageViewerPage(
+                                    urls:
+                                        items
+                                            .map(
+                                              (p) =>
+                                                  p.largeImageUrl.isEmpty
+                                                      ? p.imageUrl
+                                                      : p.largeImageUrl,
+                                            )
+                                            .toList(),
+                                    index: index,
+                                    permission: service,
+                                    allowed: () => service.enabled,
                                   ),
-                                ),
+                            ),
                           ),
                       child: _PreviewImage(
                         url: item.imageUrl,

@@ -8,6 +8,7 @@ import '../../widgets/common.dart';
 import '../../widgets/subject_card.dart';
 import '../search/subject_search_delegate.dart';
 import '../subject/subject_navigation.dart';
+import '../../app/app_links.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key, required this.repository});
@@ -78,6 +79,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
                           context,
                         ).formatFullDate(now),
                         actions: [
+                          IconButton(
+                            tooltip: strings.t('openBgmLink'),
+                            onPressed: () => AppLinkDispatcher.prompt(context),
+                            icon: const Icon(Icons.link),
+                          ),
                           IconButton.filledTonal(
                             tooltip: strings.t('refresh'),
                             onPressed: _refresh,

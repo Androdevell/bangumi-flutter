@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/media/rich_image_policy.dart';
 import '../core/network/app_image_cache.dart';
 import '../core/localization/app_localizations.dart';
+import 'image_viewer_page.dart';
 
 class RichCommentImage extends StatefulWidget {
   const RichCommentImage({super.key, required this.uri, this.deferred = false});
@@ -107,22 +108,13 @@ class _RichCommentImageState extends State<RichCommentImage> {
               () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder:
-                      (_) => Scaffold(
-                        appBar: AppBar(title: Text(uri.host)),
-                        body: Center(
-                          child: InteractiveViewer(
-                            minScale: .5,
-                            maxScale: 5,
-                            child: CachedNetworkImage(
-                              imageUrl: uri.toString(),
-                              cacheManager: AppImageCache.manager,
-                              memCacheWidth: 1920,
-                              errorWidget:
-                                  (_, __, ___) =>
-                                      Text(strings.t('imageFailed')),
-                            ),
-                          ),
-                        ),
+                      (_) => ImageViewerPage(
+                        urls: [uri.toString()],
+                        permission: policy,
+                        allowed:
+                            () =>
+                                policy.mode != ExternalImageMode.blocked ||
+                                RichImagePolicy.trustedHosts.contains(uri.host),
                       ),
                 ),
               ),

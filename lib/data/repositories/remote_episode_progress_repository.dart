@@ -7,13 +7,30 @@ import '../../core/subject_detail_models.dart';
 import '../../domain/repositories/episode_progress_repository.dart';
 
 class RemoteEpisodeProgressRepository implements EpisodeProgressRepository {
-  RemoteEpisodeProgressRepository(this.api, {required this.onChanged});
+  RemoteEpisodeProgressRepository(
+    this.api, {
+    required this.onChanged,
+    Listenable? collectionChanges,
+  }) : collectionChanges = collectionChanges ?? api.sessionChanges;
   final ApiClient api;
   final VoidCallback onChanged;
   @override
   SessionScope get scope => api.sessionScope;
   @override
   Listenable get sessionChanges => api.sessionChanges;
+  @override
+  final Listenable collectionChanges;
+  @override
+  Future<bool> isCollected(int subjectId, {bool fresh = false}) async {
+    if (!api.isLoggedIn) return false;
+    final session = scope;
+    final raw = await api.get('p1/subjects/$subjectId', fresh: fresh);
+    if (session != scope) throw const ApiException('commentSessionChanged');
+    if (raw is! Map) throw const ApiException('fieldInvalid');
+    final interest = raw['interest'];
+    return interest is Map && const {1, 2, 3, 4, 5}.contains(interest['type']);
+  }
+
   @override
   Future<Paged<SubjectEpisode>> load(
     int subjectId, {
@@ -52,9 +69,15 @@ class RemoteEpisodeProgressRepository implements EpisodeProgressRepository {
     if (!api.isLoggedIn || session != scope) {
       throw const ApiException('commentSessionChanged');
     }
-    if (episodeId <= 0 || !EpisodeStatus.values.contains(status)) {
+    if (subjectId <= 0 ||
+        episodeId <= 0 ||
+        !EpisodeStatus.values.contains(status)) {
       throw const ApiException('fieldInvalid');
     }
+    if (!await isCollected(subjectId, fresh: true)) {
+      throw const ApiException('collectBeforeProgress');
+    }
+    if (session != scope) throw const ApiException('commentSessionChanged');
     await api.patch(
       'p1/collections/episodes/$episodeId',
       body: {'type': status, 'batch': batch},

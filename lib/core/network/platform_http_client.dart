@@ -7,6 +7,11 @@ import 'package:http/io_client.dart';
 import 'package:win_http/win_http.dart';
 import '../app_identity.dart';
 import 'bounded_response.dart';
+import 'windows_direct_client.dart';
+
+enum WindowsNetworkMode { system, direct }
+
+WindowsNetworkMode windowsNetworkMode = WindowsNetworkMode.system;
 
 const _userAgent = browserUserAgent;
 
@@ -16,6 +21,9 @@ http.Client createPlatformHttpClient() {
   }
 
   if (Platform.isWindows) {
+    if (windowsNetworkMode == WindowsNetworkMode.direct) {
+      return createWindowsDirectClient();
+    }
     return WinHttpClient.fromConfiguration(
       const WinHttpClientConfiguration(
         userAgent: _userAgent,

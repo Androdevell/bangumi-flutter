@@ -146,7 +146,6 @@ class _PosterArtState extends State<PosterArt> {
             cacheManager: AppImageCache.manager,
             fit: BoxFit.cover,
             memCacheWidth: cacheWidth,
-            maxWidthDiskCache: cacheWidth == null ? null : cacheWidth * 2,
             fadeInDuration: Duration.zero,
             fadeOutDuration: Duration.zero,
             placeholderFadeInDuration: Duration.zero,

@@ -26,6 +26,8 @@ import 'subject_preview_panel.dart';
 import '../../domain/repositories/episode_progress_repository.dart';
 import '../../widgets/episode_progress_panel.dart';
 import 'episode_progress_controller.dart';
+import '../browse/tag_page.dart';
+import '../../domain/repositories/tag_repository.dart';
 
 class SubjectDetailPage extends StatefulWidget {
   const SubjectDetailPage({
@@ -457,6 +459,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                 key: ValueKey(identityHashCode(_details)),
                                 builders: [
                                   () => _SummarySection(
+                                    repository: widget.repository,
                                     details: details,
                                     progress:
                                         _progress == null
@@ -464,6 +467,9 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                             : EpisodeProgressPanel(
                                               controller: _progress!,
                                               repository: widget.repository,
+                                              onCollect:
+                                                  () =>
+                                                      _editCollection(details),
                                             ),
                                   ),
                                   () =>
@@ -474,6 +480,9 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                               controller: _progress!,
                                               repository: widget.repository,
                                               expanded: true,
+                                              onCollect:
+                                                  () =>
+                                                      _editCollection(details),
                                             ),
                                           )
                                           : _section(
@@ -482,6 +491,10 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                             (value) => _EpisodeSection(
                                               items: value.episodes,
                                               repository: widget.repository,
+                                              collected:
+                                                  (_interestType ??
+                                                      value.interestType) >
+                                                  0,
                                             ),
                                           ),
                                   () => SubjectPreviewPanel(
@@ -680,10 +693,15 @@ class _HeaderMetric extends StatelessWidget {
 }
 
 class _EpisodeSection extends StatelessWidget {
-  const _EpisodeSection({required this.items, required this.repository});
+  const _EpisodeSection({
+    required this.items,
+    required this.repository,
+    required this.collected,
+  });
 
   final List<SubjectEpisode> items;
   final BangumiRepository repository;
+  final bool collected;
 
   @override
   Widget build(BuildContext context) {
@@ -737,7 +755,7 @@ class _EpisodeSection extends StatelessWidget {
               ),
               PopupMenuButton<int>(
                 tooltip: '更新进度',
-                enabled: repository.isLoggedIn,
+                enabled: repository.isLoggedIn && collected,
                 onSelected: (value) async {
                   try {
                     await repository.updateEpisodeProgress(
@@ -785,7 +803,12 @@ class _EpisodeSection extends StatelessWidget {
 }
 
 class _SummarySection extends StatelessWidget {
-  const _SummarySection({required this.details, this.progress});
+  const _SummarySection({
+    required this.details,
+    required this.repository,
+    this.progress,
+  });
+  final BangumiRepository repository;
 
   final SubjectDetailData details;
   final Widget? progress;
@@ -811,7 +834,22 @@ class _SummarySection extends StatelessWidget {
             runSpacing: 7,
             children: [
               for (final tag in details.tags.take(30))
-                Chip(label: Text('${tag.name} ${tag.count}')),
+                ActionChip(
+                  label: Text('${tag.name} ${tag.count}'),
+                  onPressed:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder:
+                              (_) => TagPage(
+                                query: ComposeTagQuery(
+                                  details.subject.type,
+                                  tag.name,
+                                ),
+                                repository: repository,
+                              ),
+                        ),
+                      ),
+                ),
             ],
           ),
         ],

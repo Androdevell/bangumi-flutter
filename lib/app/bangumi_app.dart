@@ -15,6 +15,8 @@ import '../features/shell/app_shell.dart';
 import 'app_theme.dart';
 import 'app_motion.dart';
 import 'bootstrap/app_dependencies.dart';
+import 'app_links.dart';
+import '../core/navigation/bangumi_link.dart';
 
 class BangumiApp extends StatefulWidget {
   const BangumiApp({
@@ -49,6 +51,31 @@ class _BangumiAppState extends State<BangumiApp> with WidgetsBindingObserver {
     widget.initialTheme,
   );
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  bool _openingLink = false;
+  void _receiveLink() {
+    if (_openingLink || AppLinkDispatcher.pending.value == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _openingLink || AppLinkDispatcher.pending.value == null) {
+        return;
+      }
+      final context = _navigatorKey.currentState?.overlay?.context;
+      if (context == null) return;
+      final target =
+          BangumiLinkParser.parse(AppLinkDispatcher.pending.value!)?.uri;
+      AppLinkDispatcher.pending.value = null;
+      if (target == null) return;
+      _openingLink = true;
+      try {
+        await AppLinkDispatcher.open(context, target);
+      } finally {
+        _openingLink = false;
+        _receiveLink();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   ThemeMode get _themeMode => _theme.settings.mode;
   late Locale _locale = widget.initialLocale;
   late AppIconStyle _appIconStyle = widget.initialAppIconStyle;
@@ -60,6 +87,8 @@ class _BangumiAppState extends State<BangumiApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AppLinkDispatcher.pending.addListener(_receiveLink);
+    _receiveLink();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppIconService.apply(_appIconStyle);
     });
@@ -68,6 +97,7 @@ class _BangumiAppState extends State<BangumiApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AppLinkDispatcher.pending.removeListener(_receiveLink);
     _theme.dispose();
     if (widget.dependencies != null) {
       unawaited(widget.dependencies!.close());
@@ -151,6 +181,7 @@ class _BangumiAppState extends State<BangumiApp> with WidgetsBindingObserver {
                     config.source == ThemeColorSource.preset &&
                     config.preset == 'sakura';
                 return MaterialApp(
+                  navigatorKey: _navigatorKey,
                   scaffoldMessengerKey: _messengerKey,
                   debugShowCheckedModeBanner: false,
                   title: 'Bangumi',
@@ -186,13 +217,16 @@ class _BangumiAppState extends State<BangumiApp> with WidgetsBindingObserver {
                               ],
                             )
                             : child ?? const SizedBox.shrink();
-                    return AppMotionPolicy(
-                      reduced: _reduceMotion,
-                      child: HeroMode(
-                        enabled:
-                            !_reduceMotion &&
-                            !MediaQuery.of(context).disableAnimations,
-                        child: content,
+                    return AppLinkScope(
+                      repository: _repository,
+                      child: AppMotionPolicy(
+                        reduced: _reduceMotion,
+                        child: HeroMode(
+                          enabled:
+                              !_reduceMotion &&
+                              !MediaQuery.of(context).disableAnimations,
+                          child: content,
+                        ),
                       ),
                     );
                   },

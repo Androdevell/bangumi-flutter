@@ -8,6 +8,8 @@ import '../features/episode/episode_comments_page.dart';
 
 enum _EpisodeAction {
   comments,
+  collect,
+  recheck,
   done,
   wish,
   dropped,
@@ -35,10 +37,12 @@ class EpisodeProgressPanel extends StatelessWidget {
     required this.controller,
     required this.repository,
     this.expanded = false,
+    this.onCollect,
   });
   final EpisodeProgressController controller;
   final BangumiRepository repository;
   final bool expanded;
+  final VoidCallback? onCollect;
   Future<void> _open(BuildContext context, SubjectEpisode episode) async {
     final strings = AppLocalizations.of(context);
     final session = controller.repository.scope;
@@ -64,6 +68,34 @@ class EpisodeProgressPanel extends StatelessWidget {
                         () => Navigator.pop(context, _EpisodeAction.comments),
                   ),
                   if (repository.isLoggedIn) ...[
+                    if (controller.state.collected != true)
+                      ListTile(
+                        title: Text(
+                          strings.t(
+                            controller.state.collected == null
+                                ? 'collectionUnknown'
+                                : 'collectBeforeProgress',
+                          ),
+                        ),
+                        trailing:
+                            controller.state.collected == null
+                                ? const Icon(Icons.refresh)
+                                : onCollect == null
+                                ? null
+                                : const Icon(Icons.bookmark_add_outlined),
+                        onTap:
+                            controller.state.collected == null
+                                ? () => Navigator.pop(
+                                  context,
+                                  _EpisodeAction.recheck,
+                                )
+                                : onCollect == null
+                                ? null
+                                : () => Navigator.pop(
+                                  context,
+                                  _EpisodeAction.collect,
+                                ),
+                      ),
                     for (final option in [
                       _EpisodeAction.done,
                       _EpisodeAction.wish,
@@ -74,12 +106,21 @@ class EpisodeProgressPanel extends StatelessWidget {
                         title: Text(
                           '${strings.t('markEpisode')} · ${strings.t(option == _EpisodeAction.undo ? 'episodeUndo' : episodeStatusKey(option.status))}',
                         ),
-                        onTap: () => Navigator.pop(context, option),
+                        enabled: controller.state.collected == true,
+                        onTap:
+                            controller.state.collected == true
+                                ? () => Navigator.pop(context, option)
+                                : null,
                       ),
                     ListTile(
                       leading: const Icon(Icons.done_all),
                       title: Text(strings.t('markUntil')),
-                      onTap: () => Navigator.pop(context, _EpisodeAction.until),
+                      enabled: controller.state.collected == true,
+                      onTap:
+                          controller.state.collected == true
+                              ? () =>
+                                  Navigator.pop(context, _EpisodeAction.until)
+                              : null,
                     ),
                   ],
                 ],
@@ -88,6 +129,14 @@ class EpisodeProgressPanel extends StatelessWidget {
           ),
     );
     if (action == null || !context.mounted) return;
+    if (action == _EpisodeAction.recheck) {
+      await controller.refresh();
+      return;
+    }
+    if (action == _EpisodeAction.collect) {
+      onCollect?.call();
+      return;
+    }
     if (action == _EpisodeAction.comments) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(

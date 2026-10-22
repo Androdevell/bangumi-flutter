@@ -9,6 +9,7 @@ import '../../core/settings/app_preferences.dart';
 import '../../core/update/app_update_service.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
+import '../../widgets/windows_network_setting.dart';
 import '../../widgets/third_party_preview_setting.dart';
 import '../../widgets/rich_comment_image.dart';
 import '../../domain/repositories/account_settings_repository.dart';
@@ -679,6 +680,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     trailing: const Icon(Icons.play_arrow_rounded),
                     onTap: _testNetwork,
                   ),
+                  const WindowsNetworkSetting(),
                 ],
               ),
             ),

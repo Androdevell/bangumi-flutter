@@ -35,6 +35,8 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  link_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "com.bgm.irena/links", &flutter::StandardMethodCodec::GetInstance());
   app_icon_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(), kAppIconChannel,
@@ -74,6 +76,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  link_channel_.reset();
   app_icon_channel_.reset();
   ReleaseCustomIcons();
   if (flutter_controller_) {
@@ -119,6 +122,17 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_COPYDATA && link_channel_ && lparam) {
+    const auto* data = reinterpret_cast<const COPYDATASTRUCT*>(lparam);
+    if (data->dwData == 0x42474d && data->lpData && data->cbData > 1 && data->cbData <= 8193) {
+      const char* text = static_cast<const char*>(data->lpData);
+      if (text[data->cbData - 1] == '\0') {
+        link_channel_->InvokeMethod("link", std::make_unique<flutter::EncodableValue>(std::string(text, data->cbData - 1)));
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

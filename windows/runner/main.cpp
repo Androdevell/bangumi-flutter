@@ -26,6 +26,28 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
+  // One instance per desktop session. Dart validates every bounded link again.
+  HANDLE instance_mutex = CreateMutexW(nullptr, FALSE, L"Local\\Bangumi.Irena.Desktop.Instance");
+  if (instance_mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
+    HWND existing = FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"Bangumi");
+    if (existing) {
+      auto args = GetCommandLineArguments();
+      if (!args.empty() && args[0].size() <= 8192) {
+        COPYDATASTRUCT data{};
+        data.dwData = 0x42474d;
+        data.cbData = static_cast<DWORD>(args[0].size() + 1);
+        data.lpData = const_cast<char*>(args[0].c_str());
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(existing, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data), SMTO_ABORTIFHUNG, 2000, &result);
+      }
+      ShowWindow(existing, SW_RESTORE);
+      SetForegroundWindow(existing);
+      CloseHandle(instance_mutex);
+      CoUninitialize();
+      return EXIT_SUCCESS;
+    }
+  }
+
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
@@ -41,5 +63,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   ::CoUninitialize();
+  if (instance_mutex) CloseHandle(instance_mutex);
   return EXIT_SUCCESS;
 }

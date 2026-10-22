@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'android_image_file_service.dart';
 import 'safe_image_file_service.dart';
 import 'quota_cache_manager.dart';
+import 'platform_http_client.dart';
+import 'windows_direct_client.dart';
 
 abstract final class AppImageCache {
   static BaseCacheManager _manager = DefaultCacheManager();
@@ -23,7 +25,14 @@ abstract final class AppImageCache {
     final FileService service =
         Platform.isAndroid
             ? AndroidImageFileService()
-            : SafeImageFileService(client);
+            : SafeImageFileService(
+              client,
+              lookup:
+                  Platform.isWindows &&
+                          windowsNetworkMode == WindowsNetworkMode.direct
+                      ? resolveWindowsDirectHost
+                      : null,
+            );
     service.concurrentFetches = 3;
     _manager = QuotaCacheManager(
       Config(
