@@ -1,5 +1,5 @@
 {
-  "lib/features/subject/": ["test/repository_test.dart", "test/community_extensions_test.dart", "test/link_image_tag_test.dart"],
+  "lib/features/subject/": ["test/repository_test.dart", "test/community_extensions_test.dart", "test/link_image_tag_test.dart", "test/episode_progress_session_test.dart"],
   "lib/features/discover/": ["test/performance_security_hardening_test.dart", "test/presentation_performance_test.dart"],
   "lib/features/browse/tag_page.dart": ["test/link_image_tag_test.dart"],
   "lib/widgets/image_viewer_page.dart": ["test/link_image_tag_test.dart"],
