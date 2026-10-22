@@ -1036,8 +1036,9 @@ class RemoteBangumiRepository
   }) async {
     final session = _api.sessionScope;
     final episode = await fetchEpisode(episodeId);
-    if (session != _api.sessionScope)
+    if (session != _api.sessionScope) {
       throw const ApiException('commentSessionChanged');
+    }
     await episodeProgress.save(
       episode.subjectId,
       episodeId,
