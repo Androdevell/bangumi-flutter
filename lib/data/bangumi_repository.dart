@@ -1034,12 +1034,15 @@ class RemoteBangumiRepository
     int type, {
     bool batch = false,
   }) async {
+    final session = _api.sessionScope;
     final episode = await fetchEpisode(episodeId);
+    if (session != _api.sessionScope)
+      throw const ApiException('commentSessionChanged');
     await episodeProgress.save(
       episode.subjectId,
       episodeId,
       type,
-      session: _api.sessionScope,
+      session: session,
       batch: batch,
     );
   }
