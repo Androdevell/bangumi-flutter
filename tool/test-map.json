@@ -1,8 +1,9 @@
 {
   "lib/features/blog/": ["test/release_1213_test.dart", "test/release_1214_test.dart"],
-  "lib/core/text/bbcode_document.dart": ["test/release_1214_test.dart", "test/presentation_performance_test.dart"],
+  "lib/core/text/bbcode_document.dart": ["test/bangumi_rich_text_test.dart", "test/release_1214_test.dart", "test/presentation_performance_test.dart"],
   "lib/widgets/lazy_tab_view.dart": ["test/release_1214_test.dart", "test/presentation_performance_test.dart"],
-  "lib/widgets/rich_comment_image.dart": ["test/release_1214_test.dart", "test/community_extensions_test.dart"],
+  "lib/widgets/rich_comment_image.dart": ["test/bangumi_rich_text_test.dart", "test/release_1214_test.dart", "test/community_extensions_test.dart"],
+  "lib/widgets/bangumi_rich_text.dart": ["test/bangumi_rich_text_test.dart", "test/community_extensions_test.dart", "test/presentation_performance_test.dart", "test/release_1214_test.dart"],
   "lib/features/profile/theme_settings_page.dart": ["test/release_1213_test.dart"],
   "lib/features/profile/update_page.dart": ["test/release_1213_test.dart"],
   "lib/domain/models/blog.dart": ["test/release_1213_test.dart", "test/release_1214_test.dart"],

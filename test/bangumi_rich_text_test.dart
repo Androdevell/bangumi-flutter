@@ -34,11 +34,15 @@ void main() {
       ),
     );
 
-    final image = tester.widget<CachedNetworkImage>(
-      find.byType(CachedNetworkImage),
-    );
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(image.image, isA<ResizeImage>());
+    final resized = image.image as ResizeImage;
+    expect(resized.policy, ResizeImagePolicy.fit);
+    expect(resized.width, allOf(isPositive, lessThanOrEqualTo(2048)));
+    expect(resized.height, allOf(isPositive, lessThanOrEqualTo(2048)));
+    expect(resized.imageProvider, isA<CachedNetworkImageProvider>());
     expect(
-      image.imageUrl,
+      (resized.imageProvider as CachedNetworkImageProvider).url,
       'https://lain.bgm.tv/pic/photo/l/19/57/138463_iJH12.jpg',
     );
     expect(find.textContaining('[img='), findsNothing);
