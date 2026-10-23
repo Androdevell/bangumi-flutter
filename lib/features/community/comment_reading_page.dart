@@ -156,10 +156,34 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
                   ),
                   child: Align(
                     heightFactor: 1,
-                    child: FilledButton.tonalIcon(
-                      onPressed: _editorOpen ? null : _compose,
-                      icon: const Icon(Icons.edit_note_rounded),
-                      label: Text(strings.t('postComment')),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 880),
+                      child: Material(
+                        color:
+                            Theme.of(context).colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(24),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(24),
+                          onTap: _editorOpen ? null : _compose,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.edit_outlined, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text(strings.t('commentHint'))),
+                                const Icon(
+                                  Icons.emoji_emotions_outlined,
+                                  size: 22,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

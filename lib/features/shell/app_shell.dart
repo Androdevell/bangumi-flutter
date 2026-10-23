@@ -10,6 +10,7 @@ import '../discover/discover_page.dart';
 import '../profile/profile_page.dart';
 import '../rakuen/rakuen_page.dart';
 import '../timeline/timeline_page.dart';
+import '../notifications/notification_host.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({
@@ -159,18 +160,21 @@ class _AppShellState extends State<AppShell> {
           final showRail = constraints.maxWidth >= 760;
           final extendRail = constraints.maxWidth >= 1180;
           final pages = _createPages();
-          final content = IndexedStack(
-            index: _selectedIndex,
-            children: [
-              for (var index = 0; index < pages.length; index++)
-                TickerMode(
-                  enabled: index == _selectedIndex,
-                  child:
-                      _visited.contains(index)
-                          ? pages[index]
-                          : const SizedBox.shrink(),
-                ),
-            ],
+          final content = NotificationHost(
+            repository: widget.repository,
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: [
+                for (var index = 0; index < pages.length; index++)
+                  TickerMode(
+                    enabled: index == _selectedIndex,
+                    child:
+                        _visited.contains(index)
+                            ? pages[index]
+                            : const SizedBox.shrink(),
+                  ),
+              ],
+            ),
           );
 
           if (!showRail) {

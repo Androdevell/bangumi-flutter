@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'community_strings.dart';
 import 'settings_strings.dart';
+import 'experience_strings.dart';
 
 class AppLocalizations {
   const AppLocalizations(this.locale);
@@ -16,6 +17,7 @@ class AppLocalizations {
       const AppLocalizations(Locale('zh'));
 
   String t(String key) =>
+      experienceStrings[locale.languageCode]?[key] ??
       settingsStrings[locale.languageCode]?[key] ??
       communityStrings[locale.languageCode]?[key] ??
       (_values[locale.languageCode] ?? _values['zh']!)[key] ??

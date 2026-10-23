@@ -9,6 +9,7 @@ import '../../widgets/subject_card.dart';
 import '../search/subject_search_delegate.dart';
 import '../subject/subject_navigation.dart';
 import '../../app/app_links.dart';
+import '../notifications/notification_host.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key, required this.repository});
@@ -79,6 +80,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                           context,
                         ).formatFullDate(now),
                         actions: [
+                          const NotificationButton(),
                           IconButton(
                             tooltip: strings.t('openBgmLink'),
                             onPressed: () => AppLinkDispatcher.prompt(context),

@@ -256,7 +256,19 @@ class ApiClient {
     Map<String, String>? query,
     Object? body,
     bool readOnly = false,
-  }) => _request('POST', path, query: query, body: body, mutation: !readOnly);
+    SessionScope? expectedScope,
+    bool requiresAuth = false,
+    Set<String>? invalidatePaths,
+  }) => _request(
+    'POST',
+    path,
+    query: query,
+    body: body,
+    mutation: !readOnly,
+    expectedScope: expectedScope,
+    requiresAuth: requiresAuth,
+    invalidatePaths: invalidatePaths,
+  );
 
   Future<dynamic> put(
     String path, {

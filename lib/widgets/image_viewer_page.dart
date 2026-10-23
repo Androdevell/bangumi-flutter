@@ -2,9 +2,20 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/network/app_image_cache.dart';
 import '../core/localization/app_localizations.dart';
+import '../core/media/image_save_service.dart';
+
+/// 单一路径、等比且禁止放大解码；预览和尺寸监听共用同一个缓存键。
+ImageProvider createViewerImageProvider(String url, BaseCacheManager cache) =>
+    ResizeImage(
+      CachedNetworkImageProvider(url, cacheManager: cache),
+      width: 2048,
+      height: 2048,
+      policy: ResizeImagePolicy.fit,
+    );
 
 /// 以视口坐标为唯一基准；缩放始终围绕锚点，边界按实际图片而非留白计算。
 class ImageZoomController extends TransformationController {
@@ -62,17 +73,107 @@ class ImageViewerPage extends StatefulWidget {
     this.index = 0,
     this.permission,
     this.allowed,
+    this.cacheManager,
   });
   final List<String> urls;
   final int index;
   final Listenable? permission;
   final bool Function()? allowed;
+  final BaseCacheManager? cacheManager;
   @override
   State<ImageViewerPage> createState() => _ImageViewerPageState();
 }
 
-class _ImageViewerPageState extends State<ImageViewerPage> {
+class _ImageViewerPageState extends State<ImageViewerPage>
+    with SingleTickerProviderStateMixin {
   final zoom = ImageZoomController();
+  BaseCacheManager get _cache => widget.cacheManager ?? AppImageCache.manager;
+  late final AnimationController _animation;
+  @override
+  void initState() {
+    super.initState();
+    _animation = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+    )..addListener(_animateZoom);
+  }
+
+  void _animateZoom() {
+    final tween = _zoomTween;
+    if (tween != null) {
+      zoom.value = tween.transform(
+        Curves.easeOutCubic.transform(_animation.value),
+      );
+    }
+  }
+
+  Matrix4Tween? _zoomTween;
+  bool _saving = false;
+  Offset _gestureStart = Offset.zero;
+  double _swipeDistance = 0;
+  bool _swipeEligible = false;
+  bool get _allowed => mounted && widget.allowed?.call() != false;
+
+  void _zoomTo(double scale, Offset point) {
+    _animation.stop();
+    final start = Matrix4.copy(zoom.value);
+    zoom.zoomAt(scale, point);
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    _zoomTween = Matrix4Tween(begin: start, end: Matrix4.copy(zoom.value));
+    zoom.value = start;
+    _animation.forward(from: 0);
+  }
+
+  void _resetZoom() {
+    _animation.stop();
+    zoom.reset();
+  }
+
+  Future<void> _save() async {
+    if (_saving || !_allowed || widget.urls.isEmpty) return;
+    final url = widget.urls[index];
+    setState(() => _saving = true);
+    String? message;
+    try {
+      if (await ImageSaveService(
+        fetch: (url) => _cache.getSingleFile(url),
+      ).save(url, allowed: () => _allowed)) {
+        message = 'imageSaved';
+      }
+    } on Object {
+      message = 'imageSaveFailed';
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+        if (message != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(AppLocalizations.of(context).t(message))),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _imageActions() async {
+    if (!_allowed || _saving) return;
+    final s = AppLocalizations.of(context);
+    final save = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: const Color(0xff202020),
+      builder:
+          (context) => SafeArea(
+            child: ListTile(
+              textColor: Colors.white,
+              iconColor: Colors.white,
+              leading: const Icon(Icons.download_outlined),
+              title: Text(s.t('imageSave')),
+              onTap: () => Navigator.pop(context, true),
+            ),
+          ),
+    );
+    if (save == true) await _save();
+  }
+
   late int index = widget.index.clamp(0, math.max(0, widget.urls.length - 1));
   Offset anchor = Offset.zero;
   ImageProvider? _provider;
@@ -83,20 +184,25 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
     _detach();
     _provider = provider;
     final stream = _stream = provider.resolve(const ImageConfiguration());
-    _listener = ImageStreamListener((info, _) {
-      if (!mounted) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _stream != stream) return;
-        zoom.configure(
-          zoom.viewport,
-          image: Size(
-            info.image.width.toDouble(),
-            info.image.height.toDouble(),
-          ),
+    _listener = ImageStreamListener(
+      (info, _) {
+        final imageSize = Size(
+          info.image.width.toDouble(),
+          info.image.height.toDouble(),
         );
-        zoom.clampBounds();
-      });
-    });
+        info.dispose();
+        if (!mounted) return;
+        if (zoom.natural == imageSize) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _stream != stream) return;
+          zoom.configure(zoom.viewport, image: imageSize);
+          zoom.clampBounds();
+        });
+      },
+      onError: (Object _, StackTrace? __) {
+        /* 主图的 errorBuilder 提供重试。 */
+      },
+    );
     stream.addListener(_listener!);
   }
 
@@ -108,9 +214,50 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
     _provider = null;
   }
 
+  Widget _image(AppLocalizations strings) {
+    final url = widget.urls[index];
+    final provider = createViewerImageProvider(url, _cache);
+    _watch(provider);
+    return Image(
+      key: ValueKey(url),
+      image: provider,
+      fit: BoxFit.contain,
+      frameBuilder:
+          (_, child, frame, synchronous) =>
+              synchronous || frame != null
+                  ? child
+                  : const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+      errorBuilder:
+          (_, _, _) => Center(
+            child: FilledButton.tonalIcon(
+              icon: const Icon(Icons.refresh),
+              label: Text(strings.t('retry')),
+              onPressed: () async {
+                try {
+                  await provider.evict();
+                  await CachedNetworkImage.evictFromCache(
+                    url,
+                    cacheManager: _cache,
+                  );
+                } on Object {
+                  /* 缓存失败不触发未处理异常。 */
+                }
+                if (mounted && widget.urls[index] == url) {
+                  _detach();
+                  setState(() {});
+                }
+              },
+            ),
+          ),
+    );
+  }
+
   void _change(int delta) {
     final next = index + delta;
     if (next < 0 || next >= widget.urls.length) return;
+    _animation.stop();
     _detach();
     zoom.natural = Size.zero;
     zoom.reset();
@@ -119,6 +266,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
 
   @override
   void dispose() {
+    _animation.dispose();
     _detach();
     zoom.dispose();
     super.dispose();
@@ -130,8 +278,32 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
     Widget content() => Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('${index + 1}/${widget.urls.length}'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.black,
+          systemNavigationBarColor: Colors.black,
+        ),
+        title: Text(
+          '${widget.urls.isEmpty ? 0 : index + 1}/${widget.urls.length}',
+        ),
         actions: [
+          IconButton(
+            tooltip: s.t('imageSave'),
+            onPressed:
+                _saving || widget.urls.isEmpty || !_allowed ? null : _save,
+            icon:
+                _saving
+                    ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                    : const Icon(Icons.download_outlined),
+          ),
           IconButton(
             tooltip: s.t('imageExternal'),
             icon: const Icon(Icons.open_in_new),
@@ -171,58 +343,47 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                     children: [
                       Positioned.fill(
                         child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onLongPress: _imageActions,
+                          onSecondaryTap: _imageActions,
                           onDoubleTapDown: (d) => anchor = d.localPosition,
                           onDoubleTap:
-                              () => zoom.zoomAt(
-                                zoom.scale > 1.05 ? 1 : 2.5,
-                                anchor,
-                              ),
+                              () =>
+                                  _zoomTo(zoom.scale > 1.05 ? 1 : 2.5, anchor),
                           child: InteractiveViewer(
                             transformationController: zoom,
                             minScale: 1,
                             maxScale: 8,
                             trackpadScrollCausesScale: true,
-                            onInteractionEnd: (_) => zoom.clampBounds(),
+                            onInteractionStart: (details) {
+                              _animation.stop();
+                              _gestureStart = details.focalPoint;
+                              _swipeDistance = 0;
+                              _swipeEligible = zoom.scale <= 1.05;
+                            },
+                            onInteractionUpdate: (details) {
+                              _swipeDistance =
+                                  details.focalPoint.dx - _gestureStart.dx;
+                              if (details.pointerCount > 1 ||
+                                  zoom.scale > 1.05) {
+                                _swipeEligible = false;
+                              }
+                            },
+                            onInteractionEnd: (details) {
+                              zoom.clampBounds();
+                              final velocity =
+                                  details.velocity.pixelsPerSecond.dx;
+                              if (_swipeEligible &&
+                                  zoom.scale <= 1.05 &&
+                                  _swipeDistance.abs() > 60 &&
+                                  velocity.abs() > 500) {
+                                _change(velocity < 0 ? 1 : -1);
+                              }
+                            },
                             child: SizedBox(
                               width: size.width,
                               height: size.height,
-                              child: CachedNetworkImage(
-                                imageUrl: widget.urls[index],
-                                cacheManager: AppImageCache.manager,
-                                memCacheWidth: 4096,
-                                memCacheHeight: 4096,
-                                imageBuilder: (_, provider) {
-                                  _watch(provider);
-                                  return Image(
-                                    image: provider,
-                                    fit: BoxFit.contain,
-                                  );
-                                },
-                                placeholder:
-                                    (_, __) => const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                errorWidget:
-                                    (_, __, ___) => Center(
-                                      child: FilledButton.tonalIcon(
-                                        icon: const Icon(Icons.refresh),
-                                        label: Text(s.t('retry')),
-                                        onPressed: () async {
-                                          try {
-                                            await CachedNetworkImage.evictFromCache(
-                                              widget.urls[index],
-                                              cacheManager:
-                                                  AppImageCache.manager,
-                                            );
-                                          } on Object {
-                                            /* 保留重试入口，缓存失败不触发未处理异常。 */
-                                          }
-                                          _detach();
-                                          if (mounted) setState(() {});
-                                        },
-                                      ),
-                                    ),
-                              ),
+                              child: RepaintBoundary(child: _image(s)),
                             ),
                           ),
                         ),
@@ -233,10 +394,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                         right: 0,
                         child: Center(
                           child: Material(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHigh
-                                .withValues(alpha: .95),
+                            color: const Color(0xee202020),
                             borderRadius: BorderRadius.circular(32),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -251,7 +409,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                                 IconButton(
                                   tooltip: s.t('imageZoomOut'),
                                   onPressed:
-                                      () => zoom.zoomAt(
+                                      () => _zoomTo(
                                         zoom.scale / 1.4,
                                         size.center(Offset.zero),
                                       ),
@@ -259,7 +417,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                                 ),
                                 IconButton(
                                   tooltip: s.t('imageFit'),
-                                  onPressed: zoom.reset,
+                                  onPressed: _resetZoom,
                                   icon: const Icon(Icons.fit_screen),
                                 ),
                                 ValueListenableBuilder<Matrix4>(
@@ -276,7 +434,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                                 IconButton(
                                   tooltip: s.t('imageZoomIn'),
                                   onPressed:
-                                      () => zoom.zoomAt(
+                                      () => _zoomTo(
                                         zoom.scale * 1.4,
                                         size.center(Offset.zero),
                                       ),
@@ -301,48 +459,50 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
                 },
               ),
     );
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape):
-            () => Navigator.maybePop(context),
-        const SingleActivator(LogicalKeyboardKey.digit0): zoom.reset,
-        const SingleActivator(LogicalKeyboardKey.equal):
-            () => zoom.zoomAt(
-              zoom.scale * 1.4,
-              zoom.viewport.center(Offset.zero),
-            ),
-        const SingleActivator(LogicalKeyboardKey.equal, shift: true):
-            () => zoom.zoomAt(
-              zoom.scale * 1.4,
-              zoom.viewport.center(Offset.zero),
-            ),
-        const SingleActivator(LogicalKeyboardKey.numpadAdd):
-            () => zoom.zoomAt(
-              zoom.scale * 1.4,
-              zoom.viewport.center(Offset.zero),
-            ),
-        const SingleActivator(LogicalKeyboardKey.numpadSubtract):
-            () => zoom.zoomAt(
-              zoom.scale / 1.4,
-              zoom.viewport.center(Offset.zero),
-            ),
-        const SingleActivator(LogicalKeyboardKey.minus):
-            () => zoom.zoomAt(
-              zoom.scale / 1.4,
-              zoom.viewport.center(Offset.zero),
-            ),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _change(-1),
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () => _change(1),
-      },
-      child: Focus(
-        autofocus: true,
-        child:
-            widget.permission == null
-                ? content()
-                : ListenableBuilder(
-                  listenable: widget.permission!,
-                  builder: (_, __) => content(),
-                ),
+    return Theme(
+      data: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.white,
+          brightness: Brightness.dark,
+        ),
+      ),
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape):
+              () => Navigator.maybePop(context),
+          const SingleActivator(LogicalKeyboardKey.digit0): _resetZoom,
+          const SingleActivator(LogicalKeyboardKey.equal):
+              () =>
+                  _zoomTo(zoom.scale * 1.4, zoom.viewport.center(Offset.zero)),
+          const SingleActivator(LogicalKeyboardKey.equal, shift: true):
+              () =>
+                  _zoomTo(zoom.scale * 1.4, zoom.viewport.center(Offset.zero)),
+          const SingleActivator(LogicalKeyboardKey.numpadAdd):
+              () =>
+                  _zoomTo(zoom.scale * 1.4, zoom.viewport.center(Offset.zero)),
+          const SingleActivator(LogicalKeyboardKey.numpadSubtract):
+              () =>
+                  _zoomTo(zoom.scale / 1.4, zoom.viewport.center(Offset.zero)),
+          const SingleActivator(LogicalKeyboardKey.minus):
+              () =>
+                  _zoomTo(zoom.scale / 1.4, zoom.viewport.center(Offset.zero)),
+          const SingleActivator(LogicalKeyboardKey.arrowLeft):
+              () => _change(-1),
+          const SingleActivator(LogicalKeyboardKey.arrowRight):
+              () => _change(1),
+        },
+        child: Focus(
+          autofocus: true,
+          child:
+              widget.permission == null
+                  ? content()
+                  : ListenableBuilder(
+                    listenable: widget.permission!,
+                    builder: (_, __) => content(),
+                  ),
+        ),
       ),
     );
   }

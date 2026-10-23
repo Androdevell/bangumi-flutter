@@ -103,9 +103,14 @@ Future<String?> showCommentComposer(
   String target = '',
   String username = '',
   CommentComposerController? controller,
-}) => showDialog<String>(
+}) => showModalBottomSheet<String>(
   context: context,
-  barrierDismissible: false,
+  isScrollControlled: true,
+  useSafeArea: true,
+  isDismissible: false,
+  enableDrag: false,
+  showDragHandle: false,
+  constraints: const BoxConstraints(maxWidth: 760),
   builder:
       (_) => _CommentComposer(
         title: title,
@@ -147,6 +152,7 @@ class _CommentComposerState extends State<_CommentComposer> {
       _closing = false,
       _syncing = false,
       _confirmed = false;
+  bool _formatting = false;
   AppLocalizations get strings => AppLocalizations.of(context);
   String get _failureKey {
     final error = _model.state.error;
@@ -365,19 +371,16 @@ class _CommentComposerState extends State<_CommentComposer> {
   @override
   Widget build(BuildContext context) {
     final state = _model.state;
-    final compact = MediaQuery.sizeOf(context).width < 600;
     final content = Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
           child: Row(
             children: [
-              CircleAvatar(
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                child: const Icon(Icons.edit_note_rounded),
-              ),
-              const SizedBox(width: 12),
+              const Icon(Icons.edit_note_rounded),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -388,11 +391,6 @@ class _CommentComposerState extends State<_CommentComposer> {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    if (widget.username.isNotEmpty)
-                      Text(
-                        '@${widget.username}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
                   ],
                 ),
               ),
@@ -415,13 +413,14 @@ class _CommentComposerState extends State<_CommentComposer> {
           ),
         const SizedBox(height: 8),
         const Divider(height: 1),
-        _toolbar(),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child:
-                state.preview
-                    ? DecoratedBox(
+        if (_formatting) _toolbar(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child:
+              state.preview
+                  ? SizedBox(
+                    height: 140,
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
                         color:
                             Theme.of(context).colorScheme.surfaceContainerLow,
@@ -431,29 +430,28 @@ class _CommentComposerState extends State<_CommentComposer> {
                         padding: const EdgeInsets.all(16),
                         child: BangumiRichText(state.value.text),
                       ),
-                    )
-                    : TextField(
-                      key: const ValueKey('comment-input'),
-                      controller: _text,
-                      focusNode: _focus,
-                      autofocus: true,
-                      readOnly: _model.busy,
-                      expands: true,
-                      maxLines: null,
-                      minLines: null,
-                      textAlignVertical: TextAlignVertical.top,
-                      maxLength: _model.maxLength,
-                      maxLengthEnforcement: MaxLengthEnforcement.none,
-                      decoration: InputDecoration(
-                        hintText: widget.hint,
-                        counterText: '',
-                        contentPadding: const EdgeInsets.all(16),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                    ),
+                  )
+                  : TextField(
+                    key: const ValueKey('comment-input'),
+                    controller: _text,
+                    focusNode: _focus,
+                    autofocus: true,
+                    readOnly: _model.busy,
+                    maxLines: 5,
+                    minLines: 2,
+                    textAlignVertical: TextAlignVertical.top,
+                    maxLength: _model.maxLength,
+                    maxLengthEnforcement: MaxLengthEnforcement.none,
+                    decoration: InputDecoration(
+                      hintText: widget.hint,
+                      counterText: '',
+                      contentPadding: const EdgeInsets.all(16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-          ),
+                  ),
         ),
         if (state.status == CommentSubmitStatus.failed ||
             state.status == CommentSubmitStatus.unknown ||
@@ -480,24 +478,32 @@ class _CommentComposerState extends State<_CommentComposer> {
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 16, 4),
-          child: Row(
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed:
-                        _model.busy
-                            ? null
-                            : () => _model.dispatch(PreviewComment()),
-                    icon: Icon(
-                      state.preview
-                          ? Icons.edit_outlined
-                          : Icons.visibility_outlined,
-                    ),
-                    label: Text(strings.t(state.preview ? 'edit' : 'preview')),
-                  ),
+              _tool(Icons.emoji_emotions_outlined, 'emoticons', _emojis),
+              _tool(
+                Icons.image_outlined,
+                'insertImage',
+                () => _insertUrl(true),
+              ),
+              IconButton(
+                tooltip: strings.t('more'),
+                isSelected: _formatting,
+                onPressed: () => setState(() => _formatting = !_formatting),
+                icon: const Icon(Icons.text_format),
+              ),
+              TextButton.icon(
+                onPressed:
+                    _model.busy
+                        ? null
+                        : () => _model.dispatch(PreviewComment()),
+                icon: Icon(
+                  state.preview
+                      ? Icons.edit_outlined
+                      : Icons.visibility_outlined,
                 ),
+                label: Text(strings.t(state.preview ? 'edit' : 'preview')),
               ),
               const SizedBox(width: 8),
               Text(
@@ -551,51 +557,34 @@ class _CommentComposerState extends State<_CommentComposer> {
         },
         const SingleActivator(LogicalKeyboardKey.escape): _close,
       },
-      child: LayoutBuilder(
-        builder:
-            (context, constraints) => SingleChildScrollView(
-              child: SizedBox(
-                height: math.max(
-                  constraints.maxHeight,
-                  420 +
-                      MediaQuery.textScalerOf(context).scale(100) +
-                      (state.status == CommentSubmitStatus.unknown ||
-                              state.status == CommentSubmitStatus.stale ||
-                              state.status == CommentSubmitStatus.failed
-                          ? 140
-                          : 0),
-                ),
-                child: SafeArea(child: content),
-              ),
-            ),
-      ),
+      child: SingleChildScrollView(child: SafeArea(top: false, child: content)),
     );
     return PopScope(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _close();
       },
-      child:
-          compact
-              ? Dialog.fullscreen(child: shortcuts)
-              : Dialog(
-                backgroundColor:
-                    Theme.of(context).colorScheme.surfaceContainerLowest,
-                clipBehavior: Clip.antiAlias,
-                child: SizedBox(
-                  width: 820,
-                  height: math.max(
-                    260,
-                    math.min(
-                      680,
-                      MediaQuery.sizeOf(context).height -
-                          MediaQuery.viewInsetsOf(context).bottom -
-                          48,
-                    ),
-                  ),
-                  child: shortcuts,
-                ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: ConstrainedBox(
+          key: const ValueKey('compact-comment-sheet'),
+          constraints: BoxConstraints(
+            maxHeight: math.min(
+              480,
+              math.max(
+                0,
+                (MediaQuery.sizeOf(context).height -
+                        MediaQuery.viewInsetsOf(context).bottom -
+                        MediaQuery.paddingOf(context).top) *
+                    .72,
               ),
+            ),
+          ),
+          child: shortcuts,
+        ),
+      ),
     );
   }
 }

@@ -41,6 +41,12 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.bgm.irena/media",
+            io.flutter.plugin.common.StandardMethodCodec.INSTANCE,
+            flutterEngine.dartExecutor.binaryMessenger.makeBackgroundTaskQueue(),
+        ).setMethodCallHandler(ImageSaveBridge(this))
         linkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.bgm.irena/links").also { channel ->
             channel.setMethodCallHandler { call, result ->
                 if (call.method == "initialLink") result.success(linkFrom(intent)) else result.notImplemented()

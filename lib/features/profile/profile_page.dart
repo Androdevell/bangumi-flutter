@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../notifications/notification_host.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/community_models.dart';
@@ -303,6 +304,7 @@ class _ProfilePageState extends State<ProfilePage> {
             PageHeader(
               title: strings.t('profile'),
               subtitle: strings.t('profileSubtitle'),
+              actions: const [NotificationButton()],
             ),
             const SizedBox(height: 22),
             SurfaceBlock(

@@ -2,6 +2,13 @@
   "lib/features/subject/": ["test/repository_test.dart", "test/community_extensions_test.dart", "test/link_image_tag_test.dart", "test/episode_progress_session_test.dart"],
   "lib/features/discover/": ["test/performance_security_hardening_test.dart", "test/presentation_performance_test.dart"],
   "lib/features/browse/tag_page.dart": ["test/link_image_tag_test.dart"],
-  "lib/widgets/image_viewer_page.dart": ["test/link_image_tag_test.dart"],
+  "lib/widgets/image_viewer_page.dart": ["test/link_image_tag_test.dart", "test/notification_composer_viewer_test.dart"],
+  "lib/widgets/comment_composer.dart": ["test/comment_experience_test.dart", "test/notification_composer_viewer_test.dart"],
+  "lib/features/community/comment_reading_page.dart": ["test/comment_experience_test.dart"],
+  "lib/features/notifications/": ["test/notification_composer_viewer_test.dart"],
+  "lib/domain/models/notification.dart": ["test/notification_composer_viewer_test.dart"],
+  "lib/domain/repositories/notification_repository.dart": ["test/notification_composer_viewer_test.dart"],
+  "lib/data/repositories/remote_notification_repository.dart": ["test/notification_composer_viewer_test.dart"],
+  "lib/core/media/image_save_service.dart": ["test/notification_composer_viewer_test.dart"],
   "lib/widgets/episode_progress_panel.dart": ["test/community_extensions_test.dart", "test/link_image_tag_test.dart"]
 }
