@@ -42,6 +42,18 @@
                 <data android:host="bgm.tv" />
                 <data android:host="bangumi.tv" />
                 <data android:host="chii.in" />
+                <data android:pathPrefix="/subject/" />
+                <data android:pathPrefix="/ep/" />
+                <data android:pathPrefix="/person/" />
+                <data android:pathPrefix="/character/" />
+                <data android:pathPrefix="/user/" />
+                <data android:pathPrefix="/blog/" />
+                <data android:pathPrefix="/group/topic/" />
+                <data android:pathPrefix="/anime/tag/" />
+                <data android:pathPrefix="/book/tag/" />
+                <data android:pathPrefix="/music/tag/" />
+                <data android:pathPrefix="/game/tag/" />
+                <data android:pathPrefix="/real/tag/" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -85,6 +97,9 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

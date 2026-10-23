@@ -68,6 +68,7 @@ class CommunityReplyList extends StatelessWidget {
     this.header,
     this.authorUsername = '',
     this.canReact = true,
+    this.showEmptySummary = true,
     this.onReply,
   });
 
@@ -75,6 +76,7 @@ class CommunityReplyList extends StatelessWidget {
   final Widget? header;
   final String authorUsername;
   final bool canReact;
+  final bool showEmptySummary;
   final void Function(CommunityReply root, CommunityReply reply)? onReply;
   final String currentUsername;
   final ValueChanged<String> onUserTap;
@@ -94,18 +96,19 @@ class CommunityReplyList extends StatelessWidget {
                   ? Column(
                     children: [
                       if (header != null) header!,
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            items.isEmpty
-                                ? AppLocalizations.of(context).t('noComments')
-                                : '${AppLocalizations.of(context).t('loadedComments')} · ${items.length}',
-                            style: Theme.of(context).textTheme.labelLarge,
+                      if (items.isNotEmpty || showEmptySummary)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              items.isEmpty
+                                  ? AppLocalizations.of(context).t('noComments')
+                                  : '${AppLocalizations.of(context).t('loadedComments')} · ${items.length}',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   )
                   : _ReplyTile(

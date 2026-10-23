@@ -97,13 +97,14 @@ void main() {
           'sort': 'rank',
           'page': '2',
           'tags': '日文 + # /',
+          'tagsCat': 'subject',
         });
         return http.Response(
           jsonEncode({
             'data': [
               {'id': 4, 'name': 'Book'},
             ],
-            'total': 21,
+            'total': 2,
           }),
           200,
         );

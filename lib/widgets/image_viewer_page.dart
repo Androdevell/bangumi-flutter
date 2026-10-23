@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -112,6 +113,10 @@ class _ImageViewerPageState extends State<ImageViewerPage>
   Offset _gestureStart = Offset.zero;
   double _swipeDistance = 0;
   bool _swipeEligible = false;
+  Matrix4 _gestureMatrix = Matrix4.identity();
+  Offset _gestureScene = Offset.zero;
+  int _gesturePointers = 0;
+  double _gestureScale = 1;
   bool get _allowed => mounted && widget.allowed?.call() != false;
 
   void _zoomTo(double scale, Offset point) {
@@ -336,32 +341,77 @@ class _ImageViewerPageState extends State<ImageViewerPage>
                   final size = Size(box.maxWidth, box.maxHeight);
                   if (size != zoom.viewport) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) zoom.configure(size);
+                      if (mounted) {
+                        _animation.stop();
+                        zoom.configure(size);
+                      }
                     });
                   }
                   return Stack(
                     children: [
                       Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onLongPress: _imageActions,
-                          onSecondaryTap: _imageActions,
-                          onDoubleTapDown: (d) => anchor = d.localPosition,
-                          onDoubleTap:
-                              () =>
-                                  _zoomTo(zoom.scale > 1.05 ? 1 : 2.5, anchor),
-                          child: InteractiveViewer(
-                            transformationController: zoom,
-                            minScale: 1,
-                            maxScale: 8,
-                            trackpadScrollCausesScale: true,
-                            onInteractionStart: (details) {
+                        child: Listener(
+                          onPointerSignal: (event) {
+                            if (event is PointerScrollEvent) {
+                              GestureBinding.instance.pointerSignalResolver
+                                  .register(event, (_) {
+                                    _animation.stop();
+                                    zoom.zoomAt(
+                                      zoom.scale *
+                                          math.exp(-event.scrollDelta.dy / 200),
+                                      event.localPosition,
+                                    );
+                                  });
+                            }
+                          },
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onLongPress: _imageActions,
+                            onSecondaryTap: _imageActions,
+                            onDoubleTapDown: (d) => anchor = d.localPosition,
+                            onDoubleTap:
+                                () => _zoomTo(
+                                  zoom.scale > 1.05 ? 1 : 2.5,
+                                  anchor,
+                                ),
+                            onScaleStart: (details) {
                               _animation.stop();
                               _gestureStart = details.focalPoint;
+                              _gestureMatrix = Matrix4.copy(zoom.value);
+                              _gestureScene = zoom.toScene(
+                                details.localFocalPoint,
+                              );
+                              _gesturePointers = details.pointerCount;
+                              _gestureScale = 1;
                               _swipeDistance = 0;
                               _swipeEligible = zoom.scale <= 1.05;
                             },
-                            onInteractionUpdate: (details) {
+                            onScaleUpdate: (details) {
+                              if (_gesturePointers != details.pointerCount) {
+                                _gesturePointers = details.pointerCount;
+                                _gestureMatrix = Matrix4.copy(zoom.value);
+                                _gestureScene = zoom.toScene(
+                                  details.localFocalPoint,
+                                );
+                                _gestureScale = details.scale;
+                                _swipeEligible = false;
+                                return;
+                              }
+                              final scale = (_gestureMatrix
+                                          .getMaxScaleOnAxis() *
+                                      details.scale /
+                                      _gestureScale)
+                                  .clamp(1.0, 8.0);
+                              zoom.value =
+                                  Matrix4.identity()
+                                    ..translate(
+                                      details.localFocalPoint.dx -
+                                          _gestureScene.dx * scale,
+                                      details.localFocalPoint.dy -
+                                          _gestureScene.dy * scale,
+                                    )
+                                    ..scale(scale);
+                              zoom.clampBounds();
                               _swipeDistance =
                                   details.focalPoint.dx - _gestureStart.dx;
                               if (details.pointerCount > 1 ||
@@ -369,8 +419,7 @@ class _ImageViewerPageState extends State<ImageViewerPage>
                                 _swipeEligible = false;
                               }
                             },
-                            onInteractionEnd: (details) {
-                              zoom.clampBounds();
+                            onScaleEnd: (details) {
                               final velocity =
                                   details.velocity.pixelsPerSecond.dx;
                               if (_swipeEligible &&
@@ -380,10 +429,21 @@ class _ImageViewerPageState extends State<ImageViewerPage>
                                 _change(velocity < 0 ? 1 : -1);
                               }
                             },
-                            child: SizedBox(
-                              width: size.width,
-                              height: size.height,
-                              child: RepaintBoundary(child: _image(s)),
+                            child: ClipRect(
+                              child: ValueListenableBuilder<Matrix4>(
+                                key: const ValueKey('viewer-transform'),
+                                valueListenable: zoom,
+                                builder:
+                                    (_, matrix, child) => Transform(
+                                      transform: matrix,
+                                      child: child,
+                                    ),
+                                child: SizedBox(
+                                  width: size.width,
+                                  height: size.height,
+                                  child: RepaintBoundary(child: _image(s)),
+                                ),
+                              ),
                             ),
                           ),
                         ),

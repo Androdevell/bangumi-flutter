@@ -17,6 +17,8 @@ import 'repositories/remote_collection_repository.dart';
 import 'repositories/remote_user_repository.dart';
 import '../domain/repositories/episode_progress_repository.dart';
 import '../domain/repositories/tag_repository.dart';
+import '../domain/repositories/blog_repository.dart';
+import '../domain/models/blog.dart';
 import 'repositories/remote_episode_progress_repository.dart';
 import '../domain/repositories/nested_comment_repository.dart';
 import '../domain/repositories/group_repository.dart';
@@ -200,6 +202,7 @@ class RemoteBangumiRepository
     implements
         BangumiRepository,
         TagRepository,
+        BlogRepository,
         EpisodeMetadataRepository,
         SubjectPagingRepository,
         CollectionFeatureRepository,
@@ -609,6 +612,7 @@ class RemoteBangumiRepository
         query.tag.trim().isEmpty ||
         query.tag.length > 200 ||
         page < 1 ||
+        !const {'subject', 'meta'}.contains(query.category) ||
         !const {'rank', 'date', 'collects'}.contains(query.sort)) {
       throw const ApiException('fieldInvalid');
     }
@@ -619,12 +623,52 @@ class RemoteBangumiRepository
         'sort': query.sort,
         'page': '$page',
         'tags': query.tag,
+        'tagsCat': query.category,
       },
     );
-    return _pagedSubjects(
-      raw,
-      fallbackOffset: (page - 1) * 20,
-      fallbackLimit: 20,
+    if (raw is! Map ||
+        raw['data'] is! List ||
+        raw['total'] is! num ||
+        (raw['total'] as num) < 0) {
+      throw const ApiException('responseInvalid');
+    }
+    final items = _items(raw).map(Subject.fromJson).toList();
+    // 私有接口的 total 表示总页数，使用页单位保留末页语义。
+    return Paged<Subject>(
+      items: items,
+      offset: page - 1,
+      limit: 1,
+      total: null,
+      hasMoreOverride: page < ((raw['total'] as num?)?.toInt() ?? page),
+    );
+  }
+
+  @override
+  Future<ComposeBlogDetail> fetchBlog(int id) async {
+    if (id <= 0) throw const ApiException('fieldInvalid');
+    final blog = ComposeBlog.fromJson(_map(await _api.get('p1/blogs/$id')));
+    final errors = <String, Object>{};
+    Future<List<T>> section<T>(
+      String name,
+      T Function(Map<String, dynamic>) parse,
+    ) async {
+      try {
+        final raw = await _api.get('p1/blogs/$id/$name');
+        if (raw is! List) throw const ApiException('responseInvalid');
+        return _items(raw).map(parse).toList();
+      } on Object catch (error) {
+        errors[name] = error;
+        return [];
+      }
+    }
+
+    final subjects = section('subjects', Subject.fromJson);
+    final comments = section('comments', CommunityReply.fromJson);
+    return ComposeBlogDetail(
+      blog,
+      await subjects,
+      await comments,
+      errors: errors,
     );
   }
 

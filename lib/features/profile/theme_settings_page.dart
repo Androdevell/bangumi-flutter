@@ -7,6 +7,7 @@ import '../../core/localization/app_localizations.dart';
 import '../../core/settings/theme_preferences.dart';
 import '../../widgets/common.dart';
 import '../../widgets/settings_choice.dart';
+import '../../widgets/theme_color_palette.dart';
 
 class ThemeSettingsPage extends StatefulWidget {
   const ThemeSettingsPage({super.key, required this.controller});
@@ -86,7 +87,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   Widget build(BuildContext context) {
     final s = AppLocalizations.of(context);
     final preview =
-        Theme.of(context).brightness == Brightness.dark
+        (_draft.mode == ThemeMode.dark ||
+                (_draft.mode == ThemeMode.system &&
+                    Theme.of(context).brightness == Brightness.dark))
             ? AppTheme.dark(seed: _draft.seed)
             : AppTheme.light(seed: _draft.seed);
     return Scaffold(
@@ -163,7 +166,21 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               ],
             ),
             const SizedBox(height: 20),
+            ThemeColorPalette(
+              color: _draft.seed,
+              onChanged:
+                  _busy
+                      ? null
+                      : (color) => _select(
+                        _draft.copyWith(
+                          source: ThemeColorSource.custom,
+                          seed: color,
+                        ),
+                      ),
+            ),
+            const SizedBox(height: 20),
             TextField(
+              key: const ValueKey('theme-seed-hex'),
               controller: _hex,
               enabled: !_busy,
               maxLength: 7,
@@ -230,6 +247,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
             if (_busy) const LinearProgressIndicator(),
             const SizedBox(height: 18),
             FilledButton(
+              key: const ValueKey('theme-apply'),
               onPressed: _busy || _error == 'themeInvalid' ? null : _apply,
               child: Text(s.t('themeApply')),
             ),

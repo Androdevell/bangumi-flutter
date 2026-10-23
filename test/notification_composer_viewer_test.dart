@@ -111,9 +111,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       final reads = cache.reads;
-      final viewer = find.byType(InteractiveViewer);
+      final viewer = find.byKey(const ValueKey('viewer-transform'));
       final zoom =
-          tester.widget<InteractiveViewer>(viewer).transformationController!;
+          tester.widget<ValueListenableBuilder<Matrix4>>(viewer).valueListenable
+              as ImageZoomController;
       const point = Offset(180, 180);
       await tester.tapAt(point);
       await tester.pump(const Duration(milliseconds: 60));

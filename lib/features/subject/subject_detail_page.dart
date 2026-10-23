@@ -28,6 +28,8 @@ import '../../widgets/episode_progress_panel.dart';
 import 'episode_progress_controller.dart';
 import '../browse/tag_page.dart';
 import '../../domain/repositories/tag_repository.dart';
+import '../blog/blog_detail_page.dart';
+import '../rakuen/topic_detail_page.dart';
 
 class SubjectDetailPage extends StatefulWidget {
   const SubjectDetailPage({
@@ -550,6 +552,17 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                     'reviews',
                                     (value) => _ReviewSection(
                                       items: value.reviews,
+                                      onOpen:
+                                          (item) => Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder:
+                                                  (_) => BlogDetailPage(
+                                                    id: item.id,
+                                                    repository:
+                                                        widget.repository,
+                                                  ),
+                                            ),
+                                          ),
                                       onUserTap: _openUser,
                                     ),
                                   ),
@@ -558,6 +571,24 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                     'topics',
                                     (value) => _TopicSection(
                                       items: value.topics,
+                                      onOpen:
+                                          (item) => Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder:
+                                                  (_) => TopicDetailPage(
+                                                    topic: Topic(
+                                                      id: item.id,
+                                                      type: 'subject',
+                                                      title: item.title,
+                                                      group: '',
+                                                      replies: item.replies,
+                                                      updatedAt: item.updatedAt,
+                                                    ),
+                                                    repository:
+                                                        widget.repository,
+                                                  ),
+                                            ),
+                                          ),
                                       onUserTap: _openUser,
                                     ),
                                   ),
@@ -1281,9 +1312,14 @@ class _IndexSection extends StatelessWidget {
 }
 
 class _ReviewSection extends StatelessWidget {
-  const _ReviewSection({required this.items, required this.onUserTap});
+  const _ReviewSection({
+    required this.items,
+    required this.onUserTap,
+    required this.onOpen,
+  });
 
   final List<SubjectReview> items;
+  final ValueChanged<SubjectReview> onOpen;
   final ValueChanged<String> onUserTap;
 
   @override
@@ -1295,42 +1331,50 @@ class _ReviewSection extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final item = items[index];
-        return SurfaceBlock(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _Avatar(
-                    imageUrl: item.avatarUrl,
-                    name: item.userName,
-                    onTap: () => onUserTap(item.username),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Text('${item.userName} · ${_dateText(item.updatedAt)}'),
-                      ],
+        return InkWell(
+          onTap: () => onOpen(item),
+          child: SurfaceBlock(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _Avatar(
+                      imageUrl: item.avatarUrl,
+                      name: item.userName,
+                      onTap: () => onUserTap(item.username),
                     ),
-                  ),
-                  _CountLabel(icon: Icons.forum_outlined, count: item.replies),
-                ],
-              ),
-              if (item.summary.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  item.summary,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Text(
+                            '${item.userName} · ${_dateText(item.updatedAt)}',
+                          ),
+                        ],
+                      ),
+                    ),
+                    _CountLabel(
+                      icon: Icons.forum_outlined,
+                      count: item.replies,
+                    ),
+                  ],
                 ),
+                if (item.summary.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    item.summary,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         );
       },
@@ -1339,9 +1383,14 @@ class _ReviewSection extends StatelessWidget {
 }
 
 class _TopicSection extends StatelessWidget {
-  const _TopicSection({required this.items, required this.onUserTap});
+  const _TopicSection({
+    required this.items,
+    required this.onUserTap,
+    required this.onOpen,
+  });
 
   final List<SubjectTopic> items;
+  final ValueChanged<SubjectTopic> onOpen;
   final ValueChanged<String> onUserTap;
 
   @override
@@ -1354,6 +1403,7 @@ class _TopicSection extends StatelessWidget {
       itemBuilder: (context, index) {
         final item = items[index];
         return ListTile(
+          onTap: () => onOpen(item),
           leading: _Avatar(
             imageUrl: item.avatarUrl,
             name: item.userName,

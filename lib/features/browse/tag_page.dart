@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/open_website.dart';
 import '../../core/models.dart';
 import '../../core/paged_controller.dart';
 import '../../core/localization/app_localizations.dart';
@@ -84,6 +84,10 @@ class _TagPageState extends State<TagPage> {
                         SliverToBoxAdapter(
                           child: Column(
                             children: [
+                              if (!pages.loading &&
+                                  pages.error == null &&
+                                  pages.items.isEmpty)
+                                EmptyView(message: s.t('tagEmpty')),
                               if (pages.error != null)
                                 NetworkErrorView(
                                   error: pages.error!,
@@ -101,7 +105,8 @@ class _TagPageState extends State<TagPage> {
                                 ),
                               TextButton(
                                 onPressed:
-                                    () => launchUrl(
+                                    () => openWebsite(
+                                      context,
                                       Uri(
                                         scheme: 'https',
                                         host: 'bgm.tv',
@@ -117,7 +122,6 @@ class _TagPageState extends State<TagPage> {
                                           widget.query.tag,
                                         ],
                                       ),
-                                      mode: LaunchMode.externalApplication,
                                     ),
                                 child: Text(s.t('tagWebsite')),
                               ),

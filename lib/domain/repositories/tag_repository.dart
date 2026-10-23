@@ -4,9 +4,14 @@ import '../../core/paged.dart';
 
 @immutable
 class ComposeTagQuery {
-  const ComposeTagQuery(this.type, this.tag, {this.sort = 'rank'});
+  const ComposeTagQuery(
+    this.type,
+    this.tag, {
+    this.sort = 'rank',
+    this.category = 'subject',
+  });
   final int type;
-  final String tag, sort;
+  final String tag, sort, category;
 }
 
 abstract interface class TagRepository {

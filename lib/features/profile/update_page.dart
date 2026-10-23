@@ -6,6 +6,7 @@ import '../../core/localization/app_localizations.dart';
 import '../../core/update/app_update_service.dart';
 import '../../core/update/update_download_service.dart';
 import '../../widgets/common.dart';
+import '../../widgets/release_markdown.dart';
 
 class UpdatePage extends StatefulWidget {
   const UpdatePage({super.key});
@@ -97,7 +98,7 @@ class _UpdatePageState extends State<UpdatePage> {
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             const SizedBox(height: 12),
-                            SelectableText(
+                            ReleaseMarkdown(
                               result.notes.isEmpty
                                   ? s.t('updateNoNotes')
                                   : result.notes,

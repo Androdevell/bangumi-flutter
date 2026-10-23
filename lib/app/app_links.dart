@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/navigation/bangumi_link.dart';
@@ -13,6 +14,9 @@ import '../features/person/person_detail_page.dart';
 import '../features/user/user_profile_page.dart';
 import '../features/rakuen/topic_detail_page.dart';
 import '../widgets/common.dart';
+import '../features/browse/tag_page.dart';
+import '../domain/repositories/tag_repository.dart';
+import '../features/blog/blog_detail_page.dart';
 
 class AppLinkScope extends InheritedWidget {
   const AppLinkScope({
@@ -31,22 +35,39 @@ class AppLinkScope extends InheritedWidget {
 abstract final class AppLinkDispatcher {
   static final pending = ValueNotifier<String?>(null);
   static const channel = MethodChannel('com.bgm.irena/links');
+  static String? _lastLink;
+  static DateTime? _lastReceived;
+  static void receive(String text) {
+    final target = BangumiLinkParser.parse(text);
+    if (target == null) return;
+    final key = target.uri.toString();
+    final now = DateTime.now();
+    if (_lastLink == key &&
+        _lastReceived != null &&
+        now.difference(_lastReceived!) < const Duration(seconds: 1)) {
+      return;
+    }
+    _lastLink = key;
+    _lastReceived = now;
+    pending.value = key;
+  }
+
   static Future<void> initialize(List<String> arguments) async {
     for (final argument in arguments) {
-      if (BangumiLinkParser.parse(argument) != null) pending.value = argument;
+      receive(argument);
     }
     channel.setMethodCallHandler((call) async {
       if (call.method == 'link' &&
           call.arguments is String &&
           BangumiLinkParser.parse(call.arguments as String) != null) {
-        pending.value = call.arguments as String;
+        receive(call.arguments as String);
       }
     });
     if (Platform.isAndroid) {
       try {
         final initial = await channel.invokeMethod<String>('initialLink');
         if (initial != null && BangumiLinkParser.parse(initial) != null) {
-          pending.value = initial;
+          receive(initial);
         }
       } on MissingPluginException {
         /* 测试和不支持的宿主不注册入口。 */
@@ -71,7 +92,18 @@ abstract final class AppLinkDispatcher {
       'character' => CharacterDetailPage(characterId: id, repository: repo),
       'person' => PersonDetailPage(personId: id, repository: repo),
       'user' => UserProfilePage(username: target.key, repository: repo),
-      _ => TopicDetailPage(
+      'blog' => BlogDetailPage(id: id, repository: repo),
+      'tag' => TagPage(
+        query: ComposeTagQuery(switch (target.uri.pathSegments.first) {
+          'book' => 1,
+          'music' => 3,
+          'game' => 4,
+          'real' => 6,
+          _ => 2,
+        }, target.key),
+        repository: repo,
+      ),
+      'groupTopic' || 'subjectTopic' => TopicDetailPage(
         topic: Topic(
           id: id,
           type: target.kind == 'groupTopic' ? 'group' : 'subject',
@@ -82,10 +114,12 @@ abstract final class AppLinkDispatcher {
         ),
         repository: repo,
       ),
+      _ => null,
     };
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => page));
+    if (page == null) return false;
+    unawaited(
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page)),
+    );
     return true;
   }
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/open_website.dart';
 import '../../app/app_links.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../domain/models/notification.dart';
@@ -36,7 +36,8 @@ class _NotificationPageState extends State<NotificationPage> {
     }
     try {
       if (!await AppLinkDispatcher.open(context, item.target)) {
-        await launchUrl(item.target, mode: LaunchMode.externalApplication);
+        if (!mounted) return;
+        await openWebsite(context, item.target);
       }
     } on Object {
       if (mounted) {

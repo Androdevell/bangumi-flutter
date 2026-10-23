@@ -49,7 +49,21 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler(ImageSaveBridge(this))
         linkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.bgm.irena/links").also { channel ->
             channel.setMethodCallHandler { call, result ->
-                if (call.method == "initialLink") result.success(linkFrom(intent)) else result.notImplemented()
+                when (call.method) {
+                    "initialLink" -> result.success(linkFrom(intent))
+                    "openLinkSettings" -> {
+                        try {
+                            startActivity(Intent(android.provider.Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS,
+                                android.net.Uri.parse("package:$packageName")))
+                            result.success(true)
+                        } catch (_: android.content.ActivityNotFoundException) {
+                            startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.parse("package:$packageName")))
+                            result.success(true)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
             }
         }
         val updateChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.bgm.irena/update")

@@ -1,5 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'dart:io';
+import '../../app/app_links.dart';
 import '../notifications/notification_host.dart';
 
 import '../../core/auth/auth_service.dart';
@@ -585,17 +587,6 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
-                  ListTile(
-                    leading: const Icon(Icons.palette_outlined),
-                    title: Text(strings.t('appearance')),
-                    subtitle: Text(
-                      Theme.of(context).brightness == Brightness.dark
-                          ? strings.t('darkTheme')
-                          : strings.t('lightTheme'),
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: widget.onToggleTheme,
-                  ),
                   if (AppThemeScope.maybeOf(context)
                       case final ThemeController controller)
                     ListTile(
@@ -610,6 +601,27 @@ class _ProfilePageState extends State<ProfilePage> {
                                       ThemeSettingsPage(controller: controller),
                             ),
                           ),
+                    ),
+                  if (Platform.isAndroid)
+                    ListTile(
+                      leading: const Icon(Icons.link),
+                      title: Text(strings.t('supportedLinks')),
+                      subtitle: Text(strings.t('supportedLinksHint')),
+                      onTap: () async {
+                        try {
+                          await AppLinkDispatcher.channel.invokeMethod<bool>(
+                            'openLinkSettings',
+                          );
+                        } on Object {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(strings.t('operationFailed')),
+                              ),
+                            );
+                          }
+                        }
+                      },
                     ),
                   const Divider(height: 1),
                   ListTile(
