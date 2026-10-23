@@ -12,6 +12,16 @@ class LazyTabView extends StatefulWidget {
 class _LazyTabViewState extends State<LazyTabView> {
   TabController? _controller;
   final Set<int> _visited = {};
+  final Map<int, Widget> _pages = {};
+  int? _active;
+  @override
+  void didUpdateWidget(covariant LazyTabView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 父级刷新时重新取得数据、语言和会话；标签动画通知复用原有页面。
+    _pages.clear();
+    _visited.removeWhere((index) => index >= widget.builders.length);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -20,11 +30,18 @@ class _LazyTabViewState extends State<LazyTabView> {
       _controller?.removeListener(_changed);
       _controller = next..addListener(_changed);
       _visited.add(next.index);
+      _active = next.index;
     }
   }
 
   void _changed() {
-    if (mounted) setState(() => _visited.add(_controller!.index));
+    final index = _controller!.index;
+    if (mounted && _active != index) {
+      setState(() {
+        _active = index;
+        _visited.add(index);
+      });
+    }
   }
 
   @override
@@ -41,7 +58,9 @@ class _LazyTabViewState extends State<LazyTabView> {
           enabled: _controller!.index == index,
           child:
               _visited.contains(index)
-                  ? _RetainedTab(child: widget.builders[index]())
+                  ? _RetainedTab(
+                    child: _pages.putIfAbsent(index, widget.builders[index]),
+                  )
                   : const SizedBox.shrink(),
         ),
     ],

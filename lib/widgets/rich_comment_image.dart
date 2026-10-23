@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/media/rich_image_policy.dart';
 import '../core/network/app_image_cache.dart';
@@ -21,6 +20,10 @@ class _RichCommentImageState extends State<RichCommentImage> {
   Future<void> _retry(Uri uri) async {
     try {
       await AppImageCache.manager.removeFile(uri.toString());
+      await createViewerImageProvider(
+        uri.toString(),
+        AppImageCache.manager,
+      ).evict();
       if (mounted) setState(() => _revision++);
     } on Object {
       _showFailure();
@@ -120,20 +123,24 @@ class _RichCommentImageState extends State<RichCommentImage> {
               ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: CachedNetworkImage(
+            child: Image(
               key: ValueKey('${uri}_$_revision'),
-              imageUrl: uri.toString(),
-              cacheManager: AppImageCache.manager,
-              memCacheWidth: 1200,
+              image: createViewerImageProvider(
+                uri.toString(),
+                AppImageCache.manager,
+              ),
               fit: BoxFit.contain,
-              placeholder:
-                  (_, __) => const SizedBox(
-                    height: 140,
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-              errorWidget:
+              frameBuilder:
+                  (_, child, frame, sync) =>
+                      frame != null || sync
+                          ? child
+                          : const SizedBox(
+                            height: 140,
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+              errorBuilder:
                   (_, __, error) => Padding(
                     padding: const EdgeInsets.all(12),
                     child: Column(

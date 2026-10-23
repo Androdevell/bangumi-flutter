@@ -203,6 +203,7 @@ class RemoteBangumiRepository
         BangumiRepository,
         TagRepository,
         BlogRepository,
+        BlogPhotoRepository,
         EpisodeMetadataRepository,
         SubjectPagingRepository,
         CollectionFeatureRepository,
@@ -664,12 +665,50 @@ class RemoteBangumiRepository
 
     final subjects = section('subjects', Subject.fromJson);
     final comments = section('comments', CommunityReply.fromJson);
+    Future<Paged<ComposeBlogPhoto>?> loadPhotos() async {
+      try {
+        return await fetchBlogPhotos(id);
+      } on Object catch (error) {
+        errors['photos'] = error;
+        return null;
+      }
+    }
+
+    final photos = loadPhotos();
+    final photoPage = await photos;
     return ComposeBlogDetail(
       blog,
       await subjects,
       await comments,
+      photos: photoPage?.items ?? const [],
+      photoTotal: photoPage?.total ?? 0,
       errors: errors,
     );
+  }
+
+  @override
+  Future<Paged<ComposeBlogPhoto>> fetchBlogPhotos(
+    int id, {
+    int offset = 0,
+  }) async {
+    if (id <= 0 || offset < 0) throw const ApiException('fieldInvalid');
+    final raw = await _api.get(
+      'p1/blogs/$id/photos',
+      query: {'limit': '100', 'offset': '$offset'},
+    );
+    if (raw is! Map ||
+        raw['data'] is! List ||
+        raw['total'] is! num ||
+        (raw['total'] as num) < 0) {
+      throw const ApiException('responseInvalid');
+    }
+    final items = _items(raw).map(ComposeBlogPhoto.fromJson).toList();
+    final total = (raw['total'] as num).toInt();
+    if ((items.isEmpty && offset < total) ||
+        items.map((photo) => photo.id).toSet().length != items.length) {
+      throw const ApiException('responseInvalid');
+    }
+    return Paged(items: items, offset: offset, limit: 100, total: total);
   }
 
   @override

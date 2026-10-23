@@ -1,5 +1,6 @@
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +16,9 @@ abstract final class AppImageCache {
   static const _cacheKey = 'bangumiImageCacheV2';
 
   static BaseCacheManager get manager => _manager;
+
+  @visibleForTesting
+  static set testManager(BaseCacheManager value) => _manager = value;
 
   static void initialize(http.Client client) {
     if (_initialized) return;

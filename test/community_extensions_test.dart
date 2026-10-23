@@ -312,7 +312,12 @@ void main() {
     expect(find.byType(CachedNetworkImage), findsNothing);
     await tester.tap(find.text('加载图片'));
     await tester.pump();
-    expect(find.byType(CachedNetworkImage), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Image && widget.image is ResizeImage,
+      ),
+      findsOneWidget,
+    );
     expect(find.textContaining('[img='), findsNothing);
   });
   testWidgets('complete emoji selector inserts a three-digit sticker', (

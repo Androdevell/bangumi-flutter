@@ -38,11 +38,13 @@ class EpisodeProgressPanel extends StatelessWidget {
     required this.repository,
     this.expanded = false,
     this.onCollect,
+    this.onViewAll,
   });
   final EpisodeProgressController controller;
   final BangumiRepository repository;
   final bool expanded;
   final VoidCallback? onCollect;
+  final VoidCallback? onViewAll;
   Future<void> _open(BuildContext context, SubjectEpisode episode) async {
     final strings = AppLocalizations.of(context);
     final session = controller.repository.scope;
@@ -198,54 +200,52 @@ class EpisodeProgressPanel extends StatelessWidget {
 
       final known =
           items.where((e) => DateTime.tryParse(e.airdate) != null).length;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.view_module_outlined, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  strings.t('episodeProgress'),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              IconButton(
-                tooltip: strings.t('refresh'),
-                onPressed:
-                    state.loading || state.busyId != null
-                        ? null
-                        : controller.refresh,
-                icon: const Icon(Icons.refresh, size: 20),
-              ),
-            ],
-          ),
-          if (state.loading) const LinearProgressIndicator(minHeight: 2),
-          if (items.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+      final children = <Widget>[
+        Row(
+          children: [
+            const Icon(Icons.view_module_outlined, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
               child: Text(
-                '${page?.hasMore == true || (page?.offset ?? 0) > 0 ? '${strings.t('currentPage')} · ' : ''}${strings.t('aired')} ${items.where(aired).length}/$known${repository.isLoggedIn ? ' · ${strings.t('watchedEpisodes')} ${items.where((e) => e.collectionStatus == EpisodeStatus.done).length}' : ''}${page?.hasMore == true || (page?.offset ?? 0) > 0 ? ' · ${strings.t('allEpisodes')}: ${page?.total ?? '—'}' : ''}',
-                style: Theme.of(context).textTheme.bodySmall,
+                strings.t('episodeProgress'),
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-          if (state.error != null)
-            TextButton.icon(
-              onPressed: state.busyId == null ? controller.refresh : null,
-              icon: const Icon(Icons.refresh),
-              label: Text(
-                '${strings.t(state.saved ? 'progressRefreshFailed' : 'retry')} · ${state.error}',
-              ),
+            IconButton(
+              tooltip: strings.t('refresh'),
+              onPressed:
+                  state.loading || state.busyId != null
+                      ? null
+                      : controller.refresh,
+              icon: const Icon(Icons.refresh, size: 20),
             ),
-          if (items.isEmpty && !state.loading && state.error == null)
-            Text(strings.t('episodeNone')),
+          ],
+        ),
+        if (state.loading) const LinearProgressIndicator(minHeight: 2),
+        if (items.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              '${page?.hasMore == true || (page?.offset ?? 0) > 0 ? '${strings.t('currentPage')} · ' : ''}${strings.t('aired')} ${items.where(aired).length}/$known${repository.isLoggedIn ? ' · ${strings.t('watchedEpisodes')} ${items.where((e) => e.collectionStatus == EpisodeStatus.done).length}' : ''}${page?.hasMore == true || (page?.offset ?? 0) > 0 ? ' · ${strings.t('allEpisodes')}: ${page?.total ?? '—'}' : ''}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        if (state.error != null)
+          TextButton.icon(
+            onPressed: state.busyId == null ? controller.refresh : null,
+            icon: const Icon(Icons.refresh),
+            label: Text(
+              '${strings.t(state.saved ? 'progressRefreshFailed' : 'retry')} · ${state.error}',
+            ),
+          ),
+        if (items.isEmpty && !state.loading && state.error == null)
+          Text(strings.t('episodeNone')),
+        if (!expanded)
           Wrap(
             spacing: 4,
             runSpacing: 4,
             children: [
-              for (final episode in items)
+              for (final episode in items.take(24))
                 Builder(
                   builder: (context) {
                     final scheme = Theme.of(context).colorScheme;
@@ -320,48 +320,70 @@ class EpisodeProgressPanel extends StatelessWidget {
                 ),
             ],
           ),
-          if (page != null && (page.offset > 0 || page.hasMore))
-            Wrap(
-              spacing: 8,
-              children: [
-                TextButton(
-                  onPressed:
-                      page.offset > 0 && !state.loading && state.busyId == null
-                          ? () => controller.refresh(
-                            offset: (page.offset - page.limit).clamp(
-                              0,
-                              page.offset,
-                            ),
-                          )
-                          : null,
-                  child: Text(strings.t('previous')),
-                ),
-                TextButton(
-                  onPressed:
-                      page.hasMore && !state.loading && state.busyId == null
-                          ? () => controller.refresh(offset: page.nextOffset)
-                          : null,
-                  child: Text(strings.t('next')),
-                ),
-              ],
-            ),
-          if (expanded) ...[
-            const Divider(),
-            for (final episode in items)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Text(
-                  episode.sort.toString().replaceAll(RegExp(r'\.0$'), ''),
-                ),
-                title: Text(episode.title),
-                subtitle: Text(
-                  '${episode.airdate.isEmpty ? strings.t('unknownAirdate') : episode.airdate} · ${episode.duration}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _open(context, episode),
+        if (!expanded && onViewAll != null)
+          TextButton.icon(
+            onPressed: onViewAll,
+            icon: const Icon(Icons.list),
+            label: Text(strings.t('allEpisodes')),
+          ),
+        if (page != null && (page.offset > 0 || page.hasMore))
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed:
+                    page.offset > 0 && !state.loading && state.busyId == null
+                        ? () => controller.refresh(
+                          offset: (page.offset - page.limit).clamp(
+                            0,
+                            page.offset,
+                          ),
+                        )
+                        : null,
+                child: Text(strings.t('previous')),
               ),
-          ],
-        ],
+              TextButton(
+                onPressed:
+                    page.hasMore && !state.loading && state.busyId == null
+                        ? () => controller.refresh(offset: page.nextOffset)
+                        : null,
+                child: Text(strings.t('next')),
+              ),
+            ],
+          ),
+      ];
+      if (expanded) {
+        return ListView.builder(
+          key: const PageStorageKey('episode-progress-list'),
+          padding: const EdgeInsets.all(16),
+          itemCount: items.length + 1,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: children,
+              );
+            }
+            final episode = items[index - 1];
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Text(
+                episode.sort.toString().replaceAll(RegExp(r'\.0$'), ''),
+              ),
+              title: Text(episode.title),
+              subtitle: Text(
+                '${episode.airdate.isEmpty ? strings.t('unknownAirdate') : episode.airdate} · ${episode.duration}',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(context, episode),
+            );
+          },
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: children,
       );
     },
   );

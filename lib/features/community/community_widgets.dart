@@ -66,6 +66,7 @@ class CommunityReplyList extends StatelessWidget {
     required this.onUserTap,
     required this.onLike,
     this.header,
+    this.leadingItems = const [],
     this.authorUsername = '',
     this.canReact = true,
     this.showEmptySummary = true,
@@ -74,6 +75,7 @@ class CommunityReplyList extends StatelessWidget {
 
   final List<CommunityReply> items;
   final Widget? header;
+  final List<Widget> leadingItems;
   final String authorUsername;
   final bool canReact;
   final bool showEmptySummary;
@@ -88,41 +90,45 @@ class CommunityReplyList extends StatelessWidget {
       key: const PageStorageKey('comments-scroll'),
       padding: const EdgeInsets.symmetric(vertical: 8),
       physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: items.length + 1,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder:
-          (context, slot) =>
-              slot == 0
-                  ? Column(
-                    children: [
-                      if (header != null) header!,
-                      if (items.isNotEmpty || showEmptySummary)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              items.isEmpty
-                                  ? AppLocalizations.of(context).t('noComments')
-                                  : '${AppLocalizations.of(context).t('loadedComments')} · ${items.length}',
-                              style: Theme.of(context).textTheme.labelLarge,
-                            ),
-                          ),
-                        ),
-                    ],
-                  )
-                  : _ReplyTile(
-                    key: ValueKey(
-                      'reply:${items[slot - 1].id}:$currentUsername',
+      itemCount: leadingItems.length + items.length + 1,
+      separatorBuilder:
+          (_, index) =>
+              index < leadingItems.length
+                  ? const SizedBox.shrink()
+                  : const Divider(height: 1),
+      itemBuilder: (context, index) {
+        if (index < leadingItems.length) return leadingItems[index];
+        final slot = index - leadingItems.length;
+        return slot == 0
+            ? Column(
+              children: [
+                if (header != null) header!,
+                if (items.isNotEmpty || showEmptySummary)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        items.isEmpty
+                            ? AppLocalizations.of(context).t('noComments')
+                            : '${AppLocalizations.of(context).t('loadedComments')} · ${items.length}',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
                     ),
-                    item: items[slot - 1],
-                    authorUsername: authorUsername,
-                    canReact: canReact,
-                    currentUsername: currentUsername,
-                    onUserTap: onUserTap,
-                    onLike: onLike,
-                    onReply: onReply,
                   ),
+              ],
+            )
+            : _ReplyTile(
+              key: ValueKey('reply:${items[slot - 1].id}:$currentUsername'),
+              item: items[slot - 1],
+              authorUsername: authorUsername,
+              canReact: canReact,
+              currentUsername: currentUsername,
+              onUserTap: onUserTap,
+              onLike: onLike,
+              onReply: onReply,
+            );
+      },
     );
   }
 }

@@ -123,10 +123,15 @@ class BangumiRichText extends StatelessWidget {
                 ),
               );
             }
-            if (node.tag == 'img') {
-              final uri = BangumiBbCode.safeUrl(
-                BangumiBbCode.plain(node.children),
-              );
+            if (node.tag == 'img' || node.tag == 'photo') {
+              final uri =
+                  node.tag == 'photo'
+                      ? BangumiBbCode.photoUrl(
+                        BangumiBbCode.plain(node.children),
+                      )
+                      : BangumiBbCode.safeUrl(
+                        BangumiBbCode.plain(node.children),
+                      );
               if (uri == null) return const TextSpan(text: '[img]');
               final deferred = ++images > 20;
               return WidgetSpan(

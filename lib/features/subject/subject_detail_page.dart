@@ -466,26 +466,34 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                     progress:
                                         _progress == null
                                             ? null
-                                            : EpisodeProgressPanel(
-                                              controller: _progress!,
-                                              repository: widget.repository,
-                                              onCollect:
-                                                  () =>
-                                                      _editCollection(details),
+                                            : Builder(
+                                              builder:
+                                                  (
+                                                    context,
+                                                  ) => EpisodeProgressPanel(
+                                                    controller: _progress!,
+                                                    repository:
+                                                        widget.repository,
+                                                    onViewAll:
+                                                        () =>
+                                                            DefaultTabController.of(
+                                                              context,
+                                                            ).animateTo(1),
+                                                    onCollect:
+                                                        () => _editCollection(
+                                                          details,
+                                                        ),
+                                                  ),
                                             ),
                                   ),
                                   () =>
                                       _progress != null
-                                          ? SingleChildScrollView(
-                                            padding: const EdgeInsets.all(16),
-                                            child: EpisodeProgressPanel(
-                                              controller: _progress!,
-                                              repository: widget.repository,
-                                              expanded: true,
-                                              onCollect:
-                                                  () =>
-                                                      _editCollection(details),
-                                            ),
+                                          ? EpisodeProgressPanel(
+                                            controller: _progress!,
+                                            repository: widget.repository,
+                                            expanded: true,
+                                            onCollect:
+                                                () => _editCollection(details),
                                           )
                                           : _section(
                                             details,
@@ -846,61 +854,58 @@ class _SummarySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _SectionTitle(title: '简介', icon: Icons.notes_rounded),
+    final fields =
+        details.infobox.where((field) => field.values.isNotEmpty).toList();
+    final introduction = <Widget>[
+      _SectionTitle(title: '简介', icon: Icons.notes_rounded),
+      const SizedBox(height: 8),
+      SelectableText(
+        details.subject.summary.isEmpty ? '暂无简介' : details.subject.summary,
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      if (progress != null) ...[const SizedBox(height: 20), progress!],
+      if (details.tags.isNotEmpty) ...[
+        const SizedBox(height: 24),
+        _SectionTitle(title: '标签', icon: Icons.sell_outlined),
         const SizedBox(height: 8),
-        SelectableText(
-          details.subject.summary.isEmpty ? '暂无简介' : details.subject.summary,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        if (progress != null) ...[const SizedBox(height: 20), progress!],
-        if (details.tags.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          _SectionTitle(title: '标签', icon: Icons.sell_outlined),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: [
-              for (final tag in details.tags.take(30))
-                ActionChip(
-                  label: Text('${tag.name} ${tag.count}'),
-                  onPressed:
-                      () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder:
-                              (_) => TagPage(
-                                query: ComposeTagQuery(
-                                  details.subject.type,
-                                  tag.name,
-                                ),
-                                repository: repository,
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: [
+            for (final tag in details.tags.take(30))
+              ActionChip(
+                label: Text('${tag.name} ${tag.count}'),
+                onPressed:
+                    () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder:
+                            (_) => TagPage(
+                              query: ComposeTagQuery(
+                                details.subject.type,
+                                tag.name,
                               ),
-                        ),
+                              repository: repository,
+                            ),
                       ),
-                ),
-            ],
-          ),
-        ],
-        if (details.infobox.any((field) => field.values.isNotEmpty)) ...[
-          const SizedBox(height: 24),
-          _SectionTitle(title: '条目信息', icon: Icons.info_outline_rounded),
-          const SizedBox(height: 8),
-          SurfaceBlock(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                for (final field in details.infobox.where(
-                  (item) => item.values.isNotEmpty,
-                ))
-                  _InfoRow(label: field.key, value: field.values.join('、')),
-              ],
-            ),
-          ),
-        ],
+                    ),
+              ),
+          ],
+        ),
       ],
+      if (details.infobox.any((field) => field.values.isNotEmpty)) ...[
+        const SizedBox(height: 24),
+        _SectionTitle(title: '条目信息', icon: Icons.info_outline_rounded),
+        const SizedBox(height: 8),
+      ],
+    ];
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: introduction.length + fields.length,
+      itemBuilder: (context, index) {
+        if (index < introduction.length) return introduction[index];
+        final field = fields[index - introduction.length];
+        return _InfoRow(label: field.key, value: field.values.join('、'));
+      },
     );
   }
 }

@@ -39,7 +39,7 @@ class _Frame {
 /// 有界栈解析；文本只解码实体，不将尖括号解释成 HTML。
 abstract final class BangumiBbCode {
   static final _tokens = RegExp(
-    r'\[(/?)(b|i|u|s|mask|size|color|quote|url|img|br)(?:=([^\]\r\n]*))?\s*/?\]|\((?:bgm(?:\d+|124_tv)|(?:musume|blake)_\d{2,3})\)',
+    r'\[(/?)(b|i|u|s|mask|size|color|quote|url|img|photo|br)(?:=([^\]\r\n]*))?\s*/?\]|\((?:bgm(?:\d+|124_tv)|(?:musume|blake)_\d{2,3})\)',
     caseSensitive: false,
   );
   static final _cache = <String, ComposeRichTextDocument>{};
@@ -118,6 +118,80 @@ abstract final class BangumiBbCode {
           .parseFragment(input.replaceAll('<', '&lt;').replaceAll('>', '&gt;'))
           .text ??
       input;
+
+  /// 仅接受照片接口使用的相对路径，拒绝编码、查询和路径穿越。
+  static Uri? photoUrl(String input) {
+    final value = decode(
+      input,
+    ).trim().replaceAll(r'\_', '_').replaceAll(r'\/', '/');
+    if (!RegExp(
+      r'^[a-fA-F0-9]{2}/[a-fA-F0-9]{2}/[a-zA-Z0-9_-]+\.(?:jpg|jpeg|png|gif|webp)$',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return null;
+    }
+    return Uri.https('lain.bgm.tv', '/pic/photo/l/$value');
+  }
+
+  /// 同一照片的缩略图与原图归一化，仅匹配受限 CDN 照片目录。
+  static String canonicalImageUrl(Uri uri) {
+    if (uri.host.toLowerCase() == 'lain.bgm.tv') {
+      final match = RegExp(
+        r'^/(?:r/\d+x\d+/)?pic/photo/[lms]/(.+)$',
+      ).firstMatch(uri.path);
+      final original = match == null ? null : photoUrl(match.group(1)!);
+      if (original != null) return original.toString();
+    }
+    return uri.replace(scheme: 'https').toString();
+  }
+
+  /// 按段落拆分并复制格式祖先；遮罩和链接始终保持原子节点。
+  static List<List<ComposeRichTextNode>> blocks(
+    ComposeRichTextDocument document,
+  ) {
+    final result = <List<ComposeRichTextNode>>[];
+    var current = <ComposeRichTextNode>[];
+    void flush() {
+      if (current.isNotEmpty) result.add(current);
+      current = [];
+    }
+
+    void walk(ComposeRichTextNode node, List<ComposeRichTextNode> parents) {
+      ComposeRichTextNode wrap(ComposeRichTextNode child) {
+        for (final parent in parents.reversed) {
+          child = ComposeRichTextNode(parent.tag, parent.value, [child]);
+        }
+        return child;
+      }
+
+      if (node.tag == 'text') {
+        final parts = node.value.split('\n');
+        for (var i = 0; i < parts.length; i++) {
+          if (parts[i].isNotEmpty) {
+            current.add(wrap(ComposeRichTextNode('text', parts[i], const [])));
+          }
+          if (i < parts.length - 1) flush();
+        }
+      } else if (node.tag == 'img' || node.tag == 'photo') {
+        flush();
+        current.add(wrap(node));
+        flush();
+      } else if (node.children.isNotEmpty &&
+          !{'mask', 'url', 'quote'}.contains(node.tag)) {
+        for (final child in node.children) {
+          walk(child, [...parents, node]);
+        }
+      } else {
+        current.add(wrap(node));
+      }
+    }
+
+    for (final node in document.nodes) {
+      walk(node, const []);
+    }
+    flush();
+    return result;
+  }
 
   static String plain(
     Iterable<ComposeRichTextNode> nodes, {

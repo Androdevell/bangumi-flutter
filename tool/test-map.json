@@ -1,8 +1,12 @@
 {
-  "lib/features/blog/": ["test/release_1213_test.dart"],
+  "lib/features/blog/": ["test/release_1213_test.dart", "test/release_1214_test.dart"],
+  "lib/core/text/bbcode_document.dart": ["test/release_1214_test.dart", "test/presentation_performance_test.dart"],
+  "lib/widgets/lazy_tab_view.dart": ["test/release_1214_test.dart", "test/presentation_performance_test.dart"],
+  "lib/widgets/rich_comment_image.dart": ["test/release_1214_test.dart", "test/community_extensions_test.dart"],
   "lib/features/profile/theme_settings_page.dart": ["test/release_1213_test.dart"],
   "lib/features/profile/update_page.dart": ["test/release_1213_test.dart"],
-  "lib/domain/models/blog.dart": ["test/release_1213_test.dart"],
+  "lib/domain/models/blog.dart": ["test/release_1213_test.dart", "test/release_1214_test.dart"],
+  "lib/domain/repositories/blog_repository.dart": ["test/release_1214_test.dart"],
   "lib/core/paged.dart": ["test/release_1213_test.dart", "test/repository_test.dart"],
   "lib/widgets/release_markdown.dart": ["test/release_1213_test.dart"],
   "lib/widgets/theme_color_palette.dart": ["test/release_1213_test.dart"],
@@ -19,5 +23,5 @@
   "lib/domain/repositories/notification_repository.dart": ["test/notification_composer_viewer_test.dart"],
   "lib/data/repositories/remote_notification_repository.dart": ["test/notification_composer_viewer_test.dart"],
   "lib/core/media/image_save_service.dart": ["test/notification_composer_viewer_test.dart"],
-  "lib/widgets/episode_progress_panel.dart": ["test/community_extensions_test.dart", "test/link_image_tag_test.dart"]
+  "lib/widgets/episode_progress_panel.dart": ["test/community_extensions_test.dart", "test/link_image_tag_test.dart", "test/release_1214_test.dart", "test/episode_progress_session_test.dart"]
 }

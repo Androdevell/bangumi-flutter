@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/json_utils.dart';
 import '../../data/bangumi_repository.dart';
 import '../../domain/models/blog.dart';
 import '../../domain/repositories/blog_repository.dart';
 import '../../widgets/bangumi_rich_text.dart';
+import '../../widgets/rich_comment_image.dart';
+import '../../core/text/bbcode_document.dart';
+import '../../core/models.dart';
+import '../../core/network/app_image_cache.dart';
 import '../../widgets/common.dart';
 import '../community/comment_page_controller.dart';
 import '../community/community_widgets.dart';
@@ -21,6 +26,51 @@ class BlogDetailPage extends StatefulWidget {
 }
 
 class _BlogDetailPageState extends State<BlogDetailPage> {
+  ComposeBlogDetail? _photoDetail;
+  final List<ComposeBlogPhoto> _extraPhotos = [];
+  bool _loadingPhotos = false;
+  Object? _photoError;
+  int _photoTotal = 0;
+  Future<void> _morePhotos(ComposeBlogDetail detail) async {
+    if (_loadingPhotos || widget.repository is! BlogPhotoRepository) return;
+    final scope = CommentSubmitUseCase.currentScope(widget.repository);
+    setState(() {
+      _loadingPhotos = true;
+      _photoError = null;
+    });
+    try {
+      final page = await (widget.repository as BlogPhotoRepository)
+          .fetchBlogPhotos(
+            widget.id,
+            offset: detail.photos.length + _extraPhotos.length,
+          );
+      if (!mounted ||
+          !identical(controller.state.data, detail) ||
+          scope != CommentSubmitUseCase.currentScope(widget.repository)) {
+        return;
+      }
+      final ids =
+          [...detail.photos, ..._extraPhotos].map((photo) => photo.id).toSet();
+      if (page.items.any((photo) => ids.contains(photo.id))) {
+        throw const FormatException('responseInvalid');
+      }
+      setState(() {
+        _extraPhotos.addAll(page.items);
+        _photoTotal = page.total ?? _photoTotal;
+      });
+    } on Object catch (error) {
+      if (mounted &&
+          identical(controller.state.data, detail) &&
+          scope == CommentSubmitUseCase.currentScope(widget.repository)) {
+        setState(() => _photoError = error);
+      }
+    } finally {
+      if (mounted && identical(controller.state.data, detail)) {
+        setState(() => _loadingPhotos = false);
+      }
+    }
+  }
+
   late final controller = CommentPageController<ComposeBlogDetail>(
     load: () => (widget.repository as BlogRepository).fetchBlog(widget.id),
     session: () => CommentSubmitUseCase.currentScope(widget.repository),
@@ -73,58 +123,88 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
                 )
                 : const Center(child: CircularProgressIndicator());
           }
+          if (!identical(_photoDetail, detail)) {
+            _photoDetail = detail;
+            _extraPhotos.clear();
+            _loadingPhotos = false;
+            _photoError = null;
+            _photoTotal = detail.photoTotal;
+          }
           return RefreshIndicator(
             onRefresh: controller.refresh,
-            child: CommunityReplyList(
-              items: detail.comments,
-              currentUsername: widget.repository.currentUsername,
-              authorUsername: detail.blog.user.username,
-              onUserTap: _user,
-              canReact: false,
-              showEmptySummary: !detail.errors.containsKey('comments'),
-              onLike: (_, _) async {},
-              header: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      detail.blog.title,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(detail.blog.user.nickname),
-                      subtitle: Text(dateText(detail.blog.createdAt)),
-                      onTap: () => _user(detail.blog.user.username),
-                    ),
-                    if (detail.blog.content.isEmpty)
-                      Text(s.t('blogEmpty'))
-                    else
-                      BangumiRichText(detail.blog.content),
-                    for (final subject in detail.subjects)
-                      ListTile(
-                        title: Text(subject.title),
-                        leading: const Icon(Icons.movie_outlined),
-                        onTap:
-                            () => openSubjectDetails(
-                              context,
-                              subject: subject,
-                              repository: widget.repository,
-                              heroTag: 'blog:${widget.id}:${subject.id}',
+            child: SelectionArea(
+              child: ContentFrame(
+                maxWidth: 880,
+                child: CommunityReplyList(
+                  items: detail.comments,
+                  currentUsername: widget.repository.currentUsername,
+                  authorUsername: detail.blog.user.username,
+                  onUserTap: _user,
+                  canReact: false,
+                  showEmptySummary: !detail.errors.containsKey('comments'),
+                  onLike: (_, _) async {},
+                  leadingItems: blogReadingItems(
+                    context,
+                    detail,
+                    photos: [...detail.photos, ..._extraPhotos],
+                    photoFooter:
+                        detail.errors.containsKey('photos')
+                            ? NetworkErrorView(
+                              error: detail.errors['photos']!,
+                              onRetry: controller.refresh,
+                            )
+                            : _photoError != null
+                            ? NetworkErrorView(
+                              error: _photoError!,
+                              onRetry: () => _morePhotos(detail),
+                            )
+                            : _loadingPhotos
+                            ? const Center(child: CircularProgressIndicator())
+                            : detail.photos.length + _extraPhotos.length <
+                                _photoTotal
+                            ? Center(
+                              child: TextButton.icon(
+                                onPressed: () => _morePhotos(detail),
+                                icon: const Icon(Icons.photo_library_outlined),
+                                label: Text(s.t('blogMorePhotos')),
+                              ),
+                            )
+                            : null,
+                    onUser: _user,
+                    onSubject:
+                        (subject) => openSubjectDetails(
+                          context,
+                          subject: subject,
+                          repository: widget.repository,
+                          heroTag: 'blog:${widget.id}:${subject.id}',
+                        ),
+                  ),
+                  header: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 16),
+                        Text(
+                          s.t('blogComments'),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        if (state.error != null)
+                          NetworkErrorView(
+                            error: state.error!,
+                            onRetry: controller.refresh,
+                          ),
+                        for (final error in detail.errors.entries)
+                          if (error.key != 'photos')
+                            NetworkErrorView(
+                              error: error.value,
+                              onRetry: controller.refresh,
                             ),
-                      ),
-                    if (state.error != null)
-                      NetworkErrorView(
-                        error: state.error!,
-                        onRetry: controller.refresh,
-                      ),
-                    for (final error in detail.errors.entries)
-                      NetworkErrorView(
-                        error: error.value,
-                        onRetry: controller.refresh,
-                      ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -133,4 +213,124 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
       ),
     );
   }
+}
+
+/// 日志各块由外层同一个列表按需挂载；图片不在屏外提前解码。
+List<Widget> blogReadingItems(
+  BuildContext context,
+  ComposeBlogDetail detail, {
+  required ValueChanged<String> onUser,
+  required ValueChanged<Subject> onSubject,
+  List<ComposeBlogPhoto>? photos,
+  Widget? photoFooter,
+}) {
+  final s = AppLocalizations.of(context);
+  final document = BangumiBbCode.parse(detail.blog.content);
+  final inlineIds = <int>{};
+  final inlineUrls = <String>{};
+  void images(Iterable<ComposeRichTextNode> nodes) {
+    for (final node in nodes) {
+      if (node.tag == 'photo') {
+        final uri = BangumiBbCode.photoUrl(BangumiBbCode.plain(node.children));
+        if (uri != null) {
+          inlineUrls.add(BangumiBbCode.canonicalImageUrl(uri));
+          final id = int.tryParse(node.value);
+          if (id != null) inlineIds.add(id);
+        }
+      } else if (node.tag == 'img') {
+        final uri = BangumiBbCode.safeUrl(BangumiBbCode.plain(node.children));
+        if (uri != null) inlineUrls.add(BangumiBbCode.canonicalImageUrl(uri));
+      }
+      images(node.children);
+    }
+  }
+
+  images(document.nodes);
+  Widget inset(Widget child) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+    child: child,
+  );
+  return [
+    inset(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 12),
+          Text(
+            detail.blog.title,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CommunityAvatar(user: detail.blog.user),
+            title: Text(detail.blog.user.nickname),
+            subtitle: Text(dateText(detail.blog.createdAt)),
+            onTap: () => onUser(detail.blog.user.username),
+          ),
+          const Divider(),
+        ],
+      ),
+    ),
+    if (detail.blog.content.isEmpty) inset(Text(s.t('blogEmpty'))),
+    for (final block in BangumiBbCode.blocks(document))
+      inset(
+        BangumiRichText(
+          '',
+          selectable: false,
+          nodes: block,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.8),
+        ),
+      ),
+    if (document.truncated) inset(Text(s.t('richTextLimited'))),
+    for (final photo in photos ?? detail.photos)
+      if (!inlineIds.contains(photo.id) &&
+          !inlineUrls.contains(photo.originalUrl.toString()))
+        inset(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 720),
+            child: RichCommentImage(uri: photo.originalUrl),
+          ),
+        ),
+    if (photoFooter != null) inset(photoFooter),
+    if (detail.subjects.isNotEmpty)
+      inset(
+        Text(
+          s.t('blogSubjects'),
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+      ),
+    for (final subject in detail.subjects)
+      inset(
+        Card.filled(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(12),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 48,
+                height: 64,
+                child:
+                    subject.imageUrl.isEmpty
+                        ? const Icon(Icons.movie_outlined)
+                        : CachedNetworkImage(
+                          imageUrl: subject.imageUrl,
+                          cacheManager: AppImageCache.manager,
+                          memCacheWidth: 144,
+                          fit: BoxFit.cover,
+                          errorWidget:
+                              (_, _, _) => const Icon(Icons.movie_outlined),
+                        ),
+              ),
+            ),
+            title: Text(subject.title),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => onSubject(subject),
+          ),
+        ),
+      ),
+  ];
 }
