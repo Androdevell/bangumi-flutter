@@ -95,19 +95,7 @@ class SafeImageFileService extends FileService {
         } finally {
           await sink.close();
         }
-        final buffer = await ui.ImmutableBuffer.fromFilePath(file.path);
-        ui.ImageDescriptor? descriptor;
-        try {
-          descriptor = await ui.ImageDescriptor.encoded(buffer);
-          if (descriptor.width <= 0 ||
-              descriptor.height <= 0 ||
-              descriptor.width * descriptor.height > 24 * 1024 * 1024) {
-            throw const HttpException('Image pixel limit exceeded');
-          }
-        } finally {
-          descriptor?.dispose();
-          buffer.dispose();
-        }
+        await _validatePixels(file);
       } catch (_) {
         await _files.release(file);
         rethrow;
@@ -130,5 +118,23 @@ class SafeImageFileService extends FileService {
       );
     }
     throw const HttpException('Too many image redirects');
+  }
+
+  /// 校验先释放原生描述符，再报告超限，避免 Windows AOT 的嵌套异常清理崩溃。
+  static Future<void> _validatePixels(File file) async {
+    final buffer = await ui.ImmutableBuffer.fromFilePath(file.path);
+    ui.ImageDescriptor? descriptor;
+    var invalid = false;
+    try {
+      descriptor = await ui.ImageDescriptor.encoded(buffer);
+      invalid =
+          descriptor.width <= 0 ||
+          descriptor.height <= 0 ||
+          descriptor.width * descriptor.height > 24 * 1024 * 1024;
+    } finally {
+      descriptor?.dispose();
+      buffer.dispose();
+    }
+    if (invalid) throw const HttpException('Image pixel limit exceeded');
   }
 }

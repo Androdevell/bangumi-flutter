@@ -1,4 +1,5 @@
 {
+  "lib/core/network/safe_image_file_service.dart": ["test/performance_security_hardening_test.dart"],
   "lib/core/network/windows_system_client.dart": ["test/release_130_test.dart", "test/windows_io_cancellation_test.dart"],
   "lib/features/messages/": ["test/release_130_test.dart"],
   "lib/data/repositories/remote_private_message_repository.dart": ["test/release_130_test.dart"],

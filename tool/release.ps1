@@ -84,11 +84,12 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Android 原生测试未通过，拒绝构建正式包' }
     } finally { Pop-Location }
     if ($Platforms -contains 'android') {
-        & $Flutter build apk --release --target-platform android-arm64 @pubArguments @defines
+        & $Flutter --no-version-check build apk --release --target lib/main.dart --target-platform android-arm64 @pubArguments @defines
         if ($LASTEXITCODE -ne 0) { throw 'Android Release 构建失败' }
     }
     if ($Platforms -contains 'windows') {
-        & $Flutter build windows --release @pubArguments @defines
+        & (Join-Path $PSScriptRoot 'windows-image-smoke.ps1') -Flutter $Flutter
+        & $Flutter --no-version-check build windows --release --target lib/main.dart @pubArguments @defines
         if ($LASTEXITCODE -ne 0) { throw 'Windows Release 构建失败' }
     }
     $binaries = @()
@@ -151,6 +152,7 @@ try {
         oauthCompiledInBothPlatforms=($Platforms -contains 'android' -and $Platforms -contains 'windows');
         previousVersionCode=$previous.Code; signerSha256=$fingerprint;
         independentManifestSignature='not-configured'}
+    $manifest.gates.windowsAotImages = if ($Platforms -contains 'windows') { 'passed' } else { 'not-run' }
     $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-verification.json') -Encoding utf8
     Write-Output "正式包已核对并生成：$output"
 } finally {
