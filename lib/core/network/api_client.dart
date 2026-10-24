@@ -376,6 +376,82 @@ class ApiClient {
 
   String get formHash => _authService?.user?.formHash ?? '';
 
+  /// 私信/公开日志表单专用，禁止任意主机、任意提交路径或跨站重定向。
+  Future<({String html, Uri? redirect})> siteDocument(
+    String path, {
+    Map<String, String>? fields,
+    required SessionScope scope,
+  }) async {
+    _requireScope(scope);
+    if (!isLoggedIn) throw const ApiException('loginRequired');
+    final uri = Uri.parse('https://bgm.tv').resolve(path);
+    final safe =
+        uri.scheme == 'https' &&
+        uri.host == 'bgm.tv' &&
+        uri.port == 443 &&
+        uri.userInfo.isEmpty;
+    final allowed =
+        fields == null
+            ? RegExp(
+              r'^/(?:pm/(?:inbox|outbox|compose|view/\d+|conversation/\d+)\.chii|blog/\d+)$',
+            ).hasMatch(uri.path)
+            : RegExp(r'^/pm/(?:create|compose)\.chii$').hasMatch(uri.path);
+    if (!safe || !allowed) throw const ApiException('fieldInvalid');
+    final request =
+        http.Request(fields == null ? 'GET' : 'POST', uri)
+          ..followRedirects = false
+          ..headers.addAll({
+            'user-agent': browserUserAgent,
+            'referer': uri.toString(),
+            'cookie': 'kira=4',
+            'cache-control': 'no-cache',
+            if (fields != null) 'origin': 'https://bgm.tv',
+          });
+    if (fields != null) request.bodyFields = fields;
+    try {
+      final response = await readBoundedResponse(
+        await _client.send(request).timeout(const Duration(seconds: 20)),
+        maxBytes: 2 << 20,
+      ).timeout(const Duration(seconds: 20));
+      _requireScope(scope);
+      final redirect =
+          response.headers['location'] == null
+              ? null
+              : uri.resolve(response.headers['location']!);
+      if (redirect != null &&
+          (redirect.host != 'bgm.tv' ||
+              redirect.scheme != 'https' ||
+              redirect.userInfo.isNotEmpty ||
+              redirect.port != 443)) {
+        throw ApiException('responseInvalid', outcomeUnknown: fields != null);
+      }
+      if (redirect?.path == '/login' || response.statusCode == 401) {
+        throw const ApiException('profileWebLoginRequired');
+      }
+      if (response.statusCode >= 300 &&
+          response.statusCode < 400 &&
+          redirect != null) {
+        return (html: '', redirect: redirect);
+      }
+      if (response.statusCode != 200) {
+        throw ApiException(
+          'operationFailed',
+          statusCode: response.statusCode,
+          outcomeUnknown: fields != null && response.statusCode >= 500,
+        );
+      }
+      final body = utf8.decode(response.bodyBytes, allowMalformed: true);
+      if (html.parse(body).querySelector('#loginForm') != null) {
+        throw const ApiException('profileWebLoginRequired');
+      }
+      return (html: body, redirect: null);
+    } on ApiException {
+      rethrow;
+    } on Object {
+      throw ApiException('operationFailed', outcomeUnknown: fields != null);
+    }
+  }
+
   Future<void> updateProfileIdentity({
     required SessionScope scope,
     required String nickname,

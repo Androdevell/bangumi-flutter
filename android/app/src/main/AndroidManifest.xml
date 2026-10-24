@@ -48,6 +48,7 @@
                 <data android:pathPrefix="/character/" />
                 <data android:pathPrefix="/user/" />
                 <data android:pathPrefix="/blog/" />
+                <data android:pathPrefix="/index/" />
                 <data android:pathPrefix="/group/topic/" />
                 <data android:pathPrefix="/anime/tag/" />
                 <data android:pathPrefix="/book/tag/" />

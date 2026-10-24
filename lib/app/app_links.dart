@@ -17,6 +17,7 @@ import '../widgets/common.dart';
 import '../features/browse/tag_page.dart';
 import '../domain/repositories/tag_repository.dart';
 import '../features/blog/blog_detail_page.dart';
+import '../features/indexes/index_detail_page.dart';
 
 class AppLinkScope extends InheritedWidget {
   const AppLinkScope({
@@ -93,6 +94,7 @@ abstract final class AppLinkDispatcher {
       'person' => PersonDetailPage(personId: id, repository: repo),
       'user' => UserProfilePage(username: target.key, repository: repo),
       'blog' => BlogDetailPage(id: id, repository: repo),
+      'index' => IndexDetailPage(id: id, repository: repo),
       'tag' => TagPage(
         query: ComposeTagQuery(switch (target.uri.pathSegments.first) {
           'book' => 1,

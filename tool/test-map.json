@@ -1,4 +1,13 @@
 {
+  "lib/core/network/windows_system_client.dart": ["test/release_130_test.dart", "test/windows_io_cancellation_test.dart"],
+  "lib/features/messages/": ["test/release_130_test.dart"],
+  "lib/data/repositories/remote_private_message_repository.dart": ["test/release_130_test.dart"],
+  "lib/domain/repositories/private_message_repository.dart": ["test/release_130_test.dart"],
+  "lib/features/indexes/": ["test/release_130_test.dart"],
+  "lib/features/user/": ["test/release_130_test.dart", "test/presentation_performance_test.dart"],
+  "lib/features/episode/": ["test/release_130_test.dart", "test/comment_experience_test.dart"],
+  "lib/features/community/comment_sort.dart": ["test/release_130_test.dart"],
+  "lib/widgets/subject_tag_chip.dart": ["test/release_130_test.dart"],
   "lib/features/blog/": ["test/release_1213_test.dart", "test/release_1214_test.dart"],
   "lib/core/text/bbcode_document.dart": ["test/bangumi_rich_text_test.dart", "test/release_1214_test.dart", "test/presentation_performance_test.dart"],
   "lib/widgets/lazy_tab_view.dart": ["test/release_1214_test.dart", "test/presentation_performance_test.dart"],

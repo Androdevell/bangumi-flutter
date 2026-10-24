@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
-import 'package:win_http/win_http.dart';
+import 'windows_system_client.dart';
 import '../app_identity.dart';
 import 'bounded_response.dart';
 import 'windows_direct_client.dart';
@@ -24,17 +24,7 @@ http.Client createPlatformHttpClient() {
     if (windowsNetworkMode == WindowsNetworkMode.direct) {
       return createWindowsDirectClient();
     }
-    return WinHttpClient.fromConfiguration(
-      const WinHttpClientConfiguration(
-        userAgent: _userAgent,
-        accessType: WinHttpAccessType.automatic,
-        resolveTimeout: Duration(seconds: 15),
-        connectTimeout: Duration(seconds: 15),
-        sendTimeout: Duration(seconds: 20),
-        receiveTimeout: Duration(seconds: 20),
-        maxConnectionsPerServer: 20,
-      ),
-    );
+    return WindowsSystemClient();
   }
 
   return IOClient(HttpClient()..userAgent = _userAgent);

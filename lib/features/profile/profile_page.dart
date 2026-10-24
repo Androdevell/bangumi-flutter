@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../../app/app_links.dart';
 import '../notifications/notification_host.dart';
+import '../messages/private_messages_page.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/community_models.dart';
@@ -306,7 +307,10 @@ class _ProfilePageState extends State<ProfilePage> {
             PageHeader(
               title: strings.t('profile'),
               subtitle: strings.t('profileSubtitle'),
-              actions: const [NotificationButton()],
+              actions: [
+                PrivateMessageButton(repository: widget.repository),
+                const NotificationButton(),
+              ],
             ),
             const SizedBox(height: 22),
             SurfaceBlock(
@@ -752,17 +756,19 @@ class _Stat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 3),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        if (syncing)
-          Text(
-            AppLocalizations.of(context).t('collectionSyncing'),
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-      ],
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 3),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          if (syncing)
+            Text(
+              AppLocalizations.of(context).t('collectionSyncing'),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+        ],
+      ),
     );
   }
 }

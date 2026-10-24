@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/subject_tag_chip.dart';
 import '../../widgets/lazy_tab_view.dart';
 import '../../domain/models/collection_models.dart';
 import '../../core/localization/app_localizations.dart';
@@ -873,9 +874,10 @@ class _SummarySection extends StatelessWidget {
           runSpacing: 7,
           children: [
             for (final tag in details.tags.take(30))
-              ActionChip(
-                label: Text('${tag.name} ${tag.count}'),
-                onPressed:
+              SubjectTagChip(
+                name: tag.name,
+                count: tag.count,
+                onTap:
                     () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder:

@@ -17,6 +17,9 @@ import '../character/character_detail_page.dart';
 import '../community/community_widgets.dart';
 import '../subject/subject_detail_page.dart';
 import '../collection/collection_controller.dart';
+import '../blog/blog_detail_page.dart';
+import '../indexes/index_detail_page.dart';
+import '../messages/private_messages_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({
@@ -222,6 +225,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
               title: Text(user.nickname),
               actions: [
                 if (!isSelf)
+                  PrivateMessageButton(
+                    repository: widget.repository,
+                    recipient: user.username,
+                  ),
+                if (!isSelf)
                   IconButton(
                     tooltip: (_isFriend ?? user.isFriend) ? '删除好友' : '添加好友',
                     onPressed: _friendBusy ? null : () => _toggleFriend(user),
@@ -301,8 +309,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           () => _tab(
                             data,
                             'blogs',
-                            (value) =>
-                                _ContentList(items: value.blogs, empty: '暂无日志'),
+                            (value) => _ContentList(
+                              items: value.blogs,
+                              empty: '暂无日志',
+                              onTap:
+                                  (item) => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder:
+                                          (_) => BlogDetailPage(
+                                            id: item.id,
+                                            repository: widget.repository,
+                                          ),
+                                    ),
+                                  ),
+                            ),
                           ),
                           () => _tab(
                             data,
@@ -310,6 +330,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
                             (value) => _ContentList(
                               items: value.indexes,
                               empty: '暂无目录',
+                              onTap:
+                                  (item) => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder:
+                                          (_) => IndexDetailPage(
+                                            id: item.id,
+                                            repository: widget.repository,
+                                          ),
+                                    ),
+                                  ),
                             ),
                           ),
                           () => _tab(
@@ -624,7 +654,7 @@ class _CollectionOverview extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 155,
+            height: 124 + MediaQuery.textScalerOf(context).scale(28),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: group.$2.take(8).length,
@@ -681,10 +711,11 @@ class _TimelineOverview extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
+      Wrap(
+        spacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text('我的时间胶囊', style: Theme.of(context).textTheme.titleLarge),
-          const Spacer(),
           Text(
             '${data.timeline.length} 条',
             style: Theme.of(context).textTheme.bodySmall,
@@ -699,9 +730,10 @@ class _TimelineOverview extends StatelessWidget {
         )
       else
         for (final item in data.timeline.take(12))
-          IntrinsicHeight(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Column(
                   children: [
@@ -714,11 +746,10 @@ class _TimelineOverview extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                     ),
-                    Expanded(
-                      child: Container(
-                        width: 1,
-                        color: Theme.of(context).dividerColor,
-                      ),
+                    Container(
+                      width: 1,
+                      height: 24,
+                      color: Theme.of(context).dividerColor,
                     ),
                   ],
                 ),
@@ -784,19 +815,25 @@ class _TimeMachineStat extends StatelessWidget {
       key: ValueKey('profile-stat-$label'),
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(minWidth: 125, minHeight: 64),
+        width: 160,
+        constraints: const BoxConstraints(minHeight: 64),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 19),
             const SizedBox(width: 9),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$value', style: Theme.of(context).textTheme.titleMedium),
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$value',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(label, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
           ],
         ),
@@ -1213,9 +1250,14 @@ class _CollectionBadge extends StatelessWidget {
 }
 
 class _ContentList extends StatelessWidget {
-  const _ContentList({required this.items, required this.empty});
+  const _ContentList({
+    required this.items,
+    required this.empty,
+    required this.onTap,
+  });
   final List<UserContentItem> items;
   final String empty;
+  final ValueChanged<UserContentItem> onTap;
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return EmptyView(message: empty);
@@ -1241,6 +1283,8 @@ class _ContentList extends StatelessWidget {
                     ),
                   ),
           title: Text(item.title),
+          onTap: () => onTap(item),
+          trailing: const Icon(Icons.chevron_right),
           subtitle:
               item.subtitle.isEmpty
                   ? null
@@ -1409,35 +1453,50 @@ class _StatsView extends StatelessWidget {
       ('好友', stats.friends, Icons.people_outline_rounded),
       ('小组', stats.groups, Icons.groups_outlined),
     ];
-    return GridView.builder(
-      padding: const EdgeInsets.all(18),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 220,
-        mainAxisExtent: 108,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-      ),
-      itemCount: entries.length,
-      itemBuilder:
-          (_, index) => SurfaceBlock(
-            child: Row(
-              children: [
-                Icon(entries[index].$3),
-                const SizedBox(width: 12),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${entries[index].$2}',
-                      style: Theme.of(context).textTheme.headlineSmall,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = (constraints.maxWidth /
+                (190 * MediaQuery.textScalerOf(context).scale(1).clamp(1, 1.6)))
+            .floor()
+            .clamp(1, 4);
+        final width =
+            (constraints.maxWidth - 36 - (columns - 1) * 12) / columns;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (var index = 0; index < entries.length; index++)
+                SizedBox(
+                  width: width,
+                  child: SurfaceBlock(
+                    child: Row(
+                      children: [
+                        Icon(entries[index].$3),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${entries[index].$2}',
+                                style:
+                                    Theme.of(context).textTheme.headlineSmall,
+                              ),
+                              Text(entries[index].$1),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(entries[index].$1),
-                  ],
+                  ),
                 ),
-              ],
-            ),
+            ],
           ),
+        );
+      },
     );
   }
 }

@@ -3,6 +3,7 @@ param(
     [string]$Flutter = 'flutter',
     [string]$OAuthConfig = '',
     [Parameter(Mandatory = $true)][string]$PreviousApk,
+    [ValidateSet('android', 'windows')][string[]]$Platforms = @('android', 'windows'),
     [switch]$ValidateOnly,
     [switch]$NoPub
 )
@@ -82,53 +83,72 @@ try {
         & ./gradlew.bat :app:testDebugUnitTest -Ptarget-platform=android-arm64 --console=plain
         if ($LASTEXITCODE -ne 0) { throw 'Android 原生测试未通过，拒绝构建正式包' }
     } finally { Pop-Location }
-    & $Flutter build apk --release --target-platform android-arm64 @pubArguments @defines
-    if ($LASTEXITCODE -ne 0) { throw 'Android Release 构建失败' }
-    & $Flutter build windows --release @pubArguments @defines
-    if ($LASTEXITCODE -ne 0) { throw 'Windows Release 构建失败' }
+    if ($Platforms -contains 'android') {
+        & $Flutter build apk --release --target-platform android-arm64 @pubArguments @defines
+        if ($LASTEXITCODE -ne 0) { throw 'Android Release 构建失败' }
+    }
+    if ($Platforms -contains 'windows') {
+        & $Flutter build windows --release @pubArguments @defines
+        if ($LASTEXITCODE -ne 0) { throw 'Windows Release 构建失败' }
+    }
+    $binaries = @()
+    $files = @()
+    $fingerprint = $null
     $apk = Join-Path $projectRoot 'build/app/outputs/flutter-apk/app-release.apk'
-    $current = Read-Package $apk
-    if ($current.Name -ne $name -or $current.Code -ne $code -or $current.Id -ne $previous.Id) { throw '构建产物版本或包名与发布配置不一致' }
-    if ($current.Badging -notmatch "native-code: 'arm64-v8a'\s*$") { throw 'APK 必须且仅包含 arm64-v8a' }
-    $fingerprint = Read-Certificate $apk
-    if ($fingerprint -ne (Read-Certificate (Resolve-Path -LiteralPath $PreviousApk).Path)) { throw '新旧 APK 签名不一致，不能覆盖安装' }
     $windowsBundle = Join-Path $projectRoot 'build/windows/x64/runner/Release'
-    if ((Get-Item (Join-Path $windowsBundle 'bangumi_flutter.exe')).VersionInfo.ProductVersion -ne "$name+$code") { throw 'Windows 产物版本不一致' }
-    & (Join-Path $PSScriptRoot 'verify_windows_icons.ps1') -Executable (Join-Path $windowsBundle 'bangumi_flutter.exe')
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $archive = [System.IO.Compression.ZipFile]::OpenRead($apk)
-    try {
-        $entry = $archive.GetEntry('lib/arm64-v8a/libapp.so')
-        if (-not $entry) { throw 'APK 缺少 arm64 主程序' }
-        $stream = $entry.Open()
-        $buffer = New-Object System.IO.MemoryStream
-        try { $stream.CopyTo($buffer); $androidAot = [System.Text.Encoding]::UTF8.GetString($buffer.ToArray()) }
-        finally { $stream.Dispose(); $buffer.Dispose() }
-    } finally { $archive.Dispose() }
-    $windowsAot = [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes((Join-Path $windowsBundle 'data/app.so')))
-    foreach ($binary in @($androidAot, $windowsAot)) {
+    if ($Platforms -contains 'android') {
+        $current = Read-Package $apk
+        if ($current.Name -ne $name -or $current.Code -ne $code -or $current.Id -ne $previous.Id) { throw '构建产物版本或包名与发布配置不一致' }
+        if ($current.Badging -notmatch "native-code: 'arm64-v8a'\s*$") { throw 'APK 必须且仅包含 arm64-v8a' }
+        $fingerprint = Read-Certificate $apk
+        if ($fingerprint -ne (Read-Certificate (Resolve-Path -LiteralPath $PreviousApk).Path)) { throw '新旧 APK 签名不一致，不能覆盖安装' }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($apk)
+        try {
+            $entry = $archive.GetEntry('lib/arm64-v8a/libapp.so')
+            if (-not $entry) { throw 'APK 缺少 arm64 主程序' }
+            $stream = $entry.Open()
+            $buffer = New-Object System.IO.MemoryStream
+            try { $stream.CopyTo($buffer); $binaries += [System.Text.Encoding]::UTF8.GetString($buffer.ToArray()) }
+            finally { $stream.Dispose(); $buffer.Dispose() }
+        } finally { $archive.Dispose() }
+    }
+    if ($Platforms -contains 'windows') {
+        if ((Get-Item (Join-Path $windowsBundle 'bangumi_flutter.exe')).VersionInfo.ProductVersion -ne "$name+$code") { throw 'Windows 产物版本不一致' }
+        & (Join-Path $PSScriptRoot 'verify_windows_icons.ps1') -Executable (Join-Path $windowsBundle 'bangumi_flutter.exe')
+        $binaries += [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes((Join-Path $windowsBundle 'data/app.so')))
+    }
+    foreach ($binary in $binaries) {
         if ($binary.IndexOf($clientId, [StringComparison]::Ordinal) -lt 0 -or
             $binary.IndexOf($clientSecret, [StringComparison]::Ordinal) -lt 0) {
             throw '最终程序未检测到完整 OAuth 配置，拒绝发布（不输出凭据）'
         }
     }
     New-Item -ItemType Directory -Path $output | Out-Null
-    Copy-Item -LiteralPath $apk -Destination (Join-Path $output "bangumi-$name-arm64-v8a.apk")
-    Copy-Item -LiteralPath $windowsBundle -Destination (Join-Path $output 'windows-x64') -Recurse
-    Compress-Archive -LiteralPath (Join-Path $output 'windows-x64') -DestinationPath (Join-Path $output "bangumi-$name-windows-x64.zip") -CompressionLevel Optimal
+    if ($Platforms -contains 'android') {
+        Copy-Item -LiteralPath $apk -Destination (Join-Path $output "bangumi-$name-arm64-v8a.apk")
+        $files += "bangumi-$name-arm64-v8a.apk"
+    }
+    if ($Platforms -contains 'windows') {
+        Copy-Item -LiteralPath $windowsBundle -Destination (Join-Path $output 'windows-x64') -Recurse
+        Compress-Archive -LiteralPath (Join-Path $output 'windows-x64') -DestinationPath (Join-Path $output "bangumi-$name-windows-x64.zip") -CompressionLevel Optimal
+        $files += "bangumi-$name-windows-x64.zip"
+    }
     if ((& git rev-parse HEAD).Trim() -ne $sourceCommit -or @(& git status --porcelain --untracked-files=no).Count -gt 0) {
         throw '构建期间代码发生变化；保留本地输出但禁止作为已验证发行发布'
     }
     $sdkVersion = (& $Flutter --no-version-check --version --machine) -join "`n" | ConvertFrom-Json
-    $files = @("bangumi-$name-arm64-v8a.apk", "bangumi-$name-windows-x64.zip") | ForEach-Object {
+    $artifacts = @($files | ForEach-Object {
         $path = Join-Path $output $_
         @{name=$_; bytes=(Get-Item -LiteralPath $path).Length; sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()}
-    }
+    })
     $manifest = @{version=$name; versionCode=$code; sourceCommit=$sourceCommit;
         lockSha256=(Get-FileHash -LiteralPath 'pubspec.lock' -Algorithm SHA256).Hash.ToLowerInvariant();
         flutter=$sdkVersion.frameworkVersion; dart=$sdkVersion.dartSdkVersion;
         gates=@{analyze='passed'; flutterTests='passed'; androidUnitTests='passed'; realDeviceUpgrade='not-run'};
-        files=$files; oauthConfigured=$true; oauthCompiledInBothPlatforms=$true;
+        platforms=@($Platforms | Select-Object -Unique);
+        files=$artifacts; oauthConfigured=$true; oauthCompiledPlatforms=@($Platforms | Select-Object -Unique);
+        oauthCompiledInBothPlatforms=($Platforms -contains 'android' -and $Platforms -contains 'windows');
         previousVersionCode=$previous.Code; signerSha256=$fingerprint;
         independentManifestSignature='not-configured'}
     $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-verification.json') -Encoding utf8

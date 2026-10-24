@@ -462,6 +462,7 @@ void main() {
       await tester.pumpWidget(host(BlogDetailPage(id: 42, repository: repo)));
       await tester.pumpAndSettle();
       expect(find.text('Fixture blog'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Related subject'), 200);
       expect(find.text('Related subject'), findsOneWidget);
       expect(
         paths,

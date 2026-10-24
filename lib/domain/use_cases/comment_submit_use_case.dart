@@ -5,28 +5,37 @@ import '../../core/network/api_client.dart';
 import '../../data/bangumi_repository.dart';
 import '../../core/community_models.dart';
 import '../repositories/nested_comment_repository.dart';
+import '../repositories/blog_repository.dart';
 
 @immutable
 class ComposeCommentTarget {
   const ComposeCommentTarget.episode(this.id, this.title)
-    : topic = null,
+    : kind = 'episode',
+      topic = null,
+      replyTarget = null;
+  const ComposeCommentTarget.blog(this.id, this.title)
+    : kind = 'blog',
+      topic = null,
       replyTarget = null;
   ComposeCommentTarget.topic(Topic value)
-    : id = value.id,
+    : kind = 'topic',
+      id = value.id,
       title = value.title,
       topic = value,
       replyTarget = null;
   ComposeCommentTarget.reply(ComposeCommentTarget target, this.replyTarget)
-    : id = target.id,
+    : kind = target.kind,
+      id = target.id,
       title = target.title,
       topic = target.topic;
   final int id;
   final String title;
+  final String kind;
   final Topic? topic;
   final ComposeCommentReplyTarget? replyTarget;
-  int get maxLength => topic == null ? 1000 : 2000;
+  int get maxLength => kind == 'episode' ? 1000 : 2000;
   String get key =>
-      '${topic?.type ?? 'episode'}:$id:${replyTarget?.root.id ?? 0}:${replyTarget?.reply.id ?? 0}';
+      '${topic?.type ?? kind}:$id:${replyTarget?.root.id ?? 0}:${replyTarget?.reply.id ?? 0}';
 }
 
 @immutable
@@ -62,7 +71,17 @@ class CommentSubmitUseCase {
       throw const ApiException('commentInvalid');
     }
     final reply = target.replyTarget;
-    if (reply != null) {
+    if (target.kind == 'blog') {
+      if (repository is! BlogCommentRepository) {
+        throw const ApiException('commentInvalid');
+      }
+      await (repository as BlogCommentRepository).createBlogComment(
+        target.id,
+        value.trim(),
+        scope: scope,
+        replyTo: reply?.reply.id ?? 0,
+      );
+    } else if (reply != null) {
       final repo = repository;
       if (repo is! NestedCommentRepository) {
         throw const ApiException('commentInvalid');

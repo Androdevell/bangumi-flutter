@@ -53,6 +53,7 @@ abstract final class BangumiLinkParser {
             'person',
             'character',
             'blog',
+            'index',
           }.contains(p[0]) &&
           int.tryParse(p[1]) != null &&
           RegExp(r'^[1-9]\d*$').hasMatch(p[1])) {

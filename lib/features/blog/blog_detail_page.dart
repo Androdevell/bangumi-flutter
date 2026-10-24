@@ -16,6 +16,7 @@ import '../community/community_widgets.dart';
 import '../../domain/use_cases/comment_submit_use_case.dart';
 import '../subject/subject_navigation.dart';
 import '../user/user_profile_page.dart';
+import '../../widgets/comment_composer.dart';
 
 class BlogDetailPage extends StatefulWidget {
   const BlogDetailPage({super.key, required this.id, required this.repository});
@@ -26,6 +27,50 @@ class BlogDetailPage extends StatefulWidget {
 }
 
 class _BlogDetailPageState extends State<BlogDetailPage> {
+  CommentEditorSession _editor = CommentEditorSession();
+  bool _editorOpen = false;
+  int _editorGeneration = 0;
+  Future<void> _compose() async {
+    if (_editorOpen) return;
+    final s = AppLocalizations.of(context);
+    if (!widget.repository.isLoggedIn) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.t('loginComment'))));
+      return;
+    }
+    setState(() => _editorOpen = true);
+    final generation = _editorGeneration;
+    try {
+      final sent = await _editor.open(
+        context,
+        widget.repository,
+        ComposeCommentTarget.blog(
+          widget.id,
+          controller.state.data?.blog.title ?? '',
+        ),
+      );
+      if (!mounted) return;
+      if (sent != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.t('published'))));
+        if (widget.repository is BlogCommentRepository) {
+          (widget.repository as BlogCommentRepository).invalidateBlogComments(
+            widget.id,
+          );
+        }
+        await controller.refresh(afterPublish: true);
+      }
+    } finally {
+      if (generation != _editorGeneration) {
+        _editor.dispose();
+        _editor = CommentEditorSession();
+      }
+      if (mounted) setState(() => _editorOpen = false);
+    }
+  }
+
   ComposeBlogDetail? _photoDetail;
   final List<ComposeBlogPhoto> _extraPhotos = [];
   bool _loadingPhotos = false;
@@ -81,7 +126,16 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
               .collections
               .sessionChanges
           : null;
-  void _sessionChanged() => controller.refresh(reset: true);
+  void _sessionChanged() {
+    _editor.invalidateSession();
+    _editorGeneration++;
+    if (!_editorOpen) {
+      _editor.dispose();
+      _editor = CommentEditorSession();
+    }
+    controller.refresh(reset: true);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +147,7 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
   void dispose() {
     _sessionChanges?.removeListener(_sessionChanged);
     controller.dispose();
+    _editor.dispose();
     super.dispose();
   }
 
@@ -110,6 +165,19 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
     final s = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(s.t('blogDetail'))),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: OutlinedButton.icon(
+            onPressed: _editorOpen ? null : _compose,
+            icon: const Icon(Icons.edit_outlined),
+            label: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(s.t('commentHint')),
+            ),
+          ),
+        ),
+      ),
       body: ListenableBuilder(
         listenable: controller,
         builder: (_, _) {

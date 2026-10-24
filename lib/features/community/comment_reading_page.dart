@@ -11,6 +11,7 @@ import 'comment_page_controller.dart';
 import 'community_widgets.dart';
 import '../../domain/repositories/nested_comment_repository.dart';
 import '../../app/state/session_scope.dart';
+import 'comment_sort.dart';
 
 class CommentReadingPage<T> extends StatefulWidget {
   const CommentReadingPage({
@@ -23,6 +24,7 @@ class CommentReadingPage<T> extends StatefulWidget {
     required this.onReact,
     this.header,
     this.authorUsername,
+    this.sortable = false,
   });
   final BangumiRepository repository;
   final String title;
@@ -31,6 +33,7 @@ class CommentReadingPage<T> extends StatefulWidget {
   final List<CommunityReply> Function(T) items;
   final Widget Function(T)? header;
   final String Function(T)? authorUsername;
+  final bool sortable;
   final Future<void> Function(CommunityReply, String?) onReact;
   @override
   State<CommentReadingPage<T>> createState() => _CommentReadingPageState<T>();
@@ -43,6 +46,7 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
   );
   final Map<(SessionScope, String), CommentEditorSession> _editors = {};
   bool _editorOpen = false;
+  CommentOrder _order = CommentOrder.oldest;
   Listenable? get _sessionChanges =>
       widget.repository is CollectionFeatureRepository
           ? (widget.repository as CollectionFeatureRepository)
@@ -228,10 +232,45 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
                   child: RefreshIndicator(
                     onRefresh: _refresh,
                     child: CommunityReplyList(
-                      items: widget.items(data),
+                      items:
+                          widget.sortable
+                              ? sortedComments(widget.items(data), _order)
+                              : widget.items(data),
                       currentUsername: widget.repository.currentUsername,
                       authorUsername: widget.authorUsername?.call(data) ?? '',
-                      header: widget.header?.call(data),
+                      header: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (widget.header != null) widget.header!(data),
+                          if (widget.sortable)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 8,
+                              ),
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final order in CommentOrder.values)
+                                    ChoiceChip(
+                                      label: Text(
+                                        strings.t('sort${order.name}'),
+                                      ),
+                                      selected: _order == order,
+                                      onSelected:
+                                          (_) => setState(() => _order = order),
+                                    ),
+                                  Text(
+                                    strings.t('loadedCommentSort'),
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
                       onUserTap: _user,
                       onReply:
                           canPost &&

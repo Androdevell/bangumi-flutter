@@ -240,9 +240,18 @@ void main() {
     await tester.pumpWidget(host(BlogDetailPage(id: 381599, repository: repo)));
     await tester.pumpAndSettle();
     expect(find.byType(NetworkErrorView), findsOneWidget);
+    final scrollable = tester.state<ScrollableState>(
+      find.byType(Scrollable).first,
+    );
+    final errorTop =
+        tester.getTopLeft(find.byType(NetworkErrorView)).dy +
+        scrollable.position.pixels;
+    await tester.scrollUntilVisible(find.text('评论'), 150);
     expect(
-      tester.getTopLeft(find.byType(NetworkErrorView)).dy,
-      lessThan(tester.getTopLeft(find.text('评论')).dy),
+      errorTop,
+      lessThan(
+        tester.getTopLeft(find.text('评论')).dy + scrollable.position.pixels,
+      ),
     );
     expect(find.text('正文没有图片标签。', findRichText: true), findsOneWidget);
     expect(tester.takeException(), isNull);

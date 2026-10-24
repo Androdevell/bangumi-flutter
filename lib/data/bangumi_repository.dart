@@ -1,4 +1,9 @@
 import 'dart:async';
+import '../app/state/session_scope.dart';
+import '../domain/repositories/private_message_repository.dart';
+import 'repositories/remote_private_message_repository.dart';
+import 'package:html/parser.dart' as html;
+import '../domain/repositories/index_repository.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/models.dart';
@@ -204,6 +209,9 @@ class RemoteBangumiRepository
         TagRepository,
         BlogRepository,
         BlogPhotoRepository,
+        BlogCommentRepository,
+        IndexRepository,
+        PrivateMessageFeature,
         EpisodeMetadataRepository,
         SubjectPagingRepository,
         CollectionFeatureRepository,
@@ -237,6 +245,10 @@ class RemoteBangumiRepository
   final ThirdPartyPreviewService previewService;
 
   final ApiClient _api;
+  @override
+  late final PrivateMessageRepository messages = RemotePrivateMessageRepository(
+    _api,
+  );
   @override
   late final NotificationRepository notifications =
       RemoteNotificationRepository(_api);
@@ -684,6 +696,75 @@ class RemoteBangumiRepository
       photoTotal: photoPage?.total ?? 0,
       errors: errors,
     );
+  }
+
+  @override
+  void invalidateBlogComments(int id) =>
+      _api.invalidateResources({'p1/blogs/$id/comments'});
+
+  @override
+  Future<void> createBlogComment(
+    int id,
+    String content, {
+    required SessionScope scope,
+    int replyTo = 0,
+  }) async {
+    if (scope != _api.sessionScope || id <= 0 || content.trim().isEmpty) {
+      throw const ApiException('commentSessionChanged');
+    }
+    final page = await _api.siteDocument('/blog/$id', scope: scope);
+    final form = html.parse(page.html).querySelector('#ReplyForm');
+    final action = form?.attributes['action'] ?? '';
+    if (Uri.parse('https://bgm.tv/blog/$id').resolve(action).path !=
+        '/blog/entry/$id/new_reply') {
+      throw const ApiException('responseInvalid');
+    }
+    final hash =
+        form?.querySelector('input[name="formhash"]')?.attributes['value'] ??
+        '';
+    if (hash.isEmpty) throw const ApiException('profileWebLoginRequired');
+    if (scope != _api.sessionScope) {
+      throw const ApiException('commentSessionChanged');
+    }
+    final response = await _api.postWebForm(
+      'blog/entry/$id/new_reply?ajax=1',
+      referer: 'https://bgm.tv/blog/$id',
+      fields: {
+        'formhash': hash,
+        'lastview': '',
+        'content': content.trim(),
+        'submit': 'submit',
+        if (replyTo > 0) 'related': '$replyTo',
+      },
+    );
+    _requireReplyConfirmation(response);
+    invalidateBlogComments(id);
+    if (scope != _api.sessionScope) {
+      throw const ApiException('commentSessionChanged', outcomeUnknown: true);
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> indexInfo(int id) async =>
+      _map(await _api.get('p1/indexes/$id'));
+  @override
+  Future<Paged<Map<String, dynamic>>> indexEntries(
+    int id, {
+    int offset = 0,
+  }) async {
+    final raw = await _api.get(
+      'p1/indexes/$id/related',
+      query: {'limit': '30', 'offset': '$offset'},
+    );
+    if (raw is! Map || raw['data'] is! List || raw['total'] is! num) {
+      throw const ApiException('responseInvalid');
+    }
+    final items = _items(raw);
+    final total = (raw['total'] as num).toInt();
+    if (items.isEmpty && offset < total) {
+      throw const ApiException('responseInvalid');
+    }
+    return Paged(items: items, offset: offset, limit: 30, total: total);
   }
 
   @override
