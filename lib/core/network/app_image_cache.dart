@@ -13,6 +13,7 @@ import 'windows_direct_client.dart';
 abstract final class AppImageCache {
   static BaseCacheManager _manager = DefaultCacheManager();
   static bool _initialized = false;
+  static SafeImageFileService? _fileService;
   static const _cacheKey = 'bangumiImageCacheV2';
 
   static BaseCacheManager get manager => _manager;
@@ -20,7 +21,7 @@ abstract final class AppImageCache {
   @visibleForTesting
   static set testManager(BaseCacheManager value) => _manager = value;
 
-  static void initialize(http.Client client) {
+  static void initialize(http.Client client, {String cacheKey = _cacheKey}) {
     if (_initialized) return;
     _initialized = true;
     PaintingBinding.instance.imageCache
@@ -38,9 +39,10 @@ abstract final class AppImageCache {
                       : null,
             );
     service.concurrentFetches = 3;
+    _fileService = service is SafeImageFileService ? service : null;
     _manager = QuotaCacheManager(
       Config(
-        _cacheKey,
+        cacheKey,
         stalePeriod: const Duration(days: 14),
         maxNrOfCacheObjects: 600,
         fileService: service,
@@ -67,9 +69,15 @@ abstract final class AppImageCache {
       ..clearLiveImages();
   }
 
+  static Future<void> retry(String url) async {
+    _fileService?.clearFailure(url);
+    await _manager.removeFile(url);
+  }
+
   static Future<void> dispose() async {
     if (!_initialized) return;
     _initialized = false;
+    _fileService = null;
     await _manager.dispose();
     _manager = DefaultCacheManager();
   }

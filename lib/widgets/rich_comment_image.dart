@@ -19,7 +19,7 @@ class _RichCommentImageState extends State<RichCommentImage> {
 
   Future<void> _retry(Uri uri) async {
     try {
-      await AppImageCache.manager.removeFile(uri.toString());
+      await AppImageCache.retry(uri.toString());
       await createViewerImageProvider(
         uri.toString(),
         AppImageCache.manager,

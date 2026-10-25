@@ -55,7 +55,7 @@ Future<void> _verify() async {
         Object? failure;
         try {
           final result = await service.get(
-            'https://lain.bgm.tv/aot-fixture.png',
+            'https://lain.bgm.tv/aot-fixture.png?cycle=$cycle&kind=$kind',
           );
           await result.content.drain<void>();
         } on Object catch (error) {

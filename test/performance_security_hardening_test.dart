@@ -412,8 +412,6 @@ void main() {
     final root = await Directory.systemTemp.createTemp('bgm-transfer-test-');
     addTearDown(() => root.delete(recursive: true));
     final files = ImageTransferFiles(directory: root);
-    final active = await files.create();
-    await active.writeAsString('active');
     final staleDir = await Directory('${root.path}/transfer-old').create();
     final stale = await File(
       '${staleDir.path}/image.part',
@@ -421,13 +419,17 @@ void main() {
     final foreign = await File('${root.path}/notes.txt').writeAsString('keep');
     final old = DateTime.now().subtract(const Duration(days: 2));
     await stale.setLastModified(old);
-    await active.setLastModified(old);
-    await files.prune();
+    final active = await files.create();
+    await active.file.writeAsString('active');
+    await active.file.setLastModified(old);
+    // 初始化清理在创建第一个请求前完成，后续请求不再次扫描活动文件。
+    final another = await files.create();
     expect(await stale.exists(), false);
-    expect(await active.exists(), true);
+    expect(await active.file.exists(), true);
     expect(await foreign.exists(), true);
-    await files.release(active);
-    expect(await active.parent.exists(), false);
+    await active.release();
+    await another.release();
+    expect(await active.file.parent.exists(), false);
   });
 }
 

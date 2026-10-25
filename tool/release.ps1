@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PreviousApk,
     [ValidateSet('android', 'windows')][string[]]$Platforms = @('android', 'windows'),
     [switch]$ValidateOnly,
-    [switch]$NoPub
+    [switch]$NoPub,
+    [switch]$WindowsImageDiagnostics
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,20 +78,40 @@ try {
     & $Flutter --no-version-check test @pubArguments --machine |
         Set-Content -LiteralPath (Join-Path $gateDirectory 'flutter-tests.jsonl') -Encoding utf8
     if ($LASTEXITCODE -ne 0) { throw 'Flutter 测试未通过，拒绝构建正式包' }
-    Write-Output '发布门禁 3/3：Android 原生单元测试'
-    Push-Location (Join-Path $projectRoot 'android')
-    try {
-        & ./gradlew.bat :app:testDebugUnitTest -Ptarget-platform=android-arm64 --console=plain
-        if ($LASTEXITCODE -ne 0) { throw 'Android 原生测试未通过，拒绝构建正式包' }
-    } finally { Pop-Location }
+    if ($Platforms -contains 'android') {
+        Write-Output '发布门禁 3/3：Android 原生单元测试'
+        Push-Location (Join-Path $projectRoot 'android')
+        try {
+            & ./gradlew.bat :app:testDebugUnitTest -Ptarget-platform=android-arm64 --console=plain
+            if ($LASTEXITCODE -ne 0) { throw 'Android 原生测试未通过，拒绝构建正式包' }
+        } finally { Pop-Location }
+    }
     if ($Platforms -contains 'android') {
         & $Flutter --no-version-check build apk --release --target lib/main.dart --target-platform android-arm64 @pubArguments @defines
         if ($LASTEXITCODE -ne 0) { throw 'Android Release 构建失败' }
     }
     if ($Platforms -contains 'windows') {
         & (Join-Path $PSScriptRoot 'windows-image-smoke.ps1') -Flutter $Flutter
-        & $Flutter --no-version-check build windows --release --target lib/main.dart @pubArguments @defines
+        $windowsDefines = @($defines)
+        if ($WindowsImageDiagnostics) { $windowsDefines += '--dart-define=IMAGE_DIAGNOSTICS=true' }
+        & $Flutter --no-version-check build windows --release --target lib/main.dart @pubArguments @windowsDefines
         if ($LASTEXITCODE -ne 0) { throw 'Windows Release 构建失败' }
+        # 保留与最终 AOT 配套的内核，便于后续离线生成符号；仅留在忽略的 build 中。
+        $windowsAot = Join-Path $projectRoot 'build/windows/x64/runner/Release/data/app.so'
+        $windowsAotHash = (Get-FileHash -LiteralPath $windowsAot -Algorithm SHA256).Hash
+        $matchingKernel = @(Get-ChildItem -LiteralPath (Join-Path $projectRoot '.dart_tool/flutter_build') -Directory | ForEach-Object {
+            $candidateAot = Join-Path $_.FullName 'app.so'
+            $candidateKernel = Join-Path $_.FullName 'app.dill'
+            if ((Test-Path -LiteralPath $candidateAot) -and (Test-Path -LiteralPath $candidateKernel) -and
+                (Get-FileHash -LiteralPath $candidateAot -Algorithm SHA256).Hash -eq $windowsAotHash) { $candidateKernel }
+        })
+        if ($matchingKernel.Count -lt 1) { throw '未找到与最终 Windows AOT 匹配的内核，无法保留崩溃诊断依据' }
+        $symbolFolder = Join-Path $gateDirectory "windows-$name-$code"
+        New-Item -ItemType Directory -Force -Path $symbolFolder | Out-Null
+        Copy-Item -LiteralPath $windowsAot -Destination (Join-Path $symbolFolder 'app.so') -Force
+        Copy-Item -LiteralPath $matchingKernel[0] -Destination (Join-Path $symbolFolder 'app.dill') -Force
+        @{commit=$sourceCommit; version=$name; code=$code; aotSha256=$windowsAotHash.ToLowerInvariant()} | ConvertTo-Json |
+            Set-Content -LiteralPath (Join-Path $symbolFolder 'source.json') -Encoding utf8
     }
     $binaries = @()
     $files = @()
@@ -153,6 +174,8 @@ try {
         previousVersionCode=$previous.Code; signerSha256=$fingerprint;
         independentManifestSignature='not-configured'}
     $manifest.gates.windowsAotImages = if ($Platforms -contains 'windows') { 'passed' } else { 'not-run' }
+    $manifest.gates.androidUnitTests = if ($Platforms -contains 'android') { 'passed' } else { 'not-run' }
+    $manifest.windowsImageDiagnostics = [bool]$WindowsImageDiagnostics
     $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-verification.json') -Encoding utf8
     Write-Output "正式包已核对并生成：$output"
 } finally {

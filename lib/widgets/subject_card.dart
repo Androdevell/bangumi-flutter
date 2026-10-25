@@ -165,9 +165,7 @@ class _PosterArtState extends State<PosterArt> {
                             )?.t('posterFailed') ??
                             'Retry cover',
                         onPressed: () async {
-                          await AppImageCache.manager.removeFile(
-                            subject.imageUrl,
-                          );
+                          await AppImageCache.retry(subject.imageUrl);
                           if (mounted) setState(() => _revision++);
                         },
                         icon: const Icon(Icons.refresh),

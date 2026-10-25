@@ -1,39 +1,31 @@
 import 'dart:io';
+import '../diagnostics/image_diagnostics.dart';
 
-/// 临时图片文件的唯一所有者；只回收本工具目录中一天前的单个分片。
+/// 创建请求独占的临时文件；在首次创建前完成一次旧分片清理。
 class ImageTransferFiles {
   ImageTransferFiles({Directory? directory})
     : _root =
           directory ??
           Directory('${Directory.systemTemp.path}/bangumi-image-transfers-v1');
   final Directory _root;
-  final _active = <Uri>{};
-  bool _swept = false;
+  Future<void>? _initializing;
 
-  Future<File> create() async {
-    await _root.create(recursive: true);
-    if (!_swept) {
-      _swept = true;
-      await prune();
-    }
+  Future<ImageTransferFile> create({
+    int request = 0,
+    ImageDiagnostics? diagnostics,
+  }) async {
+    await (_initializing ??= _initialize());
     final folder = await _root.createTemp('transfer-');
     final file = File('${folder.path}/image.part');
-    _active.add(file.absolute.uri.normalizePath());
-    return file;
+    return ImageTransferFile._(
+      file,
+      request,
+      diagnostics ?? ImageDiagnostics.instance,
+    );
   }
 
-  Future<void> release(File file) async {
-    _active.remove(file.absolute.uri.normalizePath());
-    try {
-      if (await file.exists()) await file.delete();
-      await file.parent.delete(); // 非递归；不删除意外出现的其他文件。
-    } on FileSystemException {
-      // 占用或中断留下的分片在下次启动按 TTL 再回收。
-    }
-  }
-
-  Future<void> prune() async {
-    if (!await _root.exists()) return;
+  Future<void> _initialize() async {
+    await _root.create(recursive: true);
     final root =
         Directory(
           await _root.resolveSymbolicLinks(),
@@ -51,8 +43,7 @@ class ImageTransferFiles {
         final resolved = Directory(await child.resolveSymbolicLinks());
         if (resolved.parent.absolute.uri.normalizePath() != root) continue;
         final file = File('${resolved.path}/image.part');
-        if (_active.contains(file.absolute.uri.normalizePath()) ||
-            await FileSystemEntity.type(file.path, followLinks: false) !=
+        if (await FileSystemEntity.type(file.path, followLinks: false) !=
                 FileSystemEntityType.file ||
             !(await file.lastModified()).isBefore(cutoff)) {
           continue;
@@ -62,6 +53,76 @@ class ImageTransferFiles {
       } on FileSystemException {
         // 不跟随链接，不递归，也不强制删除其他进程占用的文件。
       }
+    }
+  }
+}
+
+/// 一个下载独占其文件和释放状态；异常与流结束共用幂等释放操作。
+class ImageTransferFile {
+  ImageTransferFile._(this.file, this.request, this.diagnostics) {
+    diagnostics.record(ImageEvent.transferCreated, request);
+  }
+  final File file;
+  final int request;
+  final ImageDiagnostics diagnostics;
+  Future<void>? _releasing;
+
+  Future<void> prepare(
+    Stream<List<int>> source,
+    Future<void> Function(File) validate,
+  ) async {
+    try {
+      await _write(source);
+      await validate(file);
+    } catch (_) {
+      await release();
+      rethrow;
+    }
+  }
+
+  Future<void> _write(Stream<List<int>> source) async {
+    final sink = file.openWrite();
+    Object? failure;
+    StackTrace? trace;
+    try {
+      await sink.addStream(source);
+    } catch (error, stack) {
+      failure = error;
+      trace = stack;
+    }
+    try {
+      await sink.close();
+    } catch (error, stack) {
+      failure ??= error;
+      trace ??= stack;
+    }
+    if (failure != null) Error.throwWithStackTrace(failure, trace!);
+  }
+
+  Stream<List<int>> read() async* {
+    try {
+      yield* file.openRead();
+    } finally {
+      await release();
+    }
+  }
+
+  Future<void> release() {
+    if (_releasing != null) {
+      diagnostics.record(ImageEvent.cleanupRepeated, request);
+    }
+    return _releasing ??= _delete();
+  }
+
+  Future<void> _delete() async {
+    diagnostics.record(ImageEvent.cleanupStarted, request);
+    try {
+      if (await file.exists()) await file.delete();
+      await file.parent.delete();
+      diagnostics.record(ImageEvent.cleanupFinished, request);
+    } on FileSystemException {
+      diagnostics.record(ImageEvent.cleanupDeferred, request);
+      // 占用或中断留下的分片在下次启动按 TTL 再回收。
     }
   }
 }

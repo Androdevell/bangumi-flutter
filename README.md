@@ -35,6 +35,8 @@ Windows 1.2.11 直连模式实拍（2026-10-22）：
 
 ## 开发与测试
 
+Windows 图片与页面切换回归可运行 `./tool/windows-navigation-stress.ps1`，匿名测试三轮、每轮 300 次，结果保存在 `build/verification/navigation/`。此命令构建独立测试入口；打包时使用 `tool/release.ps1` 明确重建 `lib/main.dart`。测试版可附加 `-WindowsImageDiagnostics`，只在本地保存有界图片阶段记录。
+
 需要项目锁定的 Flutter/Dart SDK、Android SDK，以及 Windows 的 Visual Studio C++ 桌面组件。首次运行 `flutter pub get`。
 
 ```powershell
