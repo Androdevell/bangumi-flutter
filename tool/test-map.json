@@ -1,4 +1,11 @@
 {
+  "lib/app/app_theme.dart": ["test/liquid_glass_test.dart", "test/presentation_performance_test.dart"],
+  "lib/app/visual_style.dart": ["test/liquid_glass_test.dart"],
+  "lib/core/settings/theme_preferences.dart": ["test/liquid_glass_test.dart", "test/settings_release_upgrade_test.dart"],
+  "lib/core/localization/glass_strings.dart": ["test/liquid_glass_test.dart"],
+  "lib/widgets/liquid_glass.dart": ["test/liquid_glass_test.dart"],
+  "lib/widgets/interface_style_picker.dart": ["test/liquid_glass_test.dart"],
+  "lib/features/shell/": ["test/liquid_glass_test.dart", "test/app_smoke_test.dart", "test/presentation_performance_test.dart"],
   "lib/core/network/safe_image_file_service.dart": ["test/performance_security_hardening_test.dart"],
   "lib/core/network/windows_system_client.dart": ["test/release_130_test.dart", "test/windows_io_cancellation_test.dart"],
   "lib/features/messages/": ["test/release_130_test.dart"],

@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'app_motion.dart';
+import 'visual_style.dart';
+import '../core/settings/theme_preferences.dart';
+import '../widgets/liquid_glass.dart';
 
 abstract final class AppTheme {
   static const _brand = Color(0xFFE85D87);
 
-  static ThemeData light({Color? seed, ColorScheme? dynamicScheme}) {
-    if (dynamicScheme != null) return _build(dynamicScheme);
-    if (seed != null) return _build(ColorScheme.fromSeed(seedColor: seed));
+  static ThemeData light({
+    Color? seed,
+    ColorScheme? dynamicScheme,
+    InterfaceStyle style = InterfaceStyle.material,
+  }) {
+    if (dynamicScheme != null) return _build(dynamicScheme, style);
+    if (seed != null) {
+      return _build(ColorScheme.fromSeed(seedColor: seed), style);
+    }
     final scheme = ColorScheme.fromSeed(
       seedColor: _brand,
       brightness: Brightness.light,
@@ -14,14 +23,19 @@ abstract final class AppTheme {
       surface: const Color(0xFFFFF9FB),
       surfaceContainerLowest: Colors.white,
     );
-    return _build(scheme);
+    return _build(scheme, style);
   }
 
-  static ThemeData dark({Color? seed, ColorScheme? dynamicScheme}) {
-    if (dynamicScheme != null) return _build(dynamicScheme);
+  static ThemeData dark({
+    Color? seed,
+    ColorScheme? dynamicScheme,
+    InterfaceStyle style = InterfaceStyle.material,
+  }) {
+    if (dynamicScheme != null) return _build(dynamicScheme, style);
     if (seed != null) {
       return _build(
         ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark),
+        style,
       );
     }
     final scheme = ColorScheme.fromSeed(
@@ -31,14 +45,16 @@ abstract final class AppTheme {
       surface: const Color(0xFF171417),
       surfaceContainerLowest: const Color(0xFF100E10),
     );
-    return _build(scheme);
+    return _build(scheme, style);
   }
 
-  static ThemeData _build(ColorScheme scheme) {
+  static ThemeData _build(ColorScheme scheme, InterfaceStyle style) {
+    final glass = style == InterfaceStyle.liquidGlass;
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surface,
+      scaffoldBackgroundColor: glass ? Colors.transparent : scheme.surface,
+      extensions: [AppVisualStyle(style)],
       fontFamilyFallback: const [
         'Microsoft YaHei UI',
         'Microsoft YaHei',
@@ -77,9 +93,12 @@ abstract final class AppTheme {
         shadowColor: scheme.shadow.withValues(alpha: 0.16),
         surfaceTintColor: scheme.primary.withValues(alpha: 0.035),
         margin: EdgeInsets.zero,
-        color: scheme.surfaceContainerLowest,
+        color:
+            glass
+                ? scheme.surface.withValues(alpha: .86)
+                : scheme.surfaceContainerLowest,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(glass ? 24 : 16),
           side: BorderSide(
             color: scheme.outlineVariant.withValues(alpha: 0.55),
           ),
@@ -87,9 +106,14 @@ abstract final class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         height: 70,
-        elevation: 2,
-        backgroundColor: scheme.surfaceContainerLowest,
-        indicatorColor: scheme.primaryContainer,
+        elevation: glass ? 0 : 2,
+        backgroundColor:
+            glass ? Colors.transparent : scheme.surfaceContainerLowest,
+        indicatorColor:
+            glass
+                ? scheme.primaryContainer.withValues(alpha: .68)
+                : scheme.primaryContainer,
+        surfaceTintColor: glass ? Colors.transparent : null,
         labelTextStyle: WidgetStatePropertyAll(
           TextStyle(
             fontSize: 12,
@@ -99,8 +123,12 @@ abstract final class AppTheme {
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: scheme.surfaceContainerLowest,
-        indicatorColor: scheme.primaryContainer,
+        backgroundColor:
+            glass ? Colors.transparent : scheme.surfaceContainerLowest,
+        indicatorColor:
+            glass
+                ? scheme.primaryContainer.withValues(alpha: .68)
+                : scheme.primaryContainer,
         selectedIconTheme: IconThemeData(color: scheme.primary),
         selectedLabelTextStyle: TextStyle(
           color: scheme.primary,
@@ -110,7 +138,10 @@ abstract final class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerLow,
+        fillColor:
+            glass
+                ? scheme.surface.withValues(alpha: .82)
+                : scheme.surfaceContainerLow,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
@@ -123,13 +154,14 @@ abstract final class AppTheme {
         ),
       ),
       dividerColor: scheme.outlineVariant.withValues(alpha: 0.55),
-      splashFactory: InkSparkle.splashFactory,
+      splashFactory: glass ? InkRipple.splashFactory : InkSparkle.splashFactory,
       appBarTheme: AppBarTheme(
         elevation: 0,
-        scrolledUnderElevation: 1,
+        scrolledUnderElevation: glass ? 0 : 1,
         centerTitle: false,
-        backgroundColor: scheme.surface.withValues(alpha: 0.94),
-        surfaceTintColor: scheme.primary.withValues(alpha: 0.06),
+        backgroundColor: scheme.surface.withValues(alpha: glass ? .9 : .94),
+        surfaceTintColor:
+            glass ? Colors.transparent : scheme.primary.withValues(alpha: 0.06),
       ),
       dialogTheme: DialogThemeData(
         elevation: 8,
@@ -148,7 +180,7 @@ abstract final class AppTheme {
         style: FilledButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(glass ? 22 : 14),
           ),
         ),
       ),
@@ -157,8 +189,8 @@ abstract final class AppTheme {
           TargetPlatform.android: _MotionPageTransition(),
           TargetPlatform.windows: _MotionPageTransition(),
           TargetPlatform.linux: _MotionPageTransition(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: _MotionPageTransition(),
+          TargetPlatform.iOS: _MotionPageTransition(),
         },
       ),
     );
@@ -174,14 +206,20 @@ class _MotionPageTransition extends PageTransitionsBuilder {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
     Widget child,
-  ) =>
-      AppMotionPolicy.reduce(context)
-          ? child
-          : const FadeUpwardsPageTransitionsBuilder().buildTransitions(
-            route,
-            context,
-            animation,
-            secondaryAnimation,
-            child,
-          );
+  ) {
+    final surface = AppGlassBackground(child: child);
+    if (AppMotionPolicy.reduce(context)) return surface;
+    final platform = Theme.of(context).platform;
+    final PageTransitionsBuilder transition =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS
+            ? const CupertinoPageTransitionsBuilder()
+            : const FadeUpwardsPageTransitionsBuilder();
+    return transition.buildTransitions(
+      route,
+      context,
+      animation,
+      secondaryAnimation,
+      surface,
+    );
+  }
 }

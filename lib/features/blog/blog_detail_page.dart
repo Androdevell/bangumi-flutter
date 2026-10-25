@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/liquid_glass.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/json_utils.dart';
@@ -168,12 +169,15 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: OutlinedButton.icon(
-            onPressed: _editorOpen ? null : _compose,
-            icon: const Icon(Icons.edit_outlined),
-            label: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(s.t('commentHint')),
+          child: AdaptiveActionSurface(
+            classicColor: Colors.transparent,
+            child: OutlinedButton.icon(
+              onPressed: _editorOpen ? null : _compose,
+              icon: const Icon(Icons.edit_outlined),
+              label: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(s.t('commentHint')),
+              ),
             ),
           ),
         ),

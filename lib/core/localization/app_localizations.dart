@@ -4,6 +4,7 @@ import 'community_strings.dart';
 import 'settings_strings.dart';
 import 'experience_strings.dart';
 import 'release_130_strings.dart';
+import 'glass_strings.dart';
 
 class AppLocalizations {
   const AppLocalizations(this.locale);
@@ -18,6 +19,7 @@ class AppLocalizations {
       const AppLocalizations(Locale('zh'));
 
   String t(String key) =>
+      glassStrings[locale.languageCode]?[key] ??
       release130Strings[locale.languageCode]?[key] ??
       experienceStrings[locale.languageCode]?[key] ??
       settingsStrings[locale.languageCode]?[key] ??

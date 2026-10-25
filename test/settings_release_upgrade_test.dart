@@ -118,10 +118,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('森语绿'));
+    await tester.scrollUntilVisible(
+      find.text('森语绿'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('森语绿'));
     await tester.pumpAndSettle();
-    final apply = find.widgetWithText(FilledButton, '应用配色').last;
+    final apply = find.byKey(const ValueKey('theme-apply'));
     await tester.ensureVisible(apply);
     await tester.tap(apply);
     await tester.pumpAndSettle();

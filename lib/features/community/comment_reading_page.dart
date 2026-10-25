@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/liquid_glass.dart';
 import '../../core/community_models.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/network/api_client.dart';
@@ -162,10 +163,7 @@ class _CommentReadingPageState<T> extends State<CommentReadingPage<T>> {
                     heightFactor: 1,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 880),
-                      child: Material(
-                        color:
-                            Theme.of(context).colorScheme.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(24),
+                      child: AdaptiveActionSurface(
                         child: InkWell(
                           borderRadius: BorderRadius.circular(24),
                           onTap: _editorOpen ? null : _compose,

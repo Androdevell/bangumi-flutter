@@ -9,6 +9,8 @@ import '../domain/use_cases/comment_submit_use_case.dart';
 import '../data/bangumi_repository.dart';
 import 'bangumi_rich_text.dart';
 import 'emoji_picker.dart';
+import '../app/visual_style.dart';
+import 'liquid_glass.dart';
 
 class _UrlInputDialog extends StatefulWidget {
   const _UrlInputDialog({required this.image});
@@ -110,6 +112,7 @@ Future<String?> showCommentComposer(
   isDismissible: false,
   enableDrag: false,
   showDragHandle: false,
+  backgroundColor: AppVisualStyle.glass(context) ? Colors.transparent : null,
   constraints: const BoxConstraints(maxWidth: 760),
   builder:
       (_) => _CommentComposer(
@@ -582,7 +585,10 @@ class _CommentComposerState extends State<_CommentComposer> {
               ),
             ),
           ),
-          child: shortcuts,
+          child:
+              AppVisualStyle.glass(context)
+                  ? LiquidGlassSurface(child: shortcuts)
+                  : shortcuts,
         ),
       ),
     );

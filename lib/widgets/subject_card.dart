@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../core/network/app_image_cache.dart';
 import 'common.dart';
+import 'liquid_glass.dart';
 import '../core/localization/app_localizations.dart';
 
 class SubjectCard extends StatelessWidget {
@@ -21,8 +22,7 @@ class SubjectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return HoverLift(
-      child: Card(
-        clipBehavior: Clip.antiAlias,
+      child: AdaptiveCard(
         child: InkWell(
           onTap: onTap,
           child: Column(

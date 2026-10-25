@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../app/app_motion.dart';
 import '../core/localization/app_localizations.dart';
+import '../app/visual_style.dart';
+import 'liquid_glass.dart';
 
 class ContentFrame extends StatelessWidget {
   const ContentFrame({
@@ -156,6 +158,9 @@ class SurfaceBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    if (AppVisualStyle.glass(context)) {
+      return LiquidGlassSurface(child: Padding(padding: padding, child: child));
+    }
     return Material(
       elevation: 1,
       shadowColor: scheme.shadow.withValues(alpha: 0.12),

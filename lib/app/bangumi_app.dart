@@ -186,10 +186,12 @@ class _BangumiAppState extends State<BangumiApp> with WidgetsBindingObserver {
                   debugShowCheckedModeBanner: false,
                   title: 'Bangumi',
                   theme: AppTheme.light(
+                    style: config.style,
                     seed: legacy ? null : config.seed,
                     dynamicScheme: system ? lightDynamic : null,
                   ),
                   darkTheme: AppTheme.dark(
+                    style: config.style,
                     seed: legacy ? null : config.seed,
                     dynamicScheme: system ? darkDynamic : null,
                   ),

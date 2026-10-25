@@ -11,6 +11,8 @@ import '../profile/profile_page.dart';
 import '../rakuen/rakuen_page.dart';
 import '../timeline/timeline_page.dart';
 import '../notifications/notification_host.dart';
+import '../../app/visual_style.dart';
+import '../../widgets/liquid_glass.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({
@@ -159,6 +161,7 @@ class _AppShellState extends State<AppShell> {
         builder: (context, constraints) {
           final showRail = constraints.maxWidth >= 760;
           final extendRail = constraints.maxWidth >= 1180;
+          final glass = AppVisualStyle.glass(context);
           final pages = _createPages();
           final content = NotificationHost(
             repository: widget.repository,
@@ -178,70 +181,92 @@ class _AppShellState extends State<AppShell> {
           );
 
           if (!showRail) {
+            final navigation = NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _select,
+              destinations: [
+                for (final item in destinations)
+                  NavigationDestination(
+                    icon: Icon(item.icon),
+                    selectedIcon: Icon(item.selectedIcon),
+                    label: item.label,
+                  ),
+              ],
+            );
             return Scaffold(
+              extendBody: glass,
               body: content,
-              bottomNavigationBar: NavigationBar(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: _select,
-                destinations: [
-                  for (final item in destinations)
-                    NavigationDestination(
-                      icon: Icon(item.icon),
-                      selectedIcon: Icon(item.selectedIcon),
-                      label: item.label,
-                    ),
-                ],
-              ),
+              bottomNavigationBar:
+                  glass
+                      ? SafeArea(
+                        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                        child: Align(
+                          heightFactor: 1,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 640),
+                            child: LiquidGlassSurface(
+                              blur: true,
+                              radius: 32,
+                              child: navigation,
+                            ),
+                          ),
+                        ),
+                      )
+                      : navigation,
             );
           }
 
           return Scaffold(
             body: Row(
               children: [
-                NavigationRail(
-                  extended: extendRail,
-                  minExtendedWidth: 212,
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: _select,
-                  groupAlignment: -0.35,
-                  leading: Padding(
-                    padding: const EdgeInsets.only(top: 14, bottom: 22),
-                    child: _BrandMark(
-                      showLabel: extendRail,
-                      iconStyle: widget.appIconStyle,
+                _RailSurface(
+                  glass: glass,
+                  child: NavigationRail(
+                    extended: extendRail,
+                    minExtendedWidth: 212,
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _select,
+                    groupAlignment: -0.35,
+                    leading: Padding(
+                      padding: const EdgeInsets.only(top: 14, bottom: 22),
+                      child: _BrandMark(
+                        showLabel: extendRail,
+                        iconStyle: widget.appIconStyle,
+                      ),
                     ),
-                  ),
-                  trailing: Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 18),
-                        child: IconButton(
-                          tooltip: strings.t('toggleTheme'),
-                          onPressed: widget.onToggleTheme,
-                          icon: Icon(
-                            Theme.of(context).brightness == Brightness.dark
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
+                    trailing: Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 18),
+                          child: IconButton(
+                            tooltip: strings.t('toggleTheme'),
+                            onPressed: widget.onToggleTheme,
+                            icon: Icon(
+                              Theme.of(context).brightness == Brightness.dark
+                                  ? Icons.light_mode_outlined
+                                  : Icons.dark_mode_outlined,
+                            ),
                           ),
                         ),
                       ),
                     ),
+                    destinations: [
+                      for (final item in destinations)
+                        NavigationRailDestination(
+                          icon: Icon(item.icon),
+                          selectedIcon: Icon(item.selectedIcon),
+                          label: Text(item.label),
+                        ),
+                    ],
                   ),
-                  destinations: [
-                    for (final item in destinations)
-                      NavigationRailDestination(
-                        icon: Icon(item.icon),
-                        selectedIcon: Icon(item.selectedIcon),
-                        label: Text(item.label),
-                      ),
-                  ],
                 ),
-                VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  color: Theme.of(context).dividerColor,
-                ),
+                if (!glass)
+                  VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: Theme.of(context).dividerColor,
+                  ),
                 Expanded(child: content),
               ],
             ),
@@ -250,6 +275,20 @@ class _AppShellState extends State<AppShell> {
       ),
     );
   }
+}
+
+class _RailSurface extends StatelessWidget {
+  const _RailSurface({required this.glass, required this.child});
+  final bool glass;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) =>
+      glass
+          ? Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+            child: LiquidGlassSurface(blur: true, radius: 28, child: child),
+          )
+          : child;
 }
 
 class _BrandMark extends StatelessWidget {

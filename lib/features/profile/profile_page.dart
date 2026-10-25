@@ -10,6 +10,7 @@ import '../../core/community_models.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/network/app_image_cache.dart';
 import '../../core/settings/app_preferences.dart';
+import '../../core/settings/theme_preferences.dart';
 import '../../core/update/app_update_service.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
@@ -596,6 +597,14 @@ class _ProfilePageState extends State<ProfilePage> {
                     ListTile(
                       leading: const Icon(Icons.color_lens_outlined),
                       title: Text(strings.t('themeColors')),
+                      subtitle: Text(
+                        strings.t(
+                          controller.settings.style ==
+                                  InterfaceStyle.liquidGlass
+                              ? 'styleLiquidGlass'
+                              : 'styleMaterial',
+                        ),
+                      ),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap:
                           () => Navigator.of(context).push(

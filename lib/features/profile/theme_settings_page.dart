@@ -8,6 +8,8 @@ import '../../core/settings/theme_preferences.dart';
 import '../../widgets/common.dart';
 import '../../widgets/settings_choice.dart';
 import '../../widgets/theme_color_palette.dart';
+import '../../widgets/interface_style_picker.dart';
+import '../../widgets/liquid_glass.dart';
 
 class ThemeSettingsPage extends StatefulWidget {
   const ThemeSettingsPage({super.key, required this.controller});
@@ -77,7 +79,14 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
         );
       }
     } on Object {
-      if (mounted) setState(() => _error = 'operationFailed');
+      if (mounted) {
+        setState(() => _error = 'operationFailed');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).t('operationFailed')),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -90,15 +99,55 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
         (_draft.mode == ThemeMode.dark ||
                 (_draft.mode == ThemeMode.system &&
                     Theme.of(context).brightness == Brightness.dark))
-            ? AppTheme.dark(seed: _draft.seed)
-            : AppTheme.light(seed: _draft.seed);
+            ? AppTheme.dark(seed: _draft.seed, style: _draft.style)
+            : AppTheme.light(seed: _draft.seed, style: _draft.style);
     return Scaffold(
       appBar: AppBar(title: Text(s.t('themeColors'))),
+      bottomNavigationBar: SafeArea(
+        child: ContentFrame(
+          shrinkWrap: true,
+          maxWidth: 780,
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+              child: FilledButton(
+                key: const ValueKey('theme-apply'),
+                onPressed: _busy || _error == 'themeInvalid' ? null : _apply,
+                child: Text(s.t('themeApply')),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: ContentFrame(
         maxWidth: 780,
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            Text(
+              s.t('interfaceStyle'),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            InterfaceStylePicker(
+              value: _draft.style,
+              seed: _draft.seed,
+              onChanged:
+                  _busy
+                      ? null
+                      : (style) => _select(_draft.copyWith(style: style)),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              s.t('styleApplyHint'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              s.t('glassAccessibilityHint'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 20),
             SettingsChoiceTile(
               title: s.t('themeMode'),
               value: _draft.mode.name,
@@ -217,23 +266,32 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               data: preview,
               child: Builder(
                 builder:
-                    (context) => Card(
+                    (context) => AppGlassBackground(
                       child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              s.t('themePreview'),
-                              style: Theme.of(context).textTheme.titleLarge,
+                        padding: const EdgeInsets.all(8),
+                        child: AdaptiveCard(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  s.t('themePreview'),
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: 14),
+                                FilledButton(
+                                  onPressed:
+                                      _busy || _error == 'themeInvalid'
+                                          ? null
+                                          : _apply,
+                                  child: Text(s.t('themeApply')),
+                                ),
+                                const LinearProgressIndicator(value: .6),
+                              ],
                             ),
-                            const SizedBox(height: 14),
-                            FilledButton(
-                              onPressed: () {},
-                              child: Text(s.t('themeApply')),
-                            ),
-                            const LinearProgressIndicator(value: .6),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -246,11 +304,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               ),
             if (_busy) const LinearProgressIndicator(),
             const SizedBox(height: 18),
-            FilledButton(
-              key: const ValueKey('theme-apply'),
-              onPressed: _busy || _error == 'themeInvalid' ? null : _apply,
-              child: Text(s.t('themeApply')),
-            ),
             TextButton(
               onPressed:
                   _busy ? null : () => _select(const ComposeThemePreferences()),

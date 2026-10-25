@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 enum ThemeColorSource { preset, system, custom, image }
 
+enum InterfaceStyle { material, liquidGlass }
+
 const themePresets = <String, Color>{
   'sakura': Color(0xFFE85D87),
   'iris': Color(0xFF7C6BC4),
@@ -19,17 +21,20 @@ class ComposeThemePreferences {
     this.seed = const Color(0xFFE85D87),
     this.preset = 'sakura',
     this.mode = ThemeMode.system,
+    this.style = InterfaceStyle.material,
   });
   final ThemeColorSource source;
   final Color seed;
   final String preset;
   final ThemeMode mode;
+  final InterfaceStyle style;
   String encode() => jsonEncode({
     'schema': 1,
     'source': source.name,
     'seed': seed.toARGB32(),
     'preset': preset,
     'mode': mode.name,
+    'style': style.name,
   });
   static ComposeThemePreferences decode(String? raw) {
     try {
@@ -43,6 +48,10 @@ class ComposeThemePreferences {
                 ? map['preset'] as String
                 : 'sakura',
         mode: ThemeMode.values.byName(map['mode'] as String),
+        style:
+            map['style'] == InterfaceStyle.liquidGlass.name
+                ? InterfaceStyle.liquidGlass
+                : InterfaceStyle.material,
       );
     } on Object {
       return const ComposeThemePreferences();
@@ -54,10 +63,12 @@ class ComposeThemePreferences {
     Color? seed,
     String? preset,
     ThemeMode? mode,
+    InterfaceStyle? style,
   }) => ComposeThemePreferences(
     source: source ?? this.source,
     seed: seed ?? this.seed,
     preset: preset ?? this.preset,
     mode: mode ?? this.mode,
+    style: style ?? this.style,
   );
 }
