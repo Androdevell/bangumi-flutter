@@ -51,7 +51,9 @@ class UpdateDownloadService extends ChangeNotifier {
   }
 
   Future<void> download(ComposeUpdateAsset asset) async {
-    await _maintenance;
+    while (_maintenance != null) {
+      await _maintenance;
+    }
     if (busy || _closed) return;
     file = null;
     verified = false;

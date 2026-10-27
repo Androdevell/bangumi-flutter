@@ -250,7 +250,6 @@ void main() {
         ),
       );
       final pending = manager.getSingleFile('https://example.org/image');
-      await Future<void>.delayed(const Duration(milliseconds: 40));
       expect(manager.hasActiveRequests, true);
       await expectLater(manager.maintain(() async {}), throwsStateError);
       response.complete(http.Response('fixture', 200));
@@ -306,7 +305,7 @@ void main() {
           digest: 'sha256:${sha256.convert(bytes)}',
         ),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(UpdateDownloadService.hasActiveDownloads, true);
       final skipped = await service.clear({CacheCategory.updates});
       expect(skipped.busy, contains(CacheCategory.updates));
       pending.complete(http.Response.bytes(bytes, 200));

@@ -18,7 +18,9 @@ class QuotaCacheManager extends CacheManager {
 
   @override
   getSingleFile(String url, {String? key, Map<String, String>? headers}) async {
-    await _maintenance;
+    while (_maintenance != null) {
+      await _maintenance;
+    }
     final id = key ?? url;
     _active[id] = (_active[id] ?? 0) + 1;
     try {
@@ -59,7 +61,9 @@ class QuotaCacheManager extends CacheManager {
     Map<String, String>? authHeaders,
     bool force = false,
   }) async {
-    await _maintenance;
+    while (_maintenance != null) {
+      await _maintenance;
+    }
     final id = key ?? url;
     _active[id] = (_active[id] ?? 0) + 1;
     try {
@@ -85,7 +89,9 @@ class QuotaCacheManager extends CacheManager {
     Map<String, String>? headers,
     bool withProgress = false,
   }) async* {
-    await _maintenance;
+    while (_maintenance != null) {
+      await _maintenance;
+    }
     final id = key ?? url;
     _active[id] = (_active[id] ?? 0) + 1;
     try {
@@ -114,7 +120,9 @@ class QuotaCacheManager extends CacheManager {
   }
 
   Future<void> _trim() async {
-    await _maintenance;
+    while (_maintenance != null) {
+      await _maintenance;
+    }
     if (_closed) return;
     final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
     _recent.removeWhere((_, at) => at.isBefore(cutoff));
