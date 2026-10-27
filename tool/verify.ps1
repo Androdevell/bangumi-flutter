@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('quick','full')][string]$Mode='quick', [string[]]$Tests=@(), [string]$Flutter='D:/flutter/bin/flutter.bat')
+param([ValidateSet('quick','full')][string]$Mode='quick', [string[]]$Tests=@(), [string]$Flutter='D:/flutter/bin/flutter.bat', [ValidateRange(1,16)][int]$Concurrency=2)
 $ErrorActionPreference='Stop'
 $watch=[Diagnostics.Stopwatch]::StartNew()
 $root=Split-Path -Parent $PSScriptRoot
@@ -28,7 +28,7 @@ try {
     }
     & $Flutter --no-version-check analyze --no-pub --fatal-infos > build/verification/analyze.log 2>&1
     if ($LASTEXITCODE -ne 0) { Get-Content build/verification/analyze.log -Tail 35; throw '静态分析失败' }
-    & $Flutter --no-version-check test --no-pub --machine @Tests > $log 2>&1
+    & $Flutter --no-version-check test --no-pub --machine "--concurrency=$Concurrency" @Tests > $log 2>&1
     $testExit=$LASTEXITCODE
     $events=Get-Content -LiteralPath $log | ForEach-Object { try { $_ | ConvertFrom-Json -ErrorAction Stop } catch {} }
     $done=@($events | Where-Object { $_.type -eq 'testDone' -and -not $_.hidden })

@@ -6,7 +6,8 @@ param(
     [ValidateSet('android', 'windows')][string[]]$Platforms = @('android', 'windows'),
     [switch]$ValidateOnly,
     [switch]$NoPub,
-    [switch]$WindowsImageDiagnostics
+    [switch]$WindowsImageDiagnostics,
+    [ValidateRange(1,16)][int]$TestConcurrency=2
 )
 
 $ErrorActionPreference = 'Stop'
@@ -75,7 +76,7 @@ try {
     & $Flutter --no-version-check analyze --fatal-infos @pubArguments
     if ($LASTEXITCODE -ne 0) { throw '静态分析未通过，拒绝构建正式包' }
     Write-Output '发布门禁 2/3：完整 Flutter 测试'
-    & $Flutter --no-version-check test @pubArguments --machine |
+    & $Flutter --no-version-check test @pubArguments --machine "--concurrency=$TestConcurrency" |
         Set-Content -LiteralPath (Join-Path $gateDirectory 'flutter-tests.jsonl') -Encoding utf8
     if ($LASTEXITCODE -ne 0) { throw 'Flutter 测试未通过，拒绝构建正式包' }
     if ($Platforms -contains 'android') {
@@ -176,6 +177,7 @@ try {
     $manifest.gates.windowsAotImages = if ($Platforms -contains 'windows') { 'passed' } else { 'not-run' }
     $manifest.gates.androidUnitTests = if ($Platforms -contains 'android') { 'passed' } else { 'not-run' }
     $manifest.windowsImageDiagnostics = [bool]$WindowsImageDiagnostics
+    $manifest.testConcurrency = $TestConcurrency
     $manifest.gates.windowsCacheStorage = if ($Platforms -contains 'windows') { 'passed' } else { 'not-run' }
     $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-verification.json') -Encoding utf8
     Write-Output "正式包已核对并生成：$output"
