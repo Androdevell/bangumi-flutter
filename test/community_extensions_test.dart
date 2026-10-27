@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'temp_cache_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -221,7 +222,7 @@ void main() {
     'safe image transport strips credentials and validates redirects',
     () async {
       final requests = <http.Request>[];
-      final service = SafeImageFileService(
+      final service = fixtureImageService(
         MockClient((request) async {
           requests.add(request);
           return requests.length == 1
@@ -261,7 +262,7 @@ void main() {
     'redirect to private DNS is stopped before sending credentials or network request',
     () async {
       var calls = 0;
-      final service = SafeImageFileService(
+      final service = fixtureImageService(
         MockClient((_) async {
           calls++;
           return http.Response(
@@ -285,7 +286,7 @@ void main() {
     },
   );
   test('image byte budget rejects oversized response', () async {
-    final service = SafeImageFileService(
+    final service = fixtureImageService(
       MockClient.streaming(
         (_, __) async => http.StreamedResponse(
           const Stream.empty(),

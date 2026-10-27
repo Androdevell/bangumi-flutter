@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'temp_cache_fixture.dart';
 
 import 'package:bangumi_flutter/core/network/image_header.dart';
 import 'package:bangumi_flutter/core/network/safe_image_file_service.dart';
@@ -72,7 +73,7 @@ Uint8List _gif(int width, int height) {
 SafeImageFileService _service({
   required Uint8List body,
   String type = 'image/png',
-}) => SafeImageFileService(
+}) => fixtureImageService(
   MockClient(
     (_) async =>
         http.Response.bytes(body, 200, headers: {'content-type': type}),

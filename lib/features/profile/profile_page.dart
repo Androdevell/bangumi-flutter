@@ -27,6 +27,9 @@ import '../../app/theme_controller.dart';
 import 'theme_settings_page.dart';
 import 'network_diagnostics_page.dart';
 import 'update_page.dart';
+import '../../core/cache/app_cache_service.dart';
+import '../../domain/models/cache_usage.dart';
+import 'cache/cache_management_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({
@@ -63,7 +66,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<CommunityUser>? _profile;
   late final AppUpdateService _updateService = AppUpdateService();
   late final Future<String> _appVersion = _updateService.currentVersion();
-  late Future<int> _cacheUsage = AppImageCache.diskUsageBytes();
 
   AppLocalizations get _strings => AppLocalizations.of(context);
 
@@ -114,23 +116,19 @@ class _ProfilePageState extends State<ProfilePage> {
     return _profile;
   }
 
-  Future<void> _clearImageCache() async {
-    try {
-      await AppImageCache.clear();
-      if (!mounted) return;
-      setState(() {
-        _cacheUsage = AppImageCache.diskUsageBytes();
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_strings.t('cacheCleared'))));
-    } on Object {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_strings.t('operationFailed'))));
-    }
-  }
+  Future<void> _openCacheManagement() => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder:
+          (_) => CacheManagementPage(
+            service: AppCacheService(
+              responses:
+                  widget.repository is ResponseCacheMaintenance
+                      ? widget.repository as ResponseCacheMaintenance
+                      : null,
+            ),
+          ),
+    ),
+  );
 
   Future<void> _testNetwork() async {
     await Navigator.of(context).push(
@@ -688,16 +686,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.cleaning_services_outlined),
-                    title: Text(strings.t('clearCache')),
-                    subtitle: FutureBuilder<int>(
-                      future: _cacheUsage,
-                      builder:
-                          (context, snapshot) => Text(
-                            '${strings.t('clearCacheSubtitle')}\n${strings.t('cacheUsage')}: ${snapshot.hasData ? '${(snapshot.data! / (1024 * 1024)).toStringAsFixed(1)} MB' : '—'}',
-                          ),
-                    ),
-                    trailing: const Icon(Icons.delete_sweep_outlined),
-                    onTap: _clearImageCache,
+                    title: Text(strings.t('cacheManagement')),
+                    subtitle: Text(strings.t('cacheManagementHint')),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _openCacheManagement,
                   ),
                   const Divider(height: 1),
                   ListTile(

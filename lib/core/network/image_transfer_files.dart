@@ -1,13 +1,12 @@
 import 'dart:io';
 import '../diagnostics/image_diagnostics.dart';
+import '../cache/cache_storage.dart';
 
 /// 创建请求独占的临时文件；在首次创建前完成一次旧分片清理。
 class ImageTransferFiles {
-  ImageTransferFiles({Directory? directory})
-    : _root =
-          directory ??
-          Directory('${Directory.systemTemp.path}/bangumi-image-transfers-v1');
-  final Directory _root;
+  ImageTransferFiles({Directory? directory}) : _directory = directory;
+  final Directory? _directory;
+  late Directory _root;
   Future<void>? _initializing;
 
   Future<ImageTransferFile> create({
@@ -25,6 +24,7 @@ class ImageTransferFiles {
   }
 
   Future<void> _initialize() async {
+    _root = _directory ?? await CacheStorage.transfers();
     await _root.create(recursive: true);
     final root =
         Directory(

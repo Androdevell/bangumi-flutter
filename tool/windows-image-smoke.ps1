@@ -19,6 +19,7 @@ try {
     if ($process.ExitCode -ne 0) { throw "Windows AOT 图片回归失败：退出码 $($process.ExitCode)" }
     $result = Get-Content -LiteralPath (Join-Path $folder 'windows-image-smoke.stdout.log') -Raw
     if ($result -notmatch 'Windows AOT image smoke passed: 90 cases') { throw '缺少 Windows AOT 回归完成标记' }
+    if ($result -notmatch 'Windows cache storage smoke passed: 6 categories') { throw '缺少 Windows 分类缓存清理回归完成标记' }
     Write-Output 'Windows AOT image smoke passed: 90 cases'
 } finally {
     Pop-Location

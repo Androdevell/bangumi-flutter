@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'temp_cache_fixture.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +8,6 @@ import 'package:http/testing.dart';
 import 'package:bangumi_flutter/app/state/session_scope.dart';
 import 'package:bangumi_flutter/core/network/api_client.dart';
 import 'package:bangumi_flutter/core/network/image_request_headers.dart';
-import 'package:bangumi_flutter/core/network/safe_image_file_service.dart';
 import 'package:bangumi_flutter/data/repositories/remote_privacy_repository.dart';
 import 'package:bangumi_flutter/data/repositories/web_privacy_form.dart';
 import 'package:bangumi_flutter/domain/models/privacy_settings.dart';
@@ -346,7 +346,7 @@ void main() {
         );
       });
       addTearDown(client.close);
-      final service = SafeImageFileService(
+      final service = fixtureImageService(
         client,
         lookup: (_) async => [InternetAddress('93.184.216.34')],
       );

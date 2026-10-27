@@ -43,6 +43,7 @@ abstract final class BangumiBbCode {
     caseSensitive: false,
   );
   static final _cache = <String, ComposeRichTextDocument>{};
+  static void clearCache() => _cache.clear();
   static const maxLength = 65536;
   static const maxDepth = 16;
   static const maxNodes = 2048;

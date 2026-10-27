@@ -57,6 +57,7 @@ class ApiClient {
   final Duration _readBudget;
   final int _cacheMaxBytes;
   int _cacheBytes = 0;
+  int get cachedResponseBytes => _cacheBytes;
   final Set<Completer<void>> _activeAborts = {};
   Future<dynamic>? _publicCalendar;
   DateTime? _publicCalendarAt;

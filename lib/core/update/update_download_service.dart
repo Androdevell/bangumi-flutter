@@ -17,6 +17,23 @@ class UpdateDownloadService extends ChangeNotifier {
   final http.Client Function() _clientFactory;
   final Future<Directory> Function() _directoryProvider;
   static const _native = MethodChannel('com.bgm.irena/update');
+  static int _activeDownloads = 0;
+  static bool get hasActiveDownloads => _activeDownloads > 0;
+  static Future<void>? _maintenance;
+  static Future<T> maintain<T>(Future<T> Function() action) async {
+    if (hasActiveDownloads || _maintenance != null) {
+      throw StateError('cacheBusy');
+    }
+    final done = Completer<void>();
+    _maintenance = done.future;
+    try {
+      return await action();
+    } finally {
+      _maintenance = null;
+      done.complete();
+    }
+  }
+
   http.Client? _client;
   bool busy = false, cancelled = false, verified = false, _closed = false;
   int received = 0, total = 0;
@@ -34,6 +51,7 @@ class UpdateDownloadService extends ChangeNotifier {
   }
 
   Future<void> download(ComposeUpdateAsset asset) async {
+    await _maintenance;
     if (busy || _closed) return;
     file = null;
     verified = false;
@@ -53,6 +71,7 @@ class UpdateDownloadService extends ChangeNotifier {
       return;
     }
     busy = true;
+    _activeDownloads++;
     cancelled = false;
     verified = false;
     received = 0;
@@ -186,6 +205,7 @@ class UpdateDownloadService extends ChangeNotifier {
       _requestId = null;
       if (Platform.isAndroid) _native.setMethodCallHandler(null);
       busy = false;
+      _activeDownloads--;
       _notify();
     }
   }

@@ -176,6 +176,7 @@ try {
     $manifest.gates.windowsAotImages = if ($Platforms -contains 'windows') { 'passed' } else { 'not-run' }
     $manifest.gates.androidUnitTests = if ($Platforms -contains 'android') { 'passed' } else { 'not-run' }
     $manifest.windowsImageDiagnostics = [bool]$WindowsImageDiagnostics
+    $manifest.gates.windowsCacheStorage = if ($Platforms -contains 'windows') { 'passed' } else { 'not-run' }
     $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release-verification.json') -Encoding utf8
     Write-Output "正式包已核对并生成：$output"
 } finally {

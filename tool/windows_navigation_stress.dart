@@ -1,6 +1,8 @@
 // Anonymous release benchmark of the real calendar, cards and details routes.
 import 'dart:async';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:bangumi_flutter/core/cache/managed_image_file_system.dart';
 import 'package:flutter/material.dart';
 import 'package:bangumi_flutter/app/bangumi_app.dart';
 import 'package:bangumi_flutter/core/auth/secure_vault.dart';
@@ -32,7 +34,17 @@ List<Element> elements(bool Function(Element) test) {
 void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
   final imageClient = ImageTransport(createPlatformHttpClient());
-  AppImageCache.initialize(imageClient, cacheKey: 'bangumiNavigationStressV1');
+  AppImageCache.initialize(
+    imageClient,
+    cacheKey: 'bangumiNavigationStressV1',
+    fileSystem: ManagedImageFileSystem(
+      key: 'bangumiNavigationStressV1/images',
+      legacy:
+          () async => Directory(
+            '${(await getTemporaryDirectory()).path}/bangumiNavigationStressV1',
+          ),
+    ),
+  );
   final repository = _StressRepository(); // No AuthService or saved session.
   runApp(
     BangumiApp(

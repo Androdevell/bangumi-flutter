@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../domain/models/cache_usage.dart';
 import '../app/state/session_scope.dart';
 import '../domain/repositories/private_message_repository.dart';
 import 'repositories/remote_private_message_repository.dart';
@@ -206,6 +207,7 @@ Future<Paged<Subject>> searchPage(
 class RemoteBangumiRepository
     implements
         BangumiRepository,
+        ResponseCacheMaintenance,
         TagRepository,
         BlogRepository,
         BlogPhotoRepository,
@@ -291,11 +293,17 @@ class RemoteBangumiRepository
   late final AppStateCoordinator _coordinator;
   late final StreamSubscription<Object> _collectionSubscription;
   bool _closed = false;
+  int _cacheRevision = 0;
+  @override
+  int get cachedResponseBytes => _api.cachedResponseBytes;
+  @override
+  void clearResponseCache() => invalidateCache();
   final Map<String, ({DateTime at, Future<Paged<Subject>> request})>
   _searchCache = {};
 
   @override
   void invalidateCache() {
+    _cacheRevision++;
     _api.clearCache();
     _searchCache.clear();
   }
@@ -316,9 +324,10 @@ class RemoteBangumiRepository
 
   @override
   Future<Map<String, List<Subject>>> fetchCalendar() async {
+    final revision = _cacheRevision;
     final json = await _api.publicCalendar();
     final result = _parseCalendar(json);
-    if (calendarStore != null) {
+    if (calendarStore != null && revision == _cacheRevision) {
       unawaited(calendarStore!.write(json as Map).catchError((Object _) {}));
     }
     return result;

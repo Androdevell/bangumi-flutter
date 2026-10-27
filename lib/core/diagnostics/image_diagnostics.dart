@@ -31,6 +31,7 @@ class ImageDiagnostics {
   File? _file;
   Future<void>? _writing;
   int _written = 0;
+  bool _paused = false;
   int get nextRequest => ++_next;
   Map<String, Object> get snapshot => {
     'version': appVersion,
@@ -49,7 +50,7 @@ class ImageDiagnostics {
     };
     _events.add(entry);
     if (_events.length > 128) _events.removeFirst();
-    if (_file != null) {
+    if (_file != null && !_paused) {
       _pending.add('${jsonEncode(entry)}\n');
       if (_pending.length > 128) _pending.removeFirst();
       _writing ??= _write().whenComplete(() => _writing = null);
@@ -98,4 +99,25 @@ class ImageDiagnostics {
   }
 
   Future<void> flush() async => await _writing;
+
+  Future<void> clearStored() async {
+    _paused = true;
+    try {
+      await flush();
+      _pending.clear();
+      _events.clear();
+      _counts.clear();
+      _written = 0;
+      if (_file case final file?) {
+        await file.writeAsString(
+          '${jsonEncode({'version': appVersion})}\n',
+          flush: true,
+        );
+      }
+    } finally {
+      _paused = false;
+    }
+  }
+
+  bool owns(File file) => _file?.absolute.path == file.absolute.path;
 }

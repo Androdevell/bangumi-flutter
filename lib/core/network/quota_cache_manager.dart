@@ -13,6 +13,70 @@ class QuotaCacheManager extends CacheManager {
   Timer? _timer;
   Future<void>? _trimming;
   bool _closed = false;
+  Future<void>? _maintenance;
+  bool get hasActiveRequests => _active.isNotEmpty;
+
+  @override
+  getSingleFile(String url, {String? key, Map<String, String>? headers}) async {
+    await _maintenance;
+    final id = key ?? url;
+    _active[id] = (_active[id] ?? 0) + 1;
+    try {
+      return await super.getSingleFile(url, key: key, headers: headers);
+    } finally {
+      if ((_active[id] ?? 0) <= 1) {
+        _active.remove(id);
+      } else {
+        _active[id] = _active[id]! - 1;
+      }
+    }
+  }
+
+  /// 清理期间新的读取等待；已有下载完成前不进入维护。
+  Future<T> maintain<T>(Future<T> Function() action) async {
+    while (_trimming != null) {
+      await _trimming;
+    }
+    if (hasActiveRequests || _maintenance != null) {
+      throw StateError('cacheBusy');
+    }
+    final done = Completer<void>();
+    _maintenance = done.future;
+    _timer?.cancel();
+    _timer = null;
+    try {
+      return await action();
+    } finally {
+      _maintenance = null;
+      done.complete();
+    }
+  }
+
+  @override
+  Future<FileInfo> downloadFile(
+    String url, {
+    String? key,
+    Map<String, String>? authHeaders,
+    bool force = false,
+  }) async {
+    await _maintenance;
+    final id = key ?? url;
+    _active[id] = (_active[id] ?? 0) + 1;
+    try {
+      return await super.downloadFile(
+        url,
+        key: key,
+        authHeaders: authHeaders,
+        force: force,
+      );
+    } finally {
+      if ((_active[id] ?? 0) <= 1) {
+        _active.remove(id);
+      } else {
+        _active[id] = _active[id]! - 1;
+      }
+    }
+  }
 
   @override
   Stream<FileResponse> getFileStream(
@@ -21,6 +85,7 @@ class QuotaCacheManager extends CacheManager {
     Map<String, String>? headers,
     bool withProgress = false,
   }) async* {
+    await _maintenance;
     final id = key ?? url;
     _active[id] = (_active[id] ?? 0) + 1;
     try {
@@ -49,6 +114,8 @@ class QuotaCacheManager extends CacheManager {
   }
 
   Future<void> _trim() async {
+    await _maintenance;
+    if (_closed) return;
     final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
     _recent.removeWhere((_, at) => at.isBefore(cutoff));
     await configuration.repo.open();

@@ -31,6 +31,7 @@ class SafeImageFileService extends FileService {
   final _failures = <String, ({DateTime until, HttpException error})>{};
 
   void clearFailure(String url) => _failures.remove(url);
+  void clearFailures() => _failures.clear();
   @override
   Future<FileServiceResponse> get(
     String url, {
