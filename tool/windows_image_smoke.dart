@@ -110,6 +110,8 @@ class _SmokeCache implements BaseCacheManager {
 Future<void> _cacheSmoke() async {
   final root = await Directory.systemTemp.createTemp('bgm-cache-smoke-');
   final cache = _SmokeCache();
+  // 独立 AOT 回归入口使用隔离的测试后端，不运行于正式 main.dart。
+  // ignore: invalid_use_of_visible_for_testing_member
   AppImageCache.testManager = cache;
   Future<File> write(String path, String value) async {
     final file = File('${root.path}/$path');
