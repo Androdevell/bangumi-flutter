@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../core/network/read_task_scope.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/subject_tag_chip.dart';
@@ -14,7 +15,7 @@ import '../../core/subject_detail_models.dart';
 import '../../data/bangumi_repository.dart';
 import '../../widgets/common.dart';
 import '../../widgets/section_failure_notice.dart';
-import '../../core/collection_labels.dart';
+
 import '../../widgets/bangumi_rich_text.dart';
 import '../../widgets/subject_card.dart';
 import '../character/character_detail_page.dart';
@@ -50,17 +51,17 @@ class SubjectDetailPage extends StatefulWidget {
 
 class _SubjectDetailPageState extends State<SubjectDetailPage> {
   static const _tabNames = [
-    '简介',
-    '章节',
-    '预览',
-    '吐槽',
-    '角色',
-    '制作人员',
-    '关联',
-    '目录',
-    '日志',
-    '话题',
-    '透视',
+    'detail0',
+    'detail1',
+    'detail2',
+    'detail3',
+    'detail4',
+    'detail5',
+    'detail6',
+    'detail7',
+    'detail8',
+    'detail9',
+    'detail10',
   ];
 
   late Future<SubjectDetailData> _details = _load();
@@ -93,6 +94,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
 
   @override
   void dispose() {
+    _read.cancel();
     _progress?.dispose();
     final repository = widget.repository;
     if (repository is CollectionFeatureRepository) {
@@ -102,7 +104,14 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     super.dispose();
   }
 
-  Future<SubjectDetailData> _load() async {
+  ReadTaskScope _read = ReadTaskScope();
+  Future<SubjectDetailData> _load() {
+    _read.cancel();
+    _read = ReadTaskScope();
+    return _read.run(_loadData);
+  }
+
+  Future<SubjectDetailData> _loadData() async {
     final details =
         await (widget.repository is DetailSectionsRepository
             ? (widget.repository as DetailSectionsRepository).fetchSubjectBase(
@@ -165,9 +174,9 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
 
   Future<void> _editCollection(SubjectDetailData details) async {
     if (!widget.repository.isLoggedIn) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先登录后再收藏条目')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).t('detail11'))),
+      );
       return;
     }
     final repository = widget.repository;
@@ -187,21 +196,31 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     final statuses = [
       (
         1,
-        collectionLabel(subjectType: details.subject.type, status: 1),
+        AppLocalizations.of(
+          context,
+        ).collectionStatusLabel(details.subject.type, 1),
         Icons.bookmark_add_outlined,
       ),
       (
         2,
-        collectionLabel(subjectType: details.subject.type, status: 2),
+        AppLocalizations.of(
+          context,
+        ).collectionStatusLabel(details.subject.type, 2),
         Icons.done_all_rounded,
       ),
       (
         3,
-        collectionLabel(subjectType: details.subject.type, status: 3),
+        AppLocalizations.of(
+          context,
+        ).collectionStatusLabel(details.subject.type, 3),
         Icons.play_circle_outline_rounded,
       ),
-      (4, '搁置', Icons.pause_circle_outline_rounded),
-      (5, '抛弃', Icons.block_outlined),
+      (
+        4,
+        AppLocalizations.of(context).t('detail12'),
+        Icons.pause_circle_outline_rounded,
+      ),
+      (5, AppLocalizations.of(context).t('detail13'), Icons.block_outlined),
     ];
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -225,7 +244,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '收藏与评价',
+                            AppLocalizations.of(context).t('detail14'),
                             style: Theme.of(context).textTheme.headlineSmall,
                           ),
                           const SizedBox(height: 6),
@@ -237,7 +256,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            '收藏状态',
+                            AppLocalizations.of(context).t('detail15'),
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
                           const SizedBox(height: 9),
@@ -268,11 +287,15 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                           Row(
                             children: [
                               Text(
-                                '评分',
+                                AppLocalizations.of(context).t('detail16'),
                                 style: Theme.of(context).textTheme.titleSmall,
                               ),
                               const Spacer(),
-                              Text(rate == 0 ? '未评分' : '$rate / 10'),
+                              Text(
+                                rate == 0
+                                    ? AppLocalizations.of(context).t('detail17')
+                                    : '$rate / 10',
+                              ),
                             ],
                           ),
                           Slider(
@@ -280,7 +303,10 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                             min: 0,
                             max: 10,
                             divisions: 10,
-                            label: rate == 0 ? '未评分' : '$rate 分',
+                            label:
+                                rate == 0
+                                    ? AppLocalizations.of(context).t('detail17')
+                                    : '$rate / 10',
                             onChanged:
                                 (value) =>
                                     setDialogState(() => rate = value.round()),
@@ -300,9 +326,13 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                             initialValue: comment,
                             maxLines: 4,
                             maxLength: 200,
-                            decoration: const InputDecoration(
-                              labelText: '简评',
-                              hintText: '写下此刻的感受',
+                            decoration: InputDecoration(
+                              labelText: AppLocalizations.of(
+                                context,
+                              ).t('detail18'),
+                              hintText: AppLocalizations.of(
+                                context,
+                              ).t('detail19'),
                               alignLabelWithHint: true,
                               border: OutlineInputBorder(),
                             ),
@@ -315,9 +345,13 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                   ? Icons.lock_outline_rounded
                                   : Icons.public_rounded,
                             ),
-                            title: const Text('仅自己可见'),
+                            title: Text(
+                              AppLocalizations.of(context).t('detail20'),
+                            ),
                             subtitle: Text(
-                              isPrivate ? '不会展示在公开收藏中' : '其他用户可查看这条收藏',
+                              isPrivate
+                                  ? AppLocalizations.of(context).t('detail21')
+                                  : AppLocalizations.of(context).t('detail22'),
                             ),
                             value: isPrivate,
                             onChanged:
@@ -331,7 +365,9 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                               onPressed:
                                   () => Navigator.pop(dialogContext, true),
                               icon: const Icon(Icons.save_outlined),
-                              label: const Text('保存收藏'),
+                              label: Text(
+                                AppLocalizations.of(context).t('detail23'),
+                              ),
                             ),
                           ),
                         ],
@@ -344,7 +380,7 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
     if (saved != true || !mounted) return;
     try {
       if (feature != null && formScope != feature.collections.sessionScope) {
-        throw const ApiException('登录会话已改变，请重新打开后操作');
+        throw const ApiException('commentSessionChanged');
       }
       final previousType = _interestType ?? details.interestType;
       if (repository is CollectionFeatureRepository) {
@@ -378,9 +414,9 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
         _savedComment = comment;
         _savedPrivate = isPrivate;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('收藏已更新')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).t('detail24'))),
+      );
     } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -411,13 +447,13 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
               title: Text(subject.title),
               actions: [
                 IconButton(
-                  tooltip: '刷新',
+                  tooltip: AppLocalizations.of(context).t('detail25'),
                   onPressed: _retry,
                   icon: const Icon(Icons.refresh_rounded),
                 ),
                 if (details != null)
                   IconButton(
-                    tooltip: '收藏与评价',
+                    tooltip: AppLocalizations.of(context).t('detail14'),
                     onPressed: () => _editCollection(details),
                     icon: Icon(
                       (_interestType ?? details.interestType) > 0
@@ -445,7 +481,10 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                         child: TabBar(
                           isScrollable: true,
                           tabAlignment: TabAlignment.start,
-                          tabs: [for (final name in _tabNames) Tab(text: name)],
+                          tabs: [
+                            for (final name in _tabNames)
+                              Tab(text: AppLocalizations.of(context).t(name)),
+                          ],
                         ),
                       ),
                     ),
@@ -457,7 +496,11 @@ class _SubjectDetailPageState extends State<SubjectDetailPage> {
                                 onRetry: _retry,
                               )
                               : details == null
-                              ? const LoadingView(label: '正在加载条目资料…')
+                              ? LoadingView(
+                                label: AppLocalizations.of(
+                                  context,
+                                ).t('detail26'),
+                              )
                               : LazyTabView(
                                 key: ValueKey(identityHashCode(_details)),
                                 builders: [
@@ -692,7 +735,7 @@ class _SubjectHeader extends StatelessWidget {
                           text:
                               subject.score > 0
                                   ? '${subject.score.toStringAsFixed(1)}  ${subject.ratingCount} 人'
-                                  : '暂无评分',
+                                  : AppLocalizations.of(context).t('detail27'),
                         ),
                         if (subject.rank > 0)
                           _HeaderMetric(
@@ -745,7 +788,9 @@ class _EpisodeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无章节数据');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail28'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: items.length,
@@ -776,7 +821,7 @@ class _EpisodeSection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: '查看评论',
+                tooltip: AppLocalizations.of(context).t('detail29'),
                 onPressed:
                     () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
@@ -794,7 +839,7 @@ class _EpisodeSection extends StatelessWidget {
                 ),
               ),
               PopupMenuButton<int>(
-                tooltip: '更新进度',
+                tooltip: AppLocalizations.of(context).t('detail30'),
                 enabled: repository.isLoggedIn && collected,
                 onSelected: (value) async {
                   try {
@@ -804,9 +849,13 @@ class _EpisodeSection extends StatelessWidget {
                       batch: value == 2,
                     );
                     if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('章节进度已更新')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            AppLocalizations.of(context).t('detail31'),
+                          ),
+                        ),
+                      );
                     }
                   } on Object catch (error) {
                     if (context.mounted) {
@@ -817,11 +866,23 @@ class _EpisodeSection extends StatelessWidget {
                   }
                 },
                 itemBuilder:
-                    (_) => const [
-                      PopupMenuItem(value: 1, child: Text('想看')),
-                      PopupMenuItem(value: 2, child: Text('看到这里')),
-                      PopupMenuItem(value: 3, child: Text('抛弃')),
-                      PopupMenuItem(value: 0, child: Text('撤销进度')),
+                    (_) => [
+                      PopupMenuItem(
+                        value: 1,
+                        child: Text(AppLocalizations.of(context).t('detail32')),
+                      ),
+                      PopupMenuItem(
+                        value: 2,
+                        child: Text(AppLocalizations.of(context).t('detail33')),
+                      ),
+                      PopupMenuItem(
+                        value: 3,
+                        child: Text(AppLocalizations.of(context).t('detail13')),
+                      ),
+                      PopupMenuItem(
+                        value: 0,
+                        child: Text(AppLocalizations.of(context).t('detail34')),
+                      ),
                     ],
               ),
             ],
@@ -858,16 +919,24 @@ class _SummarySection extends StatelessWidget {
     final fields =
         details.infobox.where((field) => field.values.isNotEmpty).toList();
     final introduction = <Widget>[
-      _SectionTitle(title: '简介', icon: Icons.notes_rounded),
+      _SectionTitle(
+        title: AppLocalizations.of(context).t('detail0'),
+        icon: Icons.notes_rounded,
+      ),
       const SizedBox(height: 8),
       SelectableText(
-        details.subject.summary.isEmpty ? '暂无简介' : details.subject.summary,
+        details.subject.summary.isEmpty
+            ? AppLocalizations.of(context).t('detail35')
+            : details.subject.summary,
         style: Theme.of(context).textTheme.bodyMedium,
       ),
       if (progress != null) ...[const SizedBox(height: 20), progress!],
       if (details.tags.isNotEmpty) ...[
         const SizedBox(height: 24),
-        _SectionTitle(title: '标签', icon: Icons.sell_outlined),
+        _SectionTitle(
+          title: AppLocalizations.of(context).t('detail36'),
+          icon: Icons.sell_outlined,
+        ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 7,
@@ -896,7 +965,10 @@ class _SummarySection extends StatelessWidget {
       ],
       if (details.infobox.any((field) => field.values.isNotEmpty)) ...[
         const SizedBox(height: 24),
-        _SectionTitle(title: '条目信息', icon: Icons.info_outline_rounded),
+        _SectionTitle(
+          title: AppLocalizations.of(context).t('detail37'),
+          icon: Icons.info_outline_rounded,
+        ),
         const SizedBox(height: 8),
       ],
     ];
@@ -926,7 +998,9 @@ class SubjectCommentSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无吐槽');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail38'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
@@ -1098,7 +1172,9 @@ class _CharacterSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无角色资料');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail39'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
@@ -1150,7 +1226,9 @@ class _StaffSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无制作人员资料');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail40'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
@@ -1207,7 +1285,9 @@ class _RelationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无关联条目');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail41'));
+    }
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -1296,7 +1376,9 @@ class _IndexSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无关联目录');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail42'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: items.length,
@@ -1331,7 +1413,9 @@ class _ReviewSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无日志');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail43'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
@@ -1402,7 +1486,9 @@ class _TopicSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const EmptyView(message: '暂无话题');
+    if (items.isEmpty) {
+      return EmptyView(message: AppLocalizations.of(context).t('detail44'));
+    }
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: items.length,
@@ -1434,11 +1520,11 @@ class _InsightSection extends StatelessWidget {
   final SubjectDetailData details;
 
   static const _collectionLabels = {
-    1: '想看',
-    2: '看过',
-    3: '在看',
-    4: '搁置',
-    5: '抛弃',
+    1: 'detail32',
+    2: 'detail45',
+    3: 'detail46',
+    4: 'detail12',
+    5: 'detail13',
   };
 
   @override
@@ -1447,10 +1533,13 @@ class _InsightSection extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _SectionTitle(title: '评分分布', icon: Icons.bar_chart_rounded),
+        _SectionTitle(
+          title: AppLocalizations.of(context).t('detail47'),
+          icon: Icons.bar_chart_rounded,
+        ),
         const SizedBox(height: 12),
         if (ratings.isEmpty)
-          const Text('暂无评分分布')
+          Text(AppLocalizations.of(context).t('detail48'))
         else
           for (var score = 10; score >= 1; score--)
             _StatBar(
@@ -1462,14 +1551,19 @@ class _InsightSection extends StatelessWidget {
               ),
             ),
         const SizedBox(height: 26),
-        _SectionTitle(title: '收藏状态', icon: Icons.people_alt_outlined),
+        _SectionTitle(
+          title: AppLocalizations.of(context).t('detail15'),
+          icon: Icons.people_alt_outlined,
+        ),
         const SizedBox(height: 12),
         if (details.collectionCounts.isEmpty)
-          const Text('暂无收藏统计')
+          Text(AppLocalizations.of(context).t('detail49'))
         else
           for (final entry in _collectionLabels.entries)
             _StatBar(
-              label: entry.value,
+              label: AppLocalizations.of(
+                context,
+              ).collectionStatusLabel(details.subject.type, entry.key),
               value: details.collectionCounts[entry.key] ?? 0,
               max: details.collectionCounts.values.fold<int>(
                 0,

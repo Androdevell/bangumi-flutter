@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
+import '../../core/network/read_task_scope.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/community_models.dart';
@@ -64,6 +65,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   void dispose() {
+    _read.cancel();
     _collectionSelection.dispose();
     widget.repository.collectionChanges.removeListener(_onCollectionChanged);
     final repository = widget.repository;
@@ -82,7 +84,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  Future<UserProfileData> _load() =>
+  ReadTaskScope _read = ReadTaskScope();
+  Future<UserProfileData> _load() {
+    _read.cancel();
+    _read = ReadTaskScope();
+    return _read.run(_loadData);
+  }
+
+  Future<UserProfileData> _loadData() =>
       widget.repository is DetailSectionsRepository
           ? (widget.repository as DetailSectionsRepository).fetchUserBase(
             widget.username,

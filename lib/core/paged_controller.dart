@@ -20,6 +20,7 @@ class PagedController<T> extends ChangeNotifier {
   Object? error;
   int? total;
   int _cursor = 0;
+  int _duplicatePages = 0;
   int _generation = 0;
   bool _disposed = false;
   ReadTaskScope _read = ReadTaskScope();
@@ -29,6 +30,7 @@ class PagedController<T> extends ChangeNotifier {
     _read = ReadTaskScope();
     _generation++;
     _cursor = 0;
+    _duplicatePages = 0;
     loading = false;
     hasMore = true;
     error = null;
@@ -59,7 +61,8 @@ class PagedController<T> extends ChangeNotifier {
       _items.addAll(fresh);
       _snapshot = null;
       total = page.total;
-      hasMore = page.hasMore && fresh.isNotEmpty;
+      _duplicatePages = fresh.isEmpty ? _duplicatePages + 1 : 0;
+      hasMore = page.hasMore && _duplicatePages < 3;
       _cursor = pageBased ? cursor + 1 : page.nextOffset;
       if (!pageBased && _cursor <= cursor) hasMore = false;
     } on Object catch (failure) {

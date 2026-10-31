@@ -15,11 +15,13 @@ class ComposeCacheState {
     this.clearing = false,
     this.result,
     this.failed = false,
+    this.diskReduction = 0,
   }) : usage = List.unmodifiable(usage),
        selected = Set.unmodifiable(selected);
   final List<ComposeCacheUsage> usage;
   final Set<CacheCategory> selected;
   final bool loading, clearing, failed;
+  final int diskReduction;
   final ComposeCacheClearResult? result;
 }
 
@@ -63,6 +65,10 @@ class CacheController extends ChangeNotifier {
   }
 
   Future<void> _refresh({ComposeCacheClearResult? result}) async {
+    int disk(Iterable<ComposeCacheUsage> usage) => usage
+        .where((e) => e.category != CacheCategory.memory)
+        .fold(0, (sum, e) => sum + e.bytes);
+    final before = disk(state.usage);
     _emit(
       ComposeCacheState(
         usage: state.usage,
@@ -76,6 +82,8 @@ class CacheController extends ChangeNotifier {
       _emit(
         ComposeCacheState(
           usage: usage,
+          diskReduction:
+              result == null ? 0 : (before - disk(usage)).clamp(0, before),
           selected: state.selected.where(
             (category) => usage.any(
               (item) => item.category == category && !item.unavailable,

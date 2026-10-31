@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'common.dart';
+import '../core/network/read_task_scope.dart';
 
 /// 仅挂载已访问标签页；相邻预构建不会提前触发业务读取。
 class LazyTabView extends StatefulWidget {
@@ -94,16 +95,28 @@ class SectionLoader<T> extends StatefulWidget {
 }
 
 class _SectionLoaderState<T> extends State<SectionLoader<T>> {
-  late Future<T> _future = widget.load();
+  ReadTaskScope _read = ReadTaskScope();
+  late Future<T> _future = _read.run(widget.load);
+  void _retry() {
+    _read.cancel();
+    _read = ReadTaskScope();
+    setState(() {
+      _future = _read.run(widget.load);
+    });
+  }
+
+  @override
+  void dispose() {
+    _read.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<T>(
     future: _future,
     builder: (context, snapshot) {
       if (snapshot.hasError) {
-        return NetworkErrorView(
-          error: snapshot.error!,
-          onRetry: () => setState(() => _future = widget.load()),
-        );
+        return NetworkErrorView(error: snapshot.error!, onRetry: _retry);
       }
       if (!snapshot.hasData) return const LoadingView();
       return widget.builder(snapshot.data as T);

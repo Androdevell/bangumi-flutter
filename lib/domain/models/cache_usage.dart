@@ -16,12 +16,15 @@ class ComposeCacheUsage {
     this.bytes = 0,
     this.files = 0,
     this.protectedFiles = 0,
+    this.protectedBytes = 0,
     this.unavailable = false,
   });
   final CacheCategory category;
   final int bytes;
   final int files;
   final int protectedFiles;
+  final int protectedBytes;
+  int get reclaimableBytes => (bytes - protectedBytes).clamp(0, bytes);
   final bool unavailable;
 }
 

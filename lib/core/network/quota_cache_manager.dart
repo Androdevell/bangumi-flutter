@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import '../cache/managed_image_file_system.dart';
 
 /// 只经缓存管理器删除已完成且近期未使用的条目，不触碰下载中或刚返回的文件。
 /// 不混入 ImageCacheManager：库的磁盘缩图会先额外完整解码原图，沿用 Widget 的目标尺寸解码。
@@ -119,6 +121,9 @@ class QuotaCacheManager extends CacheManager {
     }
   }
 
+  @visibleForTesting
+  Future<void> trimForTesting() => _trim();
+
   Future<void> _trim() async {
     while (_maintenance != null) {
       await _maintenance;
@@ -136,15 +141,25 @@ class QuotaCacheManager extends CacheManager {
   }
 
   Future<void> _trimOpened() async {
+    final fs = configuration.fileSystem;
+    if (fs is ManagedImageFileSystem) {
+      return fs.withoutMigration(_trimEntries);
+    }
+    return _trimEntries();
+  }
+
+  Future<void> _trimEntries() async {
     final objects = await configuration.repo.getAllObjects();
     var bytes = 0;
     final sizes = <String, int>{};
     for (final entry in objects) {
-      final file = await configuration.fileSystem.createFile(
-        entry.relativePath,
-      );
-      final size =
-          entry.length ?? (await file.exists() ? await file.length() : 0);
+      var size = entry.length;
+      if (size == null) {
+        final file = await configuration.fileSystem.createFile(
+          entry.relativePath,
+        );
+        size = await file.exists() ? await file.length() : 0;
+      }
       sizes[entry.key] = size;
       bytes += size;
     }

@@ -20,7 +20,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze --fatal-infos
-      - run: flutter test --coverage
+      - run: flutter test --coverage --concurrency=2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: flutter-coverage
@@ -47,5 +47,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter test
-      - run: flutter build windows --debug
+      - run: flutter test --concurrency=2
+      - name: Windows release image and cache regression
+        shell: pwsh
+        run: ./tool/windows-image-smoke.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-native-regression
+          path: build/verification/windows-image-smoke.*.log
+          if-no-files-found: warn

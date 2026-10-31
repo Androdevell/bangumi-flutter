@@ -127,12 +127,16 @@ class AppCacheService implements CacheMaintenance {
           );
           continue;
         }
-        var bytes = 0, count = 0, protected = 0;
+        var bytes = 0, count = 0, protected = 0, protectedBytes = 0;
         for (final item in await _files(category)) {
           try {
-            bytes += await item.file.length();
+            final length = await item.file.length();
+            bytes += length;
             count++;
-            if (item.protected) protected++;
+            if (item.protected) {
+              protected++;
+              protectedBytes += length;
+            }
           } on FileSystemException {
             /* 并发完成的文件由下一次扫描更新。 */
           }
@@ -143,6 +147,7 @@ class AppCacheService implements CacheMaintenance {
             bytes: bytes,
             files: count,
             protectedFiles: protected,
+            protectedBytes: protectedBytes,
           ),
         );
       } catch (_) {

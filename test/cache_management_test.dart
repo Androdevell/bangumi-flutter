@@ -232,6 +232,29 @@ void main() {
       await expectLater(fs.createFile('../secret'), throwsArgumentError);
     },
   );
+  test('quota scan leaves unvisited legacy images in place', () async {
+    final fs = ManagedImageFileSystem(
+      key: CacheStorage.imageKey,
+      legacy: () async => Directory('${root.path}/legacy-images'),
+    );
+    final manager = QuotaCacheManager(
+      Config('quota-regression', fileSystem: fs),
+    );
+    try {
+      final file = await manager.putFile(
+        'https://example.org/old',
+        utf8.encode('fixture'),
+      );
+      final name = file.uri.pathSegments.last;
+      final old = await write('legacy-images/$name', 'fixture');
+      await file.delete();
+      await manager.trimForTesting();
+      expect(await old.exists(), true);
+      expect(await file.exists(), false);
+    } finally {
+      await manager.dispose();
+    }
+  });
   test(
     'active image fetch prevents maintenance; new fetch waits for maintenance',
     () async {

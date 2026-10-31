@@ -82,7 +82,18 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
             .where((e) => e.category != CacheCategory.memory)
             .fold(0, (sum, e) => sum + e.bytes);
         final selectedBytes = state.usage
-            .where((e) => state.selected.contains(e.category))
+            .where(
+              (e) =>
+                  state.selected.contains(e.category) &&
+                  e.category != CacheCategory.memory,
+            )
+            .fold(0, (sum, e) => sum + e.reclaimableBytes);
+        final memoryBytes = state.usage
+            .where(
+              (e) =>
+                  e.category == CacheCategory.memory &&
+                  state.selected.contains(e.category),
+            )
             .fold(0, (sum, e) => sum + e.bytes);
         return Scaffold(
           appBar: AppBar(
@@ -118,7 +129,7 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
                         )
                         : const Icon(Icons.cleaning_services_outlined),
                 label: Text(
-                  '${s.t(state.clearing ? 'cacheClearing' : 'cacheClearSelected')} · ${formatCacheBytes(selectedBytes)}',
+                  '${s.t(state.clearing ? 'cacheClearing' : 'cacheClearSelected')} · ${s.t('cacheEstimated')} ${formatCacheBytes(selectedBytes)}${memoryBytes > 0 ? ' · ${s.t('cacheMemoryReclaim')} ${formatCacheBytes(memoryBytes)}' : ''}',
                 ),
               ),
             ),
@@ -189,6 +200,7 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
                               ? 'cacheManagementDone'
                               : 'cachePartial',
                         ),
+                        '${s.t('cacheReduction')}: ${formatCacheBytes(state.diskReduction)}',
                         if (result.busy.isNotEmpty)
                           '${s.t('cacheRetained')}: ${result.busy.map((e) => s.t('cacheTitle_${e.name}')).join('、')}',
                         if (result.failed.isNotEmpty)
@@ -260,7 +272,7 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
                               ),
                               if (usage.protectedFiles > 0)
                                 Text(
-                                  '${s.t('cacheProtected')}: ${usage.protectedFiles}',
+                                  '${s.t('cacheProtected')}: ${usage.protectedFiles} (${formatCacheBytes(usage.protectedBytes)})',
                                 ),
                               TextButton(
                                 key: ValueKey(
