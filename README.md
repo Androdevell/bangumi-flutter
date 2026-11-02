@@ -1,8 +1,10 @@
-# Bangumi Flutter
+# Bangumi Flutter · 番组计划客户端
 
 <img src="assets/branding/app_icon_anime.png" width="80" alt="Bangumi Flutter 图标">
 
-面向 Android 11+ 与 Windows 的非官方 Bangumi 客户端。
+面向 Android 11+ 与 Windows 的非官方 Bangumi（番组计划 / bgm.tv）客户端，使用 Flutter 开发，支持追番记录、章节进度、收藏同步、时间线与社区浏览。
+
+Android 应用包名：`com.bgm.irena`。该包名用于核对安装包身份；源码仓库为 [Androdevell/bangumi-flutter](https://github.com/Androdevell/bangumi-flutter)。使用 `Bangumi Flutter Androdevell` 或 `com.bgm.irena` 可作为检索关键词。
 
 [下载最新版](https://github.com/Androdevell/bangumi-flutter/releases/latest) · [更新记录](CHANGELOG.md)
 
