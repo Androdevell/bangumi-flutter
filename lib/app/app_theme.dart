@@ -140,14 +140,14 @@ abstract final class AppTheme {
         filled: true,
         fillColor:
             glass
-                ? scheme.surface.withValues(alpha: .82)
+                ? scheme.surface.withValues(alpha: .62)
                 : scheme.surfaceContainerLow,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(glass ? 28 : 14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(glass ? 28 : 14),
           borderSide: BorderSide(
             color: scheme.outlineVariant.withValues(alpha: 0.45),
           ),

@@ -46,6 +46,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  late List<Widget> _pages;
   int _sessionRevision = 0;
   final Set<int> _visited = {0};
   String _authIdentity = '';
@@ -56,12 +57,14 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _authIdentity = _identity;
+    _pages = _createPages();
     widget.authService?.addListener(_authChanged);
   }
 
   @override
   void didUpdateWidget(covariant AppShell oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _pages = _createPages();
     if (oldWidget.authService != widget.authService) {
       oldWidget.authService?.removeListener(_authChanged);
       widget.authService?.addListener(_authChanged);
@@ -75,6 +78,7 @@ class _AppShellState extends State<AppShell> {
     invalidateRepositoryCache(widget.repository);
     setState(() {
       _sessionRevision++;
+      _pages = _createPages();
     });
   }
 
@@ -162,7 +166,7 @@ class _AppShellState extends State<AppShell> {
           final showRail = constraints.maxWidth >= 760;
           final extendRail = constraints.maxWidth >= 1180;
           final glass = AppVisualStyle.glass(context);
-          final pages = _createPages();
+          final pages = _pages;
           final content = NotificationHost(
             repository: widget.repository,
             child: IndexedStack(

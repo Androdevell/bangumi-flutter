@@ -15,6 +15,7 @@ class AppGlassBackground extends StatelessWidget {
         child: IgnorePointer(
           child: RepaintBoundary(
             child: CustomPaint(
+              isComplex: true,
               painter: _AmbientPainter(
                 Theme.of(context).colorScheme,
                 AppVisualStyle.glass(context) &&
@@ -35,7 +36,7 @@ class LiquidGlassSurface extends StatelessWidget {
     super.key,
     required this.child,
     this.blur = false,
-    this.radius = 24,
+    this.radius = 28,
   });
   final Widget child;
   final bool blur;
@@ -52,7 +53,7 @@ class LiquidGlassSurface extends StatelessWidget {
           contrast
               ? scheme.surfaceContainerLowest
               : scheme.surface.withValues(
-                alpha: blur ? (dark ? .68 : .52) : (dark ? .82 : .74),
+                alpha: blur ? (dark ? .72 : .62) : (dark ? .86 : .68),
               ),
       child: Ink(
         decoration: BoxDecoration(
@@ -64,9 +65,9 @@ class LiquidGlassSurface extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.white.withValues(alpha: dark ? .09 : .55),
+                      Colors.white.withValues(alpha: dark ? .065 : .25),
                       scheme.primary.withValues(alpha: dark ? .025 : .018),
-                      Colors.white.withValues(alpha: dark ? .025 : .24),
+                      Colors.white.withValues(alpha: dark ? .015 : .10),
                     ],
                     stops: const [0, .55, 1],
                   ),
@@ -76,20 +77,23 @@ class LiquidGlassSurface extends StatelessWidget {
     );
     if (blur && !contrast && !AppMotionPolicy.reduce(context)) {
       surface = BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: surface,
       );
     }
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: shape,
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: dark ? .14 : .065),
-            blurRadius: 20,
-            offset: const Offset(0, 7),
-          ),
-        ],
+        boxShadow:
+            blur && !contrast
+                ? [
+                  BoxShadow(
+                    color: scheme.shadow.withValues(alpha: dark ? .12 : .045),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+                : const [],
       ),
       child: ClipRRect(
         borderRadius: shape,
@@ -105,7 +109,7 @@ class LiquidGlassSurface extends StatelessWidget {
                         Colors.white,
                         scheme.primary,
                         dark ? .55 : .14,
-                      )!.withValues(alpha: dark ? .3 : .85),
+                      )!.withValues(alpha: dark ? .24 : .64),
             ),
           ),
           child: surface,
@@ -153,12 +157,27 @@ class _AmbientPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    canvas.drawRect(rect, Paint()..color = scheme.surface);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color =
+            glass && scheme.brightness == Brightness.light
+                ? Color.lerp(scheme.surface, const Color(0xFFEDF3FF), .45)!
+                : scheme.surface,
+    );
     if (!glass) return;
     final dark = scheme.brightness == Brightness.dark;
     for (final (center, color, radius) in [
-      (const Alignment(-1, -.8), scheme.primary, .95),
-      (const Alignment(1.1, .45), scheme.tertiary, .85),
+      (
+        const Alignment(-1, -.8),
+        Color.lerp(scheme.primary, const Color(0xFF93C5FD), .4)!,
+        .95,
+      ),
+      (
+        const Alignment(1.1, .45),
+        Color.lerp(scheme.tertiary, const Color(0xFFB4A1F5), .4)!,
+        .85,
+      ),
       (const Alignment(-.4, 1.2), scheme.secondary, .75),
     ]) {
       canvas.drawRect(
@@ -168,7 +187,7 @@ class _AmbientPainter extends CustomPainter {
             center: center,
             radius: radius,
             colors: [
-              color.withValues(alpha: dark ? .16 : .13),
+              color.withValues(alpha: dark ? .16 : .23),
               color.withValues(alpha: 0),
             ],
           ).createShader(rect),

@@ -117,29 +117,7 @@ class _HoverLiftState extends State<HoverLift> {
                 : Offset.zero,
         duration: AppMotionPolicy.duration(context, 150),
         curve: Curves.easeOutCubic,
-        child: AnimatedScale(
-          scale: 1,
-          duration: AppMotionPolicy.duration(context, 150),
-          curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: AppMotionPolicy.duration(context, 150),
-            decoration: BoxDecoration(
-              boxShadow:
-                  _hovered
-                      ? [
-                        BoxShadow(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.shadow.withValues(alpha: 0.13),
-                          blurRadius: 24,
-                          offset: const Offset(0, 9),
-                        ),
-                      ]
-                      : const [],
-            ),
-            child: widget.child,
-          ),
-        ),
+        child: RepaintBoundary(child: widget.child),
       ),
     );
   }

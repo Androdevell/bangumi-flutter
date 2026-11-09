@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Flutter='D:/flutter/bin/flutter.bat', [ValidateRange(1,3)][int]$Rounds=3)
+param([string]$Flutter='D:/flutter/bin/flutter.bat', [ValidateRange(1,3)][int]$Rounds=3, [switch]$Glass)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 Push-Location $root
@@ -15,7 +15,7 @@ try {
     for($round=1; $round -le $Rounds; $round++) {
         $arguments=@('stress')
         if ($round -eq 1) { $arguments += '--stress-cold' }
-        if ($round -eq 3) { $arguments += '--stress-glass' }
+        if ($Glass -or $round -eq 3) { $arguments += '--stress-glass' }
         $stdout=Join-Path $logs "round-$round.stdout.log"
         $stderr=Join-Path $logs "round-$round.stderr.log"
         $watch=[Diagnostics.Stopwatch]::StartNew()
